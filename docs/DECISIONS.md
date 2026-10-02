@@ -20,7 +20,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-012 | AI uses the same commands and gets no resource bonuses (except Tribes, D-017) | Accepted, amended 2026-10-02 |
 | D-013 | Require Node 24 LTS for development | **Accepted** 2026-10-01 (installed 24.19.0) |
 | D-015 | A handoff document after every phase; each phase starts in a fresh chat | **Accepted** 2026-10-01 |
-| D-014 | Working title "Borderline" as a placeholder | **Proposed** |
+| D-014 | Name: **OpenBorder** (was the working title "Borderline") | **Accepted** 2026-10-02 (user) |
 | D-016 | Phase 2 order: big lobbies → Tribes & Nations → alliances → teams | **Accepted** 2026-10-02 |
 | D-017 | Tribes are weaker by stats; Nations stay fair | **Accepted** 2026-10-02 |
 
@@ -168,9 +168,20 @@ npm, so it was upgraded to **npm 11.17.0** (the version bundled with Node 24).
 
 ---
 
-## D-014 — Working title · Proposed
+## D-014 — Name: OpenBorder · Accepted 2026-10-02
 
-"Borderline" as a codename until you choose a name. Must not resemble "OpenFront".
+**History.** Phase 0 used "Borderline" as a codename, with the note that the final name
+must not resemble "OpenFront".
+
+**Decision (user, 2026-10-02).** The game is called **OpenBorder** — title, start screen,
+README, package name and the dev debug hook (`window.__openborder`) were renamed.
+
+**Risk, flagged when it was chosen.** "OpenBorder" follows the same "Open + territory
+word" pattern as "OpenFront", the game we are inspired by. Players may link the two, and
+OpenFront's team could object to a confusingly similar name on a public launch. Our
+code, art and text stay independent (D-001), which is what licensing cares about; the
+name is a trademark/branding question. **Revisit before any public launch (Phase 5):**
+check for conflicts, and keep a fallback name ready. Old handoffs still say "Borderline".
 
 ---
 

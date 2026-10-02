@@ -10,7 +10,7 @@
  *   chosen tile (so a disc never jumps across water).
  */
 import { distanceSquared, isLand, isValidTile, tileAt, tileX, tileY } from "../map/gameMap.ts";
-import { NEUTRAL, setOwner, type Player, type World } from "../world.ts";
+import { isTribe, NEUTRAL, setOwner, type Player, type World } from "../world.ts";
 import { capacityOf, startingTroops } from "./troops.ts";
 
 /** Handles the `spawn` command. Returns a rejection reason, or null on success. */
@@ -40,8 +40,12 @@ export function applyConfirmSpawn(world: World, player: Player): string | null {
  * the match once every human has confirmed (immediately if there are no humans).
  */
 export function updateSpawnPhase(world: World): void {
-  for (const player of world.players) {
-    if (player.kind === "bot" && player.spawnTile < 0 && player.alive) spawnRandomly(world, player);
+  // Nations first (spread evenly), then tribes (scattered at random among them).
+  for (const tribes of [false, true]) {
+    for (const player of world.players) {
+      if (player.kind !== "bot" || isTribe(player) !== tribes) continue;
+      if (player.spawnTile < 0 && player.alive) spawnRandomly(world, player);
+    }
   }
   const waitingForHumans = world.players.some((p) => p.kind === "human" && p.alive && !p.ready);
   if (waitingForHumans) return;
@@ -63,7 +67,7 @@ export function isSpawnProtected(world: World): boolean {
 }
 
 function spawnRandomly(world: World, player: Player): void {
-  const tile = findRandomSpawnTile(world);
+  const tile = findRandomSpawnTile(world, player);
   if (tile < 0) {
     // No neutral land left anywhere: the player can't enter the game.
     player.alive = false;
@@ -147,28 +151,42 @@ function fullDiscSize(radius: number): number {
  * possible from other spawns. The distance requirement starts from the spacing the
  * lobby size allows and is relaxed step by step when no spot is found. Returns -1 if no neutral land is left.
  */
-function findRandomSpawnTile(world: World): number {
+function findRandomSpawnTile(world: World, player: Player): number {
   const { map, rng, rules } = world;
   const tileCount = map.width * map.height;
-  const others = world.players.filter((p) => p.spawnTile >= 0).map((p) => p.spawnTile);
+  const spawned = world.players.filter((p) => p.spawnTile >= 0);
   const minClaimable = Math.ceil(rules.spawn.randomMinLandShare * fullDiscSize(rules.spawn.radius));
   const ATTEMPTS_PER_ROUND = 400;
 
-  const evenSpacing = Math.sqrt(map.landTiles / Math.max(1, world.players.length));
-  let minDistance = Math.min(
-    rules.spawn.randomMinDistance,
-    Math.floor(rules.spawn.randomSpacingShare * evenSpacing),
-  );
+  // Nations and humans are spread evenly among themselves; tribes are scattered at random
+  // (milestone 2.1 playtest: "too organized") — only kept off each other's discs and a
+  // little away from the nations.
+  const tribe = isTribe(player);
+  const rivals = world.players.filter((p) => !isTribe(p)).length;
+  const evenSpacing = Math.sqrt(map.landTiles / Math.max(1, rivals));
+  let minDistance = tribe
+    ? rules.spawn.tribeMinDistance
+    : Math.min(
+        rules.spawn.randomMinDistance,
+        Math.floor(rules.spawn.randomSpacingShare * evenSpacing),
+      );
+  let rivalDistance = tribe ? rules.spawn.tribeRivalDistance : minDistance;
   for (let round = 0; round < 8; round++) {
     const minDistanceSquared = minDistance * minDistance;
+    const rivalDistanceSquared = rivalDistance * rivalDistance;
     for (let attempt = 0; attempt < ATTEMPTS_PER_ROUND; attempt++) {
       const tile = rng.nextInt(tileCount);
       if (!isLand(map, tile) || world.owner[tile] !== NEUTRAL) continue;
-      if (others.some((other) => distanceSquared(map, tile, other) < minDistanceSquared)) continue;
+      const tooClose = spawned.some((other) => {
+        const limit = isTribe(other) ? minDistanceSquared : rivalDistanceSquared;
+        return distanceSquared(map, tile, other.spawnTile) < limit;
+      });
+      if (tooClose) continue;
       if (spawnDisc(world, tile).length < minClaimable) continue;
       return tile;
     }
     minDistance = Math.floor(minDistance * 0.7);
+    rivalDistance = Math.floor(rivalDistance * 0.7);
   }
 
   // Last resort: the first neutral land tile after a random starting point.

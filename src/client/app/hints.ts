@@ -75,6 +75,7 @@ export class HintTracker {
   }
 }
 
+// Kept from the working title "Borderline" so finished hints stay finished after the rename.
 const STORAGE_KEY = "borderline.hints.v1";
 
 /** Remembers finished hints in localStorage; quietly does nothing where that's unavailable. */

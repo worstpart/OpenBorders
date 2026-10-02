@@ -219,6 +219,11 @@ or "Nation · Medium · turtle"; the HUD's odds include the tribe discount. Head
 run is identical to Phase 1's: lobbies without tribes play exactly as before. No errors in
 any run. Browser: 10 nations + 100 tribes on Normal at 4× — clean console, readable map.
 
+**After the user's first 2.1 playtest:** smaller tribe names and troop numbers (tribe troops
+only when zoomed in); tribes scattered at random instead of evenly (nations still evenly);
+the game renamed **OpenBorder** (D-014). 40 games each, 10 nations + 100 tribes: nations
+win 80/80; median Medium 13.8 min, Hard 10.3 min; 8-nation games identical to before.
+
 Open for later: tribes don't yet react to alliances or traitors (2.2); nations don't
 yet decide about alliances (2.2).
 

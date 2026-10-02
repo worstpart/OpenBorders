@@ -1,4 +1,4 @@
-# Borderline *(working title)*
+# OpenBorder
 
 A browser-based, real-time territory strategy game: start small, expand, grow, meet
 your neighbors, fight or ally, and control the map.

@@ -4,8 +4,8 @@
 > playtesting and headless bot-vs-bot simulations. Anything marked **[Decision]**
 > needs your input; see also `DECISIONS.md`.
 >
-> **Working title:** *Borderline* (placeholder codename — not final, and deliberately
-> unrelated to the OpenFront name).
+> **Name:** *OpenBorder* (D-014, chosen by the user 2026-10-02; was the codename
+> *Borderline*). Similarity to "OpenFront" is a known risk to revisit before launch.
 
 ---
 
@@ -385,7 +385,9 @@ stats; Nations get no bonuses or penalties (D-017, D-012).
 | Thinks every | 4–8 s | Easy 6–10 s · Medium 4–7 s · Hard 2–5 s |
 | Decisions | expand while open land is near; otherwise, at ≥ 55% of capacity, attack a random weak neighbour with 30% of its troops; never counters, reinforces or retreats | everything in §3.11; Easy never counters or reinforces, Medium counters but doesn't reinforce, Hard does both |
 | Names | the invented names list | invented country names |
-| Colours | **dull browns and tans** (low saturation, darker than highland terrain), labels lighter | bright colours, kept away from the browns; labels bold |
+| Colours | **dull browns and tans** (low saturation, darker than highland terrain) | bright colours, kept away from the browns |
+| Labels | small name (≤ 12 px), lighter; troops only when zoomed in close | bold name up to 26 px; troops at 60% of the name size |
+| Spawns | **scattered at random** — only 9 tiles from other tribes (discs never overlap, clumps welcome) and 20 from nations | spread evenly among nations and humans (§3.12 spacing, counting only them) |
 | Targets (nations) | — | tribe targets weigh **3×**; up to **3 wars on tribes** at once, one war at a time against a nation |
 
 - Why handicaps by stats (user's choice, D-017): full-strength tribes would hold full
@@ -408,7 +410,10 @@ ate the ~50 remaining tribes one at a time. Preferring tribes (×3) and eating u
 at once brought games to **Hard 9.7 · Medium 12.6 · Easy 16.7 min** (median). With
 tribes in the lobby turtles no longer dominate (Medium: turtle 17, expander 16,
 aggressor 10, opportunist 7 of 50). The tribe colours were the user's request after the
-first look ("dull brown/tan like OpenFront").
+first look ("dull brown/tan like OpenFront"). After the first playtest: tribe names and
+all troop numbers were too big on the map (made smaller; tribe troops only when zoomed
+in), and evenly spaced tribes looked "very organized" (now scattered at random, nations
+still spread evenly). Tribe populations themselves were fine and are unchanged.
 
 ---
 
@@ -634,7 +639,7 @@ than ~60% of games, and players attack every 10–30 s rather than waiting.
 
 | # | Question | Default if not decided |
 |---|---|---|
-| Q1 | Final name of the game | Keep codename *Borderline* until later |
+| Q1 | Final name of the game | **Decided:** *OpenBorder* (D-014) |
 | Q2 | First map: procedural fictional continent or a real-world region? | **Decided:** procedural (D-009) |
 | Q3 | Include directed attacks in Phase 1? | **Decided:** yes, tunable `FOCUS_WEIGHT` (D-010) |
 | Q4 | Include encirclement in Phase 1? | **Decided:** yes (D-010) |

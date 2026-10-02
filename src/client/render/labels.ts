@@ -159,6 +159,12 @@ function localCentroid(
 }
 
 const MAX_NAME_PX = 26;
+/** Tribes are filler: small names, so the nations' labels dominate the map (2.1 playtest). */
+const MAX_TRIBE_NAME_PX = 12;
+/** Troop counts are secondary: smaller than the name (2.1 playtest: "too big"). */
+const TROOP_SCALE = 0.6;
+/** A tribe's troop count only shows once its name is at least this big (zoomed in). */
+const TRIBE_TROOPS_FROM_PX = 11;
 const MIN_READABLE_PX = 9;
 
 export class LabelLayer {
@@ -215,7 +221,7 @@ export class LabelLayer {
         continue;
 
       const weight = player.tribe ? 500 : 700;
-      let size = Math.min(MAX_NAME_PX, radiusPx * 0.55);
+      let size = Math.min(player.tribe ? MAX_TRIBE_NAME_PX : MAX_NAME_PX, radiusPx * 0.55);
       ctx.font = `${weight} ${size}px ${this.font}`;
       const nameWidth = ctx.measureText(player.name).width;
       if (nameWidth > radiusPx * 1.8) size *= (radiusPx * 1.8) / nameWidth;
@@ -227,14 +233,16 @@ export class LabelLayer {
       ctx.lineWidth = Math.max(2, size * 0.18);
       ctx.strokeStyle = "rgba(10, 14, 22, 0.55)";
       ctx.fillStyle = player.tribe ? "rgba(255, 255, 255, 0.8)" : "#ffffff";
-      const nameY = sy - size * 0.38;
+      const showTroops = !player.tribe || size >= TRIBE_TROOPS_FROM_PX;
+      const nameY = showTroops ? sy - size * 0.32 : sy;
       ctx.strokeText(player.name, sx, nameY);
       ctx.fillText(player.name, sx, nameY);
+      if (!showTroops) continue;
 
-      const troopSize = size * 0.78;
+      const troopSize = size * TROOP_SCALE;
       ctx.font = `500 ${troopSize}px ${this.font}`;
       ctx.lineWidth = Math.max(2, troopSize * 0.18);
-      const troopY = sy + size * 0.55;
+      const troopY = sy + size * 0.5;
       const troops = formatTroops(player.troops);
       ctx.strokeText(troops, sx, troopY);
       ctx.fillStyle = "rgba(255, 255, 255, 0.86)";

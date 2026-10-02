@@ -167,3 +167,41 @@ describe("nation difficulty", () => {
     expect(world.players[0]!.capacity).toBe(troopCapacity(DEFAULT_RULES, 4));
   });
 });
+
+describe("tribe spawns", () => {
+  it("are scattered at random — clumps allowed, discs never overlap — away from nations", () => {
+    const map = createMap(120, 120, new Uint8Array(120 * 120).fill(Terrain.Plains));
+    const world = createWorld({
+      seed: 5,
+      map,
+      players: [
+        { name: "N1", kind: "bot" },
+        { name: "N2", kind: "bot" },
+        ...Array.from({ length: 30 }, (_, k) => ({
+          name: `T${k}`,
+          kind: "bot" as const,
+          tier: "tribe" as const,
+        })),
+      ],
+    });
+    runTick(world, { tick: 1, commands: [] });
+    const at = (p: (typeof world.players)[number]) => [
+      p.spawnTile % 120,
+      Math.floor(p.spawnTile / 120),
+    ];
+    const dist = (a: number[], b: number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
+    const nations = world.players.slice(0, 2).map(at);
+    const tribes = world.players.slice(2).map(at);
+    let closestTribes = Infinity;
+    for (let a = 0; a < tribes.length; a++) {
+      for (let b = a + 1; b < tribes.length; b++) {
+        closestTribes = Math.min(closestTribes, dist(tribes[a]!, tribes[b]!));
+      }
+      for (const n of nations) expect(dist(tribes[a]!, n)).toBeGreaterThanOrEqual(14); // 20, maybe relaxed
+    }
+    expect(closestTribes).toBeGreaterThanOrEqual(DEFAULT_RULES.spawn.tribeMinDistance);
+    // Nations alone would be spread ~0.7 × √(14,400 / 2) ≈ 59 apart; tribes sit much closer.
+    expect(closestTribes).toBeLessThan(15);
+    expect(dist(nations[0]!, nations[1]!)).toBeGreaterThanOrEqual(59);
+  });
+});

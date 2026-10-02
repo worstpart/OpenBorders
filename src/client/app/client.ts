@@ -149,7 +149,7 @@ export class GameClient {
 
   /**
    * Development-only hooks for verifying behavior from the browser console (exposed as
-   * window.__borderline by main.ts in dev builds only): slow the game down, pause it,
+   * window.__openborder by main.ts in dev builds only): slow the game down, pause it,
    * and read the latest tick frame.
    */
   get debug() {

@@ -177,7 +177,7 @@ the whole map (the worst case for partial uploads), comparing:
   differing neighbour is fighting it, a pulsing band in the attacker's color (at least
   6 border widths, or 0.85 of a tile when zoomed in). Water tiles get a renderer-only
   owner id so coasts never count as neutral land.
-- *Dev-only debug hook* (`window.__borderline`, absent from production builds): set game
+- *Dev-only debug hook* (`window.__openborder`, absent from production builds): set game
   speed, pause/resume, read the latest frame, send commands — used for scripted browser
   checks.
 

@@ -1,5 +1,8 @@
 # Phase 2 handoff (after milestone 2.1)
 
+> **The game is now called OpenBorder** (D-014, 2026-10-02; older docs say "Borderline").
+> The dev debug hook is `window.__openborder` (older handoffs say `__borderline`).
+
 > **For the next session: read this file first**, then
 > [`PHASE_1_HANDOFF.md`](PHASE_1_HANDOFF.md) §4–§6 (how the user wants us to work,
 > environment gotchas, repo map — all still valid). Written 2026-10-02. Last commit:
@@ -25,7 +28,9 @@
 - **Tribes (D-017 — the user chose weaker tribes):** `rules.tribe`: ⅓ capacity, ½ growth,
   non-tribes pay 0.7× losses per tribe tile; AI thinks every 4–8 s, expands, else attacks a
   random neighbour it can beat with 30% of its troops; never counters/reinforces/retreats.
-  Colours: dull browns/tans (user request "like OpenFront"), lighter labels.
+  Colours: dull browns/tans (user request "like OpenFront"); small, light labels (troops
+  only when zoomed in); spawns scattered at random (9 tiles apart, 20 from nations) while
+  nations stay evenly spread — all from the user's first 2.1 playtest.
 - **Nations:** the Phase 1 personality bots + `ai.difficulties` (think 6–10 / 4–7 / 2–5 s;
   Easy never counters or reinforces, Medium counters only, Hard both) — no stat changes
   (D-012). They weigh tribe targets 3× and run up to 3 tribe wars at once (one war at a

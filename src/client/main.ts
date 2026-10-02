@@ -28,7 +28,7 @@ try {
 }
 
 if (import.meta.env.DEV && client) {
-  (window as unknown as { __borderline: GameClient["debug"] }).__borderline = client.debug;
+  (window as unknown as { __openborder: GameClient["debug"] }).__openborder = client.debug;
 }
 
 mount(App, {

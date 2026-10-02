@@ -35,6 +35,10 @@ export interface SpawnRules {
    * from the first to the last instead of the first ones taking the room.
    */
   readonly randomSpacingShare: number;
+  /** Tribes only keep this far from each other (their discs just don't overlap)… */
+  readonly tribeMinDistance: number;
+  /** …and this far from nations and humans. */
+  readonly tribeRivalDistance: number;
   /** A random spawn needs at least this share of its disc to be claimable land (no slivers). */
   readonly randomMinLandShare: number;
 }
@@ -331,6 +335,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // spacing still fit. 8 players: min(70, 160) = 70 (unchanged); 126 players on the
     // reference map: 40 (milestone 2.0).
     randomSpacingShare: 0.7,
+    // Tribes are scattered at random, clumps and all (2.1 playtest: evenly spread tribes
+    // looked "very organized"); 9 = two disc radii + 1, so discs never overlap.
+    tribeMinDistance: 9,
+    tribeRivalDistance: 20,
     randomMinLandShare: 0.8,
   },
   expansion: {

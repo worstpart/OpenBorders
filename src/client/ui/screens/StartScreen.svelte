@@ -60,7 +60,7 @@
 {/snippet}
 
 <section class="card" aria-labelledby="title">
-  <h1 id="title">Borderline</h1>
+  <h1 id="title">OpenBorder</h1>
   <p class="tagline">Start small. Expand. Outlast everyone.</p>
 
   <div class="row">
@@ -122,7 +122,7 @@
   <button type="button" class="play" onclick={play} disabled={starting}>
     {starting ? "Starting…" : "Play"}
   </button>
-  <p class="note">Working title · Phase 2 prototype</p>
+  <p class="note">Phase 2 prototype</p>
 </section>
 
 <style>
