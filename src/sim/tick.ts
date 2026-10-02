@@ -18,6 +18,12 @@ import {
   applyAllianceRequest,
   updateDiplomacy,
 } from "./systems/diplomacy.ts";
+import {
+  applyBuild,
+  applyCancelBuild,
+  applyUpgrade,
+  updateBuildings,
+} from "./systems/buildings.ts";
 import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
@@ -37,6 +43,7 @@ export const TICK_STEPS = [
   "attacks",
   "encircle",
   "eliminate",
+  "buildings",
   "troops",
   "economy",
   "bots",
@@ -80,6 +87,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 5. Players with no land (or a collapsed remnant under attack) are out.
     eliminate(world);
     probe?.("eliminate");
+    // 5b. Buildings on captured land change hands; constructions finish; bonuses add up.
+    updateBuildings(world);
+    probe?.("buildings");
     // 6. Troops regrow.
     growTroops(world);
     probe?.("troops");
@@ -140,6 +150,12 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyMobilize(world, player, command.percentBp);
     case "donate":
       return applyDonate(world, player, command.to, command.resource, command.percentBp);
+    case "build":
+      return applyBuild(world, player, command.buildingType, command.tile);
+    case "upgrade":
+      return applyUpgrade(world, player, command.buildingId);
+    case "cancelBuild":
+      return applyCancelBuild(world, player, command.buildingId);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

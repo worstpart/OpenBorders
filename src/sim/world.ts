@@ -9,6 +9,7 @@ import type { StampedCommand } from "./commands.ts";
 import {
   DEFAULT_RULES,
   PERSONALITIES,
+  type BuildingType,
   type Difficulty,
   type GameRules,
   type Personality,
@@ -66,6 +67,11 @@ export interface Player {
   gold: number;
   /** Gold earned in the last tick (shown on the HUD). */
   lastIncome: number;
+  /**
+   * What this player's finished buildings add (GAME_DESIGN.md §3.17), recomputed every tick
+   * from world.buildings — derived, so not hashed.
+   */
+  readonly bonus: BuildingBonus;
   /** Team number (1..), or 0 = no team (free-for-all, and tribes in team games; §3.15). */
   readonly team: number;
   /** Bots only. */
@@ -88,6 +94,38 @@ export interface PlayerSetup {
   readonly difficulty?: Difficulty;
   /** Team games (GAME_DESIGN.md §3.15): 1..teams; 0 or left out = no team. */
   readonly team?: number;
+}
+
+/** The sum of a player's building effects (GAME_DESIGN.md §3.17). */
+export interface BuildingBonus {
+  /** Extra troop capacity. */
+  capacity: number;
+  /** Extra troop growth, as a share (capped by rules.buildings.maxGrowthBonus). */
+  growth: number;
+  /** Extra gold per tick. */
+  income: number;
+  /** Mobilize costs this share less. */
+  mobilizeDiscount: number;
+}
+
+/**
+ * A building (GAME_DESIGN.md §3.17, ARCHITECTURE.md §5.7). There is no health: the level is
+ * the health (a hit or a capture costs a level; level 0 means destroyed).
+ */
+export interface Building {
+  readonly id: number;
+  readonly type: BuildingType;
+  owner: PlayerId;
+  readonly tile: number;
+  /** The level that works now: 0 while first being built, else 1..3. */
+  level: number;
+  /** The level being built or upgraded to; equal to `level` when idle. */
+  targetLevel: number;
+  /** When the current construction or upgrade started and finishes (-1 when idle). */
+  startTick: number;
+  readyTick: number;
+  /** Gold paid for the current construction or upgrade (cancelling refunds part of it). */
+  paid: number;
 }
 
 /** A bot's own state (GAME_DESIGN.md §3.11). */
@@ -145,6 +183,16 @@ export interface World {
   /** Commands bots decided on this tick; applied first thing next tick, like any command. */
   pendingCommands: StampedCommand[];
   nextAttackId: number;
+  /** Buildings, by ascending id (GAME_DESIGN.md §3.17). */
+  buildings: Building[];
+  nextBuildingId: number;
+  /** Building id standing on each tile, or -1. Kept in sync by systems/buildings.ts. */
+  readonly buildingAt: Int32Array;
+  /**
+   * Tiles with a building whose owner changed this tick (filled by setOwner); the buildings
+   * system settles them once the tick's fighting is over. Not game state.
+   */
+  buildingTileChanges: number[];
   /** Scratch marks for de-duplicating tiles inside one operation (not game state). */
   readonly scratchMarks: Int32Array;
   scratchStamp: number;
@@ -251,6 +299,7 @@ export function createWorld(setup: GameSetup): World {
     betrayals: 0,
     gold: 0,
     lastIncome: 0,
+    bonus: { capacity: 0, growth: 0, income: 0, mobilizeDiscount: 0 },
     team: p.team ?? 0,
     encircleDirty: true,
     brain: p.kind === "bot" ? createBrain(p, rng) : null,
@@ -275,6 +324,10 @@ export function createWorld(setup: GameSetup): World {
     lastDonationTick: new Map(),
     pendingCommands: [],
     nextAttackId: 1,
+    buildings: [],
+    nextBuildingId: 1,
+    buildingAt: new Int32Array(setup.map.width * setup.map.height).fill(-1),
+    buildingTileChanges: [],
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),
     scratchStamp: 0,
     scratchQueue: new Int32Array(setup.map.width * setup.map.height),
@@ -334,6 +387,7 @@ export function setOwner(world: World, tile: number, newOwner: PlayerId): void {
   world.ownerHash =
     (world.ownerHash ^ ownerTileHash(tile, oldOwner) ^ ownerTileHash(tile, newOwner)) >>> 0;
   world.changes.push(tile);
+  if (world.buildingAt[tile]! >= 0) world.buildingTileChanges.push(tile);
 
   const { width } = world.map;
   const x = tile % width;

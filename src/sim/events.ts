@@ -3,6 +3,7 @@
  * toasts and effects. Events describe outcomes; they never drive the simulation.
  */
 import type { Command } from "./commands.ts";
+import type { BuildingType } from "./rules.ts";
 import type { DonationResource, Phase, PlayerId } from "./world.ts";
 
 export type SimEvent =
@@ -94,6 +95,52 @@ export type SimEvent =
       readonly to: PlayerId;
       readonly resource: DonationResource;
       readonly amount: number;
+    }
+  | {
+      /** A construction (level 1) or an upgrade (level 2–3) began; `gold` was paid. */
+      readonly type: "buildingStarted";
+      readonly buildingId: number;
+      readonly playerId: PlayerId;
+      readonly buildingType: BuildingType;
+      readonly tile: number;
+      readonly level: number;
+      readonly gold: number;
+    }
+  | {
+      /** A construction or upgrade finished: the building works at `level` now. */
+      readonly type: "buildingCompleted";
+      readonly buildingId: number;
+      readonly playerId: PlayerId;
+      readonly buildingType: BuildingType;
+      readonly tile: number;
+      readonly level: number;
+    }
+  | {
+      /** A construction or upgrade was cancelled (`refund` gold came back). */
+      readonly type: "buildingCancelled";
+      readonly buildingId: number;
+      readonly playerId: PlayerId;
+      readonly refund: number;
+    }
+  | {
+      /** `to` took the building's tile and now owns it, one level lower. */
+      readonly type: "buildingCaptured";
+      readonly buildingId: number;
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+      readonly buildingType: BuildingType;
+      readonly tile: number;
+      readonly level: number;
+    }
+  | {
+      /** The building is gone: its tile was captured (by `by`), or its construction cancelled. */
+      readonly type: "buildingDestroyed";
+      readonly buildingId: number;
+      readonly playerId: PlayerId;
+      readonly buildingType: BuildingType;
+      readonly tile: number;
+      readonly by: PlayerId | null;
+      readonly reason: "captured" | "cancelled";
     }
   | {
       readonly type: "commandRejected";

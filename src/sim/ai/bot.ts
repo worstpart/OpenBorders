@@ -50,7 +50,9 @@ import {
   isAllied,
   isTraitor,
 } from "../systems/diplomacy.ts";
-import { donationCooldownLeft, troopRoom } from "../systems/economy.ts";
+import { bordersTarget } from "../systems/attacks.ts";
+import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
+import { buildingReserve, decideBuild } from "./build.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
@@ -103,6 +105,13 @@ export function thinkBots(world: World): void {
     for (const command of [...gold.before, ...actions, ...gold.after]) {
       world.pendingCommands.push({ playerId: bot.id, command });
     }
+    // Buildings (GAME_DESIGN.md §3.17): only with gold left over — not right before an
+    // attack (the war chest goes to Mobilize) nor when giving gold away.
+    const strikes = actions.some((c) => c.type === "attack" && c.target !== NEUTRAL);
+    if (!tribe && !strikes && !gold.after.some((c) => c.type === "donate")) {
+      const build = decideBuild(world, bot, incomingTroops(world, bot.id));
+      if (build) world.pendingCommands.push({ playerId: bot.id, command: build });
+    }
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
     brain.idleThinks = actions.length === 0 && wasting ? brain.idleThinks + 1 : 0;
   }
@@ -132,13 +141,15 @@ function economy(
   const after: Command[] = [];
   if (capacity <= 0) return { before, after };
   let home = bot.homeTroops;
-  let gold = bot.gold;
+  // Gold saved toward a building stays out of the war chest (GAME_DESIGN.md §3.17).
+  let gold = bot.gold - buildingReserve(world, bot, bot.brain!.personality);
   if (actions.some((c) => c.type === "attack" && c.target !== NEUTRAL)) {
-    const chest = Math.min(troopRoom(bot), gold / world.rules.economy.goldPerTroop);
+    const discount = bot.bonus.mobilizeDiscount;
+    const chest = Math.min(troopRoom(bot), gold / goldPerTroop(world.rules, discount));
     if (chest >= ai.mobilizeMinShare * capacity) {
       before.push({ type: "mobilize", percentBp: bps(chest / capacity) });
       home += chest;
-      gold -= chest * world.rules.economy.goldPerTroop;
+      gold -= mobilizeCost(world.rules, chest, discount);
     }
   }
   // Home troops once this think's attacks have left.
@@ -155,7 +166,11 @@ function economy(
     const humanAlly = friend.kind === "human" && isAllied(world, bot.id, friend.id);
     if (!teammate && !humanAlly) continue;
     const deficit = incomingTroops(world, friend.id) - friend.homeTroops;
-    if (deficit > worst && donationCooldownLeft(world, bot.id, friend.id, "troops") === 0) {
+    if (
+      deficit > worst &&
+      donationCooldownLeft(world, bot.id, friend.id, "troops") === 0 &&
+      bordersTarget(world, bot, friend.id) // D-023: troops only over a shared border
+    ) {
       worst = deficit;
       needy = friend;
     }

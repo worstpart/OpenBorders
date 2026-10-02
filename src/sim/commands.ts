@@ -4,6 +4,7 @@
  * simulation validates each one when it executes; invalid commands are rejected and
  * reported as events (they are normal in multiplayer, e.g. a stale click).
  */
+import type { BuildingType } from "./rules.ts";
 import type { DonationResource, PlayerId } from "./world.ts";
 
 export type Command =
@@ -46,7 +47,13 @@ export type Command =
       readonly to: PlayerId;
       readonly resource: DonationResource;
       readonly percentBp: number;
-    };
+    }
+  /** Build a level-I building on one of your tiles (GAME_DESIGN.md §3.17). */
+  | { readonly type: "build"; readonly buildingType: BuildingType; readonly tile: number }
+  /** Upgrade one of your buildings to its next level. */
+  | { readonly type: "upgrade"; readonly buildingId: number }
+  /** Stop a construction or upgrade; part of the price comes back. */
+  | { readonly type: "cancelBuild"; readonly buildingId: number };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

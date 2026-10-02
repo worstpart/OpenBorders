@@ -20,6 +20,7 @@ import {
   type PlayerId,
   type World,
 } from "../world.ts";
+import { bordersTarget } from "./attacks.ts";
 import { areFriendly } from "./diplomacy.ts";
 import type { GameRules } from "../rules.ts";
 
@@ -32,7 +33,23 @@ export function goldIncome(rules: GameRules, tiles: number, share = 1): number {
 
 /** This player's income per tick. */
 export function incomeOf(rules: GameRules, player: Player): number {
-  return goldIncome(rules, player.tiles, isTribe(player) ? rules.economy.tribeIncomeShare : 1);
+  const land = goldIncome(
+    rules,
+    player.tiles,
+    isTribe(player) ? rules.economy.tribeIncomeShare : 1,
+  );
+  // Factories and Metropolises (GAME_DESIGN.md §3.17).
+  return land + (land > 0 ? player.bonus.income : 0);
+}
+
+/** Gold one troop costs to mobilize, after a Factory's discount. */
+export function goldPerTroop(rules: GameRules, discount = 0): number {
+  return rules.economy.goldPerTroop * (1 - discount);
+}
+
+/** Gold a mobilize of `troops` costs (rounded up to whole gold). */
+export function mobilizeCost(rules: GameRules, troops: number, discount = 0): number {
+  return Math.ceil(troops * goldPerTroop(rules, discount));
 }
 
 /** Tick system (step 6b): income, and forgetting donation cooldowns that are over. */
@@ -63,9 +80,10 @@ export function mobilizeTroops(
   rules: GameRules,
   player: { capacity: number; homeTroops: number; fieldTroops: number; gold: number },
   percentBp: number,
+  discount = 0,
 ): number {
   const wanted = Math.floor((player.capacity * percentBp) / 10_000);
-  const affordable = Math.floor(player.gold / rules.economy.goldPerTroop);
+  const affordable = Math.floor(player.gold / goldPerTroop(rules, discount));
   return Math.max(0, Math.min(wanted, troopRoom(player), affordable));
 }
 
@@ -77,9 +95,10 @@ export function applyMobilize(world: World, player: Player, percentBp: number): 
     return "invalid percentage";
   }
   if (troopRoom(player) < 1) return "your army is full";
-  const troops = mobilizeTroops(world.rules, player, percentBp);
+  const discount = player.bonus.mobilizeDiscount;
+  const troops = mobilizeTroops(world.rules, player, percentBp, discount);
   if (troops < 1) return "not enough gold";
-  const gold = troops * world.rules.economy.goldPerTroop;
+  const gold = Math.min(player.gold, mobilizeCost(world.rules, troops, discount));
   player.gold -= gold;
   player.homeTroops += troops;
   world.events.push({ type: "mobilized", playerId: player.id, troops, gold });
@@ -127,6 +146,10 @@ export function applyDonate(
   const friend = getPlayer(world, to);
   if (!friend?.alive) return "that player is gone";
   if (!areFriendly(world, player.id, to)) return "only allies and teammates";
+  // D-023: troops reach a friend over a shared border (airlifts come with Airports, 2B.1).
+  if (resource === "troops" && !bordersTarget(world, player, to)) {
+    return "troops only go to a friend you border";
+  }
   if (donationCooldownLeft(world, player.id, to, resource) > 0) {
     return "gave them that too recently";
   }

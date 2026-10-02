@@ -6,7 +6,7 @@
  *                          [--width 1100 --height 700] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
- *                          [--no-alliances] [--teams N] [--no-economy]
+ *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -24,6 +24,9 @@
  * --no-economy turns gold off (GAME_DESIGN §3.16): games then play as in 2.3. Each game
  * reports gold earned, mobilized, donated and looted, and the median income of the
  * nations alive at minutes 1, 3 and 6.
+ * --no-buildings turns buildings off (GAME_DESIGN §3.17): games then play as in 2.4. Each
+ * game reports builds, upgrades, gold spent on them, captures, and when the first level
+ * I / II / III building was finished.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -111,6 +114,23 @@ export interface GameReport {
     income3: number | null;
     income6: number | null;
   };
+  /** Buildings (GAME_DESIGN §3.17), totals over all players. */
+  buildings: {
+    builds: number;
+    upgrades: number;
+    goldSpent: number;
+    cancelled: number;
+    captured: number;
+    destroyed: number;
+    /** Buildings standing at the end, by level. */
+    endL1: number;
+    endL2: number;
+    endL3: number;
+    /** Minutes of play until the first building of each level was finished (null: never). */
+    firstL1: number | null;
+    firstL2: number | null;
+    firstL3: number | null;
+  };
   tickMs: { avg: number; p99: number; max: number };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -145,12 +165,16 @@ async function main(): Promise<void> {
       "no-alliances": { type: "boolean", default: false },
       teams: { type: "string", default: "0" },
       "no-economy": { type: "boolean", default: false },
+      "no-buildings": { type: "boolean", default: false },
     },
   });
   const loaded = loadRules(args.rules);
-  const rules = args["no-economy"]
+  const withEconomy = args["no-economy"]
     ? { ...loaded, economy: { ...loaded.economy, enabled: false } }
     : loaded;
+  const rules = args["no-buildings"]
+    ? { ...withEconomy, buildings: { ...withEconomy.buildings, enabled: false } }
+    : withEconomy;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -274,6 +298,20 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     income3: null,
     income6: null,
   };
+  const buildings: GameReport["buildings"] = {
+    builds: 0,
+    upgrades: 0,
+    goldSpent: 0,
+    cancelled: 0,
+    captured: 0,
+    destroyed: 0,
+    endL1: 0,
+    endL2: 0,
+    endL3: 0,
+    firstL1: null,
+    firstL2: null,
+    firstL3: null,
+  };
   let reason = "timeout";
   let error: string | null = null;
 
@@ -316,6 +354,18 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
           }
         }
         if (event.type === "eliminated") economy.looted += event.loot;
+        else if (event.type === "buildingStarted") {
+          if (event.level === 1) buildings.builds++;
+          else buildings.upgrades++;
+          buildings.goldSpent += event.gold;
+        } else if (event.type === "buildingCancelled") buildings.cancelled++;
+        else if (event.type === "buildingCaptured") buildings.captured++;
+        else if (event.type === "buildingDestroyed" && event.reason === "captured") {
+          buildings.destroyed++;
+        } else if (event.type === "buildingCompleted") {
+          const key = (["firstL1", "firstL2", "firstL3"] as const)[event.level - 1]!;
+          buildings[key] ??= round((world.tick - world.playStartTick) / 600, 2);
+        }
       }
       for (const p of world.players) if (p.alive) economy.earned += p.lastIncome;
       if (world.playStartTick >= 0) {
@@ -353,6 +403,11 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     error = caught instanceof Error ? (caught.stack ?? caught.message) : String(caught);
   }
 
+  for (const b of world.buildings) {
+    if (b.level === 1) buildings.endL1++;
+    else if (b.level === 2) buildings.endL2++;
+    else if (b.level === 3) buildings.endL3++;
+  }
   const sorted = [...times].sort((a, b) => a - b);
   const winner = world.winner !== null ? world.players[world.winner - 1]! : null;
   const playTicks = world.tick - Math.max(0, world.playStartTick);
@@ -377,6 +432,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     rejected,
     diplomacy,
     economy,
+    buildings,
     tickMs: {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
@@ -495,6 +551,25 @@ function summarize(
               key,
               Math.round(
                 reports.reduce((s, r) => s + (r.economy[key] ?? 0), 0) /
+                  Math.max(1, reports.length),
+              ),
+            ],
+      ),
+    ),
+    buildingsPerGame: Object.fromEntries(
+      (Object.keys(reports[0]?.buildings ?? {}) as (keyof GameReport["buildings"])[]).map((key) =>
+        key.startsWith("first")
+          ? [
+              key + "Median",
+              {
+                minutes: median(reports.map((r) => r.buildings[key])),
+                games: reports.filter((r) => r.buildings[key] !== null).length,
+              },
+            ]
+          : [
+              key,
+              round(
+                reports.reduce((s, r) => s + (r.buildings[key] ?? 0), 0) /
                   Math.max(1, reports.length),
               ),
             ],

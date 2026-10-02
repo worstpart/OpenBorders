@@ -6,7 +6,7 @@
 import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
 import { landNeighbors } from "./systems/attacks.ts";
-import type { Difficulty } from "./rules.ts";
+import type { BuildingType, Difficulty } from "./rules.ts";
 import type { BotTier, Phase, PlayerId, PlayerKind, World } from "./world.ts";
 
 export interface PlayerSnapshot {
@@ -24,6 +24,10 @@ export interface PlayerSnapshot {
   /** Gold, and gold earned in the last tick (GAME_DESIGN.md §3.16). */
   readonly gold: number;
   readonly goldPerTick: number;
+  /** Mobilize discount from Factories (GAME_DESIGN.md §3.17), a share. */
+  readonly mobilizeDiscount: number;
+  /** Troop growth bonus from Housing, a share. */
+  readonly growthBonus: number;
   readonly peakTiles: number;
   /** Bots only: nation or tribe (GAME_DESIGN.md §3.13). */
   readonly tier: BotTier | null;
@@ -57,6 +61,21 @@ export interface AttackSnapshot {
   readonly retreating: boolean;
 }
 
+/** A building (GAME_DESIGN.md §3.17). */
+export interface BuildingSnapshot {
+  readonly id: number;
+  readonly type: BuildingType;
+  readonly owner: PlayerId;
+  readonly tile: number;
+  /** Working level (0 while first being built). */
+  readonly level: number;
+  /** Level being built or upgraded to (= level when idle). */
+  readonly targetLevel: number;
+  /** Current construction/upgrade: start and finish ticks (-1 when idle). */
+  readonly startTick: number;
+  readonly readyTick: number;
+}
+
 export interface AllianceSnapshot {
   /** The lower player id and the higher one. */
   readonly a: PlayerId;
@@ -84,6 +103,8 @@ export interface TickFrame {
   readonly attacks: readonly AttackSnapshot[];
   readonly alliances: readonly AllianceSnapshot[];
   readonly allianceRequests: readonly AllianceRequestSnapshot[];
+  /** Every building, by ascending id. */
+  readonly buildings: readonly BuildingSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Team games: the team that won (0 = none). */
@@ -107,6 +128,8 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     growthPerTick: p.lastGrowth,
     gold: p.gold,
     goldPerTick: p.lastIncome,
+    mobilizeDiscount: p.bonus.mobilizeDiscount,
+    growthBonus: p.bonus.growth,
     peakTiles: p.peakTiles,
     tier: p.brain?.tier ?? null,
     personality: p.brain?.tier === "nation" ? p.brain.personality : null,
@@ -147,6 +170,16 @@ export function buildFrame(world: World): TickFrame {
       renewB: a.renewB,
     })),
     allianceRequests: world.allianceRequests.map((r) => ({ ...r })),
+    buildings: world.buildings.map((b) => ({
+      id: b.id,
+      type: b.type,
+      owner: b.owner,
+      tile: b.tile,
+      level: b.level,
+      targetLevel: b.targetLevel,
+      startTick: b.startTick,
+      readyTick: b.readyTick,
+    })),
     events: world.events.slice(),
     winner: world.winner,
     winningTeam: world.winningTeam,

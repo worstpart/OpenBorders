@@ -221,6 +221,85 @@ export interface EconomyRules {
   readonly donationCooldownTicks: number;
 }
 
+/**
+ * Building types built so far (GAME_DESIGN.md §3.17). Border Defense (2.6), Port (2.7) and
+ * the air/strategic buildings (Phase 2B) join this list in their own milestones.
+ */
+export const BUILDING_TYPES = ["housing", "factory"] as const;
+export type BuildingType = (typeof BUILDING_TYPES)[number];
+
+/**
+ * One level of a building. Effect numbers are the building's total at that level (not
+ * the step from the level below), so "Housing II: +80k capacity" reads straight off it.
+ */
+export interface BuildingLevelRules {
+  /** Display name of the level ("Developed Housing"). */
+  readonly name: string;
+  /** Gold to build it (level 1) or to upgrade to it, before escalation. */
+  readonly cost: number;
+  /** Ticks the construction or upgrade takes. */
+  readonly buildTicks: number;
+  /** Extra troop capacity. */
+  readonly capacity?: number;
+  /** Extra troop growth (share; all of a player's buildings together are capped). */
+  readonly growthBonus?: number;
+  /** Extra gold per tick. */
+  readonly income?: number;
+  /** Mobilize costs this share less (the player's best building counts; no stacking). */
+  readonly mobilizeDiscount?: number;
+}
+
+export interface BuildingTypeRules {
+  /** Levels I, II, III. */
+  readonly levels: readonly [BuildingLevelRules, BuildingLevelRules, BuildingLevelRules];
+  /** When its tile is captured: drop a level (L1 → destroyed), or be destroyed outright. */
+  readonly onCapture: "downgrade" | "destroy";
+}
+
+/** Buildings (GAME_DESIGN.md §3.17): three levels each, paid in gold. */
+export interface BuildingRules {
+  /** false: nobody can build (games play exactly as in 2.4). Needs the economy. */
+  readonly enabled: boolean;
+  /** Buildings stand at least this far apart (tiles, straight line), whoever owns them. */
+  readonly minSpacing: number;
+  /** Each level a player already owns of a type makes the next build/upgrade of it this much dearer… */
+  readonly escalationPerLevel: number;
+  /** …up to this multiple of the base price. */
+  readonly escalationMax: number;
+  /** Prices are rounded to this many gold (readable numbers on the HUD). */
+  readonly priceRounding: number;
+  /** Cancelling a construction or upgrade refunds this share of what it cost. */
+  readonly cancelRefund: number;
+  /** All growth bonuses of a player's buildings together are capped at this share. */
+  readonly maxGrowthBonus: number;
+  readonly types: Readonly<Record<BuildingType, BuildingTypeRules>>;
+}
+
+/** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
+export interface BuildAiRules {
+  /**
+   * A nation saves toward its best building option if it costs at most this many ticks of
+   * its income (so it aims at what it can reach soon)…
+   */
+  readonly goalHorizonTicks: number;
+  /**
+   * …keeping this share of the price out of its war chest (Mobilize before attacks), by
+   * personality: turtles invest, aggressors fight.
+   */
+  readonly saving: Readonly<Record<Personality, number>>;
+  /** At most one building per this many tiles; beyond that it only upgrades. */
+  readonly tilesPerBuilding: number;
+  /**
+   * How a nation values an option (troop-equivalents per unit): gold per tick counts for
+   * this many ticks of income…
+   */
+  readonly incomeHorizonTicks: number;
+  /** …and a growth bonus for this many ticks of peak growth. */
+  readonly growthHorizonTicks: number;
+  /** Candidate tiles sampled per placement. */
+  readonly placementSamples: number;
+}
+
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
 export type Personality = (typeof PERSONALITIES)[number];
 
@@ -388,6 +467,8 @@ export interface AiRules {
   /** A nation refuses alliances with whoever betrayed it, for this long. */
   readonly grudgeTicks: number;
   readonly personalities: Readonly<Record<Personality, PersonalityRules>>;
+  /** Buildings (GAME_DESIGN.md §3.17). */
+  readonly build: BuildAiRules;
 }
 
 export interface GameRules {
@@ -405,6 +486,7 @@ export interface GameRules {
   readonly tribe: TribeRules;
   readonly diplomacy: DiplomacyRules;
   readonly economy: EconomyRules;
+  readonly buildings: BuildingRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -625,6 +707,17 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         betrayal: 1,
       },
     },
+    // Buildings (§3.17): like OpenFront's nations, Housing first; Factories next; upgrades
+    // once the land is "full". Most gold stays a war chest for attacks (§3.16).
+    build: {
+      goalHorizonTicks: 1_200,
+      saving: { expander: 0.8, aggressor: 0.4, turtle: 1, opportunist: 0.6 },
+      tilesPerBuilding: 4_000,
+      // Value an option by what it returns over the next ~2.5 min (income) / 1 min (growth).
+      incomeHorizonTicks: 1_500,
+      growthHorizonTicks: 600,
+      placementSamples: 24,
+    },
   },
   tribe: {
     // OpenFront's tribes have a third of the troops and half the growth (research §3.4);
@@ -671,6 +764,65 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // 10 s per friend and kind: enough to rescue an ally, too slow to pump one player.
     donationCooldownTicks: 100,
   },
+  buildings: {
+    enabled: true,
+    // OpenFront keeps 15 tiles on maps ~3× ours (research §3.14).
+    minSpacing: 8,
+    // +25% per level owned of a type, at most ×3: spam gets dear, a few strong buildings don't.
+    escalationPerLevel: 0.25,
+    escalationMax: 3,
+    priceRounding: 1_000,
+    cancelRefund: 0.5,
+    maxGrowthBonus: 0.2,
+    // Prices sized to our economy (§3.17.12): ~40k gold by 1:00, ~200k by 3:00, ~650k by 6:00.
+    // Every level step gives about as much per gold as the level before it (plus a new
+    // ability), so upgrading is never a trap — and a level-I building is cheap, not better.
+    types: {
+      // The gold → army engine (OpenFront's City). A fixed bonus: small players gain the most.
+      housing: {
+        onCapture: "downgrade",
+        levels: [
+          { name: "Housing", cost: 40_000, buildTicks: 50, capacity: 30_000 },
+          {
+            name: "Developed Housing",
+            cost: 90_000,
+            buildTicks: 100,
+            capacity: 90_000,
+            growthBonus: 0.05,
+          },
+          {
+            name: "Metropolis",
+            cost: 220_000,
+            buildTicks: 200,
+            capacity: 250_000,
+            growthBonus: 0.1,
+            income: 20,
+          },
+        ],
+      },
+      // Gold, and cheaper Mobilize. Each step pays for itself in ~3.5 min.
+      factory: {
+        onCapture: "downgrade",
+        levels: [
+          { name: "Factory", cost: 60_000, buildTicks: 50, income: 30 },
+          {
+            name: "Industrial Complex",
+            cost: 120_000,
+            buildTicks: 100,
+            income: 90,
+            mobilizeDiscount: 0.1,
+          },
+          {
+            name: "Mega Industrial Complex",
+            cost: 280_000,
+            buildTicks: 200,
+            income: 220,
+            mobilizeDiscount: 0.2,
+          },
+        ],
+      },
+    },
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -687,6 +839,7 @@ export function makeRules(overrides: {
   tribe?: Partial<TribeRules>;
   diplomacy?: Partial<DiplomacyRules>;
   economy?: Partial<EconomyRules>;
+  buildings?: Partial<BuildingRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -702,6 +855,7 @@ export function makeRules(overrides: {
     tribe: { ...DEFAULT_RULES.tribe, ...overrides.tribe },
     diplomacy: { ...DEFAULT_RULES.diplomacy, ...overrides.diplomacy },
     economy: { ...DEFAULT_RULES.economy, ...overrides.economy },
+    buildings: { ...DEFAULT_RULES.buildings, ...overrides.buildings },
   });
 }
 

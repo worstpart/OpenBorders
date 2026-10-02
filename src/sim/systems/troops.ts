@@ -57,8 +57,9 @@ export function growTroops(world: World): void {
 }
 
 function regenerate(rules: GameRules, player: Player): void {
-  player.capacity = capacityOf(rules, player);
-  const share = isTribe(player) ? rules.tribe.growthShare : 1;
+  // Housing adds capacity and growth (GAME_DESIGN.md §3.17); bonus is 0 without buildings.
+  player.capacity = capacityOf(rules, player) + player.bonus.capacity;
+  const share = (isTribe(player) ? rules.tribe.growthShare : 1) * (1 + player.bonus.growth);
   const growth =
     player.tiles > 0
       ? troopGrowth(rules, player.homeTroops, player.fieldTroops, player.capacity, share)

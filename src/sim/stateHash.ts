@@ -84,6 +84,18 @@ export function hashWorld(world: World): number {
       .addInt(a.front.size)
       .addNumber(a.front.peekTime());
   }
+  h.addInt(world.nextBuildingId).addInt(world.buildings.length);
+  for (const b of world.buildings) {
+    h.addInt(b.id)
+      .addString(b.type)
+      .addInt(b.owner)
+      .addInt(b.tile)
+      .addInt(b.level)
+      .addInt(b.targetLevel)
+      .addInt(b.startTick)
+      .addInt(b.readyTick)
+      .addInt(b.paid);
+  }
   for (const word of world.rng.getState()) h.addInt(word);
   return h.digest();
 }
