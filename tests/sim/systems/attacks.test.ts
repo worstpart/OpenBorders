@@ -256,8 +256,8 @@ describe("attacking a player", () => {
     let frame = tick(world);
     for (let k = 0; k < 20 && frame.changedTiles.length === 0; k++) frame = tick(world);
     expect(frame.changedTiles.length).toBe(1);
-    // r = 1800 / 5000 = 0.36 → clamped to 0.5; d = 120: loss = 1 × 0.5 × (3 + 0.8 × 120) = 49.5.
-    expect(world.attacks[0]!.troops).toBe(5_000 - 49.5);
+    // r = 1800 / 5000 = 0.36 → clamped to 0.5; d = 120: loss = 1 × 0.5 × (3 + 1.2 × 120) = 73.5.
+    expect(world.attacks[0]!.troops).toBe(5_000 - 73.5);
     expect(defender.homeTroops).toBe(1_800 - 120);
     expect(defender.tiles).toBe(14);
   });
@@ -278,6 +278,26 @@ describe("attacking a player", () => {
     const big = outcome(50);
     expect(big.lossPerTile).toBeLessThan(small.lossPerTile);
     expect(big.ticks).toBeLessThan(small.ticks);
+  });
+
+  it("a defender holds against an equal army; a clear edge wins (Lanchester square law)", () => {
+    // Player 2 holds 100 tiles with 10,000 troops (density 100) in a one-tile-wide strip.
+    const fight = (army: number) => {
+      const world = worldFromAscii("1" + "2".repeat(100), {
+        rules: EXACT,
+        homeTroops: [army, 10_000],
+      });
+      attack(world, 1, 2, 100, 0, 100);
+      runUntilIdle(world, 5_000);
+      return {
+        defenderTiles: world.players[1]!.tiles,
+        defenderTroops: world.players[1]!.homeTroops,
+      };
+    };
+    const even = fight(10_000);
+    expect(even.defenderTiles).toBeGreaterThan(20);
+    expect(even.defenderTroops).toBeGreaterThan(2_000);
+    expect(fight(13_000).defenderTiles).toBe(0);
   });
 
   it("is blocked by spawn protection at the start of the match", () => {

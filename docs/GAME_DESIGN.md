@@ -129,10 +129,13 @@ attack percentage.
 
 ```
 Cost per tile (troops)   plains 3 · highland 4 · mountain 6
-Speed                    ≈ NEUTRAL_SPEED × frontier tiles per tick
-                          × terrain factor (plains 1.0 · highland 0.8 · mountain 0.6)
-                          × min(1, army / 2,000)     ← tiny armies crawl
+Front speed              one tile per layer delay: 3 ticks on plains (~2.5 tiles/s with noise)
+                          × terrain (plains 1 · highland 1.25 · mountain 1.67)
+                          ÷ min(1, army / 2,000)     ← tiny armies crawl (floor 10% speed)
 ```
+
+A long frontier captures more tiles per tick only because more tiles are on the front;
+the front itself never advances faster than its layer delay (see §3.7).
 
 - Expansion is **directed** (§3.7): it flows outward from where you clicked first,
   then spreads.
@@ -155,9 +158,19 @@ d  = defender home pool ÷ defender tiles          (defender density)
 
 attacker loss / tile = TERRAIN_LOSS × clamp(r, 0.5, 2.5) × (LOSS_BASE + LOSS_DENSITY × d)
 defender loss / tile = d
-tiles per tick       ≈ frontier × PVP_SPEED ÷ (TERRAIN_SLOW × clamp(r, 0.8, 8))
-                       (further slowed when r > 20: hopeless attacks barely move)
+layer delay (ticks)  = 4 × TERRAIN_SLOW × clamp(r, 0.8, 8)
+                       (× r/20 more when r > 20: hopeless attacks barely move)
+
+LOSS_BASE 3 · LOSS_DENSITY 1.2 · TERRAIN_LOSS = TERRAIN_SLOW = 1 / 1.25 / 1.5
 ```
+
+**Why LOSS_DENSITY = 1.2 (changed from 0.8 after the first play-test).** Because the
+attacker's cost scales with r = D/A while the defender loses d per tile, a fight follows
+*Lanchester's square law*: an army A takes everything from a home pool D only if
+A² > 1.2·D², i.e. with ~10% more troops. Equal armies stall with the defender keeping
+~40%. With 0.8, a slightly *smaller* army could wipe out a neighbour in seconds right
+after spawn protection ended — far too swingy. Attacking still pays off with an edge:
+sending twice the defender's pool halves the cost per tile.
 
 | Effect | Result |
 |---|---|
@@ -176,17 +189,33 @@ tiles per tick       ≈ frontier × PVP_SPEED ÷ (TERRAIN_SLOW × clamp(r, 0.8,
 OpenFront attacks spread over the entire shared border; aiming is impossible
 (their longest-standing feature request). We make **where you click matter**:
 
+**As built (milestone 1.3) — fronts move in continuous time.** Every target tile next to
+the attacker's land has a *ready time*; the attack takes it when that time has come and
+it can pay the troop cost. Taking a tile puts its neighbours on the front:
+
 ```
-priority(tile) = waveOrder + small noise
-               + TERRAIN_DELAY (mountains later)
-               − FILL_BONUS × (own neighbours)      (smooths the front)
-               + FOCUS_WEIGHT × distance(tile, click point)
+ready(neighbour) = when this tile fell
+                 + layer delay (terrain, army size, odds — §3.5, §3.6)
+                   × direction pull  (1 toward the click … 1 + FOCUS_PULL straight away)
+                   × (1 − FILL_SHARE × (own sides − 1))
+                 + noise (0 … 1.5 ticks)
+border tiles at launch start FOCUS_SPREAD ticks later per tile of distance from the
+border tile nearest the click point
 ```
+
+| Constant | Value | Effect |
+|---|---|---|
+| `FOCUS_SPREAD` | 0.35 ticks/tile | The attack opens near the click point and widens along the border at ~3 tiles/tick |
+| `FOCUS_PULL` | 1.0 | A step straight away from the click takes twice as long as one toward it |
+| `FILL_SHARE` | 0.29 | Each extra side the attacker owns cuts the remaining wait by 29% of a layer delay (1 − 1/√2): diagonal fronts advance as fast as straight ones, so fronts grow round instead of diamond-shaped, and gaps fill quickly |
 
 Tiles near the click point fall first; the attack then widens outward from there.
 This rewards **position**: drive toward a chokepoint, split an enemy in two, cut off a
-pocket for encirclement, or avoid mountains. `FOCUS_WEIGHT = 0` reproduces a classic
-"whole-border" attack, so we can tune between the two in playtests.
+pocket for encirclement, or avoid mountains. `FOCUS_SPREAD = FOCUS_PULL = 0`
+reproduces a classic "whole-border" attack, so we can tune between the two in
+playtests. (The first draft biased a priority queue toward the click point, but with a
+per-tick budget proportional to the border, the whole border's budget would have poured
+into one spot as an unrealistically fast spearhead.)
 
 ### 3.8 Encirclement
 

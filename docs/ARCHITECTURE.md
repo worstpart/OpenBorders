@@ -171,7 +171,15 @@ the whole map (the worst case for partial uploads), comparing:
   each territory (tied cells averaged, then refined to the local centroid), recomputed at
   most every 250 ms; drawn on a Canvas2D overlay, sized to fit, faded out when tiny.
 - Measured (Chrome, 1345×1274, 8 players, spawn phase + troop growth): **0.11 ms CPU per
-  frame**, 0.06 ms per tick, display-capped 165 fps.
+  frame**, 0.06 ms per tick, display-capped 165 fps. With a 1,000-tile expansion running
+  (milestone 1.3): 0.19 ms CPU per frame, 0.10 ms per tick.
+- *Fronts*: an R8 "who attacks whom" texture (players × players). Where a tile's nearest
+  differing neighbour is fighting it, a pulsing band in the attacker's color (at least
+  6 border widths, or 0.85 of a tile when zoomed in). Water tiles get a renderer-only
+  owner id so coasts never count as neutral land.
+- *Dev-only debug hook* (`window.__borderline`, absent from production builds): set game
+  speed, pause/resume, read the latest frame, send commands — used for scripted browser
+  checks.
 
 ---
 
@@ -252,12 +260,29 @@ network traffic and behave identically on every machine.
   constructor parameter properties), so `tools/` can run simulation code with plain
   `node` (Node 24 strips types natively). Enum-like values use `as const` objects.
 
+### 5.4.2 Attacks as built (milestone 1.3)
+
+- `world.attacks`: one army per (attacker, target) pair (0 = neutral land), processed in
+  launch order. Each has a *front*: a min-heap (`TileQueue`, ties by insertion order) of
+  (ready time, tile) plus a map of each tile's current ready time; superseded heap
+  entries are skipped when popped. Ready times chain from the time a tile actually fell,
+  so the 10 Hz tick only decides when we look, not the front's shape.
+- Per tick: `resolveCollisions` (opposing armies subtract), then `advanceAttacks` (take
+  every ready tile the army can pay for; bring retreating armies home). Field troops
+  are recomputed from the armies every tick, so they can never drift.
+- `setOwner` also maintains each player's **border set** (owned tiles touching a
+  different owner); attacks seed their fronts from it. A test checks it against a full
+  recomputation.
+- Troop amounts are plain numbers (not integers) computed only with + − × ÷ and
+  `Math.sqrt`, all exactly rounded by IEEE 754 → still bit-identical everywhere.
+
 ### 5.5 Commands (Phase 1)
 
 | Command | Payload | Notes |
 |---|---|---|
 | `spawn` | tile | only during spawn phase; validated; picking again moves the spawn |
 | `confirmSpawn` | — | locks in the spawn; the match starts when every human has confirmed |
+| `retreat` | attack id | the army stops at once and returns after 2 s (−20% from players) |
 | `attack` | target (player or neutral), **percent** (basis points), focus tile | the sim computes troops from the *current* home pool at execution time — clients never send absolute troop numbers |
 | `retreat` | attack id | |
 

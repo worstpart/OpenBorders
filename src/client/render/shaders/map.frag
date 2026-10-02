@@ -26,7 +26,8 @@ const uint WATER = 65535u;
 const float FILL = 0.56;          // territory color over terrain
 const float HOVER_FILL = 0.14;    // extra fill on the hovered player's land
 const float FLASH_TICKS = 4.0;    // capture flash duration (0.4 s)
-const float FRONT_WIDTH = 5.0;    // front glow width, in border widths
+const float FRONT_MIN_WIDTH = 6.0;  // front glow width when zoomed out, in border widths
+const float FRONT_TILES = 0.85;     // ...and at least this share of a tile when zoomed in
 const float SHADE_DECODE = 255.0 / 128.0;
 
 uint ownerAt(ivec2 tile) {
@@ -99,9 +100,10 @@ void main() {
     bool attacking = isAttacking(owner, other);
     if (attacked || attacking) {
       vec3 attackerColor = attacked ? playerColor(other) : own;
-      float pulse = 0.65 + 0.35 * sin(uSeconds * 6.0);
-      float glow = 1.0 - smoothstep(0.0, uBorderPx * FRONT_WIDTH, dPx);
-      color = mix(color, mix(attackerColor, vec3(1.0), 0.35), glow * glow * pulse * 0.8);
+      float pulse = 0.7 + 0.3 * sin(uSeconds * 6.0);
+      float width = max(uBorderPx * FRONT_MIN_WIDTH, uZoom * FRONT_TILES);
+      float glow = 1.0 - smoothstep(0.0, width, dPx);
+      color = mix(color, mix(attackerColor, vec3(1.0), 0.3), glow * pulse * 0.75);
     }
 
     float width = uBorderPx * (owner == uLocalOwner ? 1.35 : 1.0);

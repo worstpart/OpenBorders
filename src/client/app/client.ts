@@ -4,6 +4,7 @@
  */
 import { LocalHost } from "../../host/localHost.ts";
 import type { FrameTiming } from "../../host/host.ts";
+import type { Command } from "../../sim/commands.ts";
 import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
@@ -107,6 +108,23 @@ export class GameClient {
     ui.localPlayerId = initial.localPlayerId;
     this.publish(initial.frame);
     ui.screen = "game";
+  }
+
+  /**
+   * Development-only hooks for verifying behavior from the browser console (exposed as
+   * window.__borderline by main.ts in dev builds only): slow the game down, pause it,
+   * and read the latest tick frame.
+   */
+  get debug() {
+    return {
+      setSpeed: (multiplier: number) => this.host?.setSpeed(multiplier),
+      pause: () => this.host?.pause(),
+      resume: () => this.host?.resume(),
+      frame: () => this.latestFrame,
+      renderer: () => this.renderer,
+      /** Sends a command as the local player (scripted browser checks). */
+      send: (command: Command) => this.host?.send(command),
+    };
   }
 
   retreat(attackId: number): void {

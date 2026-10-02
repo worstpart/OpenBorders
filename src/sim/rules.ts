@@ -153,11 +153,13 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // Mountains: ~1.5× losses and ~1.5× slower than plains.
     terrainLoss: { plains: 1, highland: 1.25, mountain: 1.5 },
     terrainDelay: { plains: 1, highland: 1.25, mountain: 1.5 },
-    // At r = 1 against density d, a tile costs 3 + 0.8·d: roughly an even trade with the
-    // defender (who loses d), plus the cost of taking ground. Sending twice the
-    // defender's pool (r = 0.5) halves the cost; being outnumbered 2.5× multiplies it.
+    // At r = 1 against density d, a tile costs 3 + 1.2·d while the defender loses d.
+    // Because the cost scales with r (= D/A), a fight follows Lanchester's square law:
+    // an army A takes everything from a home pool D when A² > 1.2·D², i.e. with ~10% more
+    // troops. Equal armies stall (the defender keeps ~40%), so attacking needs an edge,
+    // and sending twice the defender's pool (r = 0.5) halves the cost per tile.
     lossBase: 3,
-    lossDensity: 0.8,
+    lossDensity: 1.2,
     lossRatioMin: 0.5,
     lossRatioMax: 2.5,
     // ~2.5 tiles/s at even odds: fights move about as fast as expansion.

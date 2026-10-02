@@ -35,8 +35,11 @@ npm install
 
 | Input | Action |
 |---|---|
-| Left click | Choose / move your start (spawn phase) |
+| Left click | Choose / move your start (spawn phase); then expand into neutral land or attack enemy land |
 | Enter | Confirm your start |
+| 1 2 3 4 5 | Send 10 / 25 / 50 / 75 / 100% of your home troops per click |
+| Q / E, Shift + wheel | Send 5% less / more |
+| × on an attack chip | Retreat (troops return after 2 s, −20% against players) |
 | Drag (any button) | Pan |
 | Mouse wheel | Zoom toward the cursor |
 | W A S D / arrows | Pan |

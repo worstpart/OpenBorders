@@ -27,6 +27,10 @@ try {
   reportFatal(error);
 }
 
+if (import.meta.env.DEV && client) {
+  (window as unknown as { __borderline: GameClient["debug"] }).__borderline = client.debug;
+}
+
 mount(App, {
   target: requireElement("#ui", HTMLDivElement),
   props: {
