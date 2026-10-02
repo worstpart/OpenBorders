@@ -5,9 +5,10 @@
  *    construction); `upgrade` raises it to the next level (the current level keeps working
  *    meanwhile); `cancelBuild` stops either and refunds part of the price.
  *  - Prices grow with the levels of that type you already own (escalation).
- *  - The level is the building's health: when its tile is captured it changes hands one
- *    level lower (level I is destroyed) — or is destroyed outright, depending on the type
- *    and on who took it (tribes never keep buildings).
+ *  - The level is the building's health (strikes and missiles will cost levels, Phase 2B).
+ *    When its tile is captured, the taker adopts it at its level (user, 2.5 playtest) — or
+ *    it is destroyed, depending on the type and on who took it (tribes never keep
+ *    buildings). An unfinished building is lost; an upgrade in progress is cancelled.
  *  - Every tick the finished buildings' effects are summed into each player's `bonus`,
  *    which the troop and gold systems read; they never look at building types.
  *
@@ -261,8 +262,8 @@ function settleCapture(world: World, tile: number): void {
   if (newOwner === building.owner) return; // taken and retaken within the tick
   const from = building.owner;
   const taker = getPlayer(world, newOwner);
-  // A building under construction was never finished: it counts at its working level.
-  const level = building.level - 1;
+  // The taker gets what works: an unfinished building is lost, an upgrade is cancelled.
+  const level = building.level;
   if (
     newOwner === NEUTRAL ||
     !taker ||

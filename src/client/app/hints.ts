@@ -15,7 +15,7 @@ export const HINT_TEXT: Record<HintId, string> = {
   menus: "Right-click land for more options. Esc pauses the game.",
   gold: "Your land earns gold. Mobilize (M) turns it into troops at once — best right after an attack, to get back to the sweet spot.",
   build:
-    "You can afford a building: right-click your land (or press B) to build Housing (more troops) or a Factory (more gold). Click a building to upgrade it.",
+    "You can afford a building: pick Housing (more troops) or a Factory (more gold) from the build bar at the bottom, then click your land to place it. Click a building to upgrade it.",
   ally: "Alliances: right-click a player (or press K over their land) to propose one. Allies can't attack each other; breaking an alliance makes you a traitor for 30 s.",
 };
 

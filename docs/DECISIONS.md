@@ -350,6 +350,10 @@ the user.
 fly missions in headless and spectated games before the human controls are added. Longer
 games are fine (provisional target ~15–20 min, GAME_DESIGN §3.17.12).
 
+**Amended after the 2.5 playtest (user):** captured buildings are **adopted at their
+level** by whoever takes the tile (the design said one level lower); building happens from
+a build bar with the building following the mouse (OpenFront's way).
+
 **Alternatives.** Unlimited OpenFront-style stacking (opaque); everything in Phase 2
 (would delay boats and maps); air phase after multiplayer (my first recommendation —
 multiplayer's risks would be found earlier; the user preferred the full solo game first).

@@ -9,6 +9,7 @@
   import { ui } from "../../app/uiState.svelte.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { formatTroops } from "../../format.ts";
+  import BuildingIcon from "./BuildingIcon.svelte";
 
   interface Props {
     onUpgrade: (buildingId: number) => void;
@@ -65,7 +66,11 @@
     oncontextmenu={(e) => e.preventDefault()}
   >
     <div class="head">
-      <span class="type">{TYPE_LABEL[card.type]}</span>
+      <span class="type"
+        ><span class="glyph"
+          ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={18} /></span
+        >{TYPE_LABEL[card.type]}</span
+      >
       <span class="pips" aria-label="Level {card.level} of 3">
         {#each [1, 2, 3] as k (k)}<span class="pip" class:on={k <= card.level}></span>{/each}
       </span>
@@ -154,6 +159,16 @@
     font-size: var(--text-xs, 11px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .type {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .glyph {
+    color: #f6f1e4;
   }
 
   .pips {

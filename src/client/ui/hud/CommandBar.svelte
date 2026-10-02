@@ -5,12 +5,15 @@
   import { GROWTH_TEXT, troopBarModel } from "../../app/troopBar.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
+  import type { BuildingType } from "../../../sim/rules.ts";
+  import BuildBar from "./BuildBar.svelte";
 
   interface Props {
     onMobilize: () => void;
+    onPickBuilding: (type: BuildingType) => void;
   }
 
-  let { onMobilize }: Props = $props();
+  let { onMobilize, onPickBuilding }: Props = $props();
 
   const me = $derived(ui.me);
   const economy = DEFAULT_RULES.economy.enabled;
@@ -121,6 +124,7 @@
           <kbd>M</kbd>
         </button>
       </div>
+      <BuildBar onPick={onPickBuilding} />
     {/if}
   </section>
 {/if}

@@ -10,9 +10,14 @@ import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
-import { placementProblem } from "../../sim/systems/buildings.ts";
-import { BuildingLayer } from "../render/buildings.ts";
-import { buildingAtPoint } from "./buildings.ts";
+import {
+  BuildingLayer,
+  iconSize,
+  ICON_MIN_PX,
+  ICON_PX_PER_ZOOM,
+  type BuildGhost,
+} from "../render/buildings.ts";
+import { BUILD_BLOCK_TEXT, buildingAtPoint, placementCheck } from "./buildings.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
 import {
@@ -49,10 +54,6 @@ const LOCAL_PLAYER_ID = 1;
 const LABEL_REFRESH_MS = 250;
 /** The gold capture effect (GAME_DESIGN.md §3.16) lasts this long, in real time. */
 const LOOT_FX_MS = 2_400;
-/** Building icons (render/buildings.ts): CSS px per pixel-per-tile of zoom, and bounds. */
-const ICON_PX_PER_ZOOM = 7;
-const ICON_MIN_PX = 13;
-const ICON_MAX_PX = 30;
 
 /** A capture whose gold is pouring into the capturer (border shimmer + floating number). */
 interface LootEffect {
@@ -246,9 +247,14 @@ export class GameClient {
     this.host?.send({ type: "donate", to, resource, percentBp: Math.round(percent * 100) });
   }
 
-  /** Builds a level-I building of this type on one of our tiles (GAME_DESIGN.md §3.17). */
-  build(type: BuildingType, tile: number): void {
-    this.host?.send({ type: "build", buildingType: type, tile });
+  /**
+   * Picks a building up from the build bar (GAME_DESIGN.md §3.17.13): it follows the mouse
+   * until a click on our land places it. Picking the same one again puts it back.
+   */
+  pickBuilding(type: BuildingType): void {
+    if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
+    ui.placing = ui.placing === type ? null : type;
+    if (ui.placing) ui.menu = null;
   }
 
   upgrade(buildingId: number): void {
@@ -476,6 +482,9 @@ export class GameClient {
     ui.alliances = frame.alliances;
     ui.allianceRequests = frame.allianceRequests;
     ui.buildings = frame.buildings;
+    if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
+      ui.placing = null;
+    }
     // A building card whose building is gone closes.
     const menu = ui.menu;
     if (menu?.kind === "building" && !frame.buildings.some((b) => b.id === menu.id)) {
@@ -567,6 +576,10 @@ export class GameClient {
       this.host.send({ type: "spawn", tile: index });
       return;
     }
+    if (ui.placing) {
+      this.placeBuilding(index);
+      return;
+    }
     // A click on a building icon opens its card instead of attacking (GAME_DESIGN.md §3.17).
     const hit = this.buildingUnder(at);
     if (hit !== null) {
@@ -576,8 +589,25 @@ export class GameClient {
     this.attackTile(index, ui.attackPercent);
   }
 
-  /** Right click: the context menu for the land under the cursor. */
+  /** Places the building we're holding at `tile`, if it may go there. */
+  private placeBuilding(tile: number): void {
+    const type = ui.placing;
+    if (!type || !this.host) return;
+    const problem = placementCheck(ui.buildContext, type, tile);
+    if (problem) {
+      this.toast({ text: `Can't build there: ${BUILD_BLOCK_TEXT[problem]}`, tone: "info" });
+      return;
+    }
+    this.host.send({ type: "build", buildingType: type, tile });
+    ui.placing = null;
+  }
+
+  /** Right click: the context menu for the land under the cursor (or put a building back). */
   private secondaryClick(at: ScreenPoint): void {
+    if (ui.placing) {
+      ui.placing = null;
+      return;
+    }
     const map = this.map;
     const tile = this.camera.tileAt(at);
     if (!map || !tile || ui.screen !== "game" || ui.phase !== "playing" || ui.menu) return;
@@ -593,7 +623,7 @@ export class GameClient {
     if (!map) return null;
     const zoom = this.camera.zoom;
     const natural = zoom * ICON_PX_PER_ZOOM;
-    const size = Math.min(ICON_MAX_PX, Math.max(ICON_MIN_PX, natural));
+    const size = iconSize(zoom);
     const point = this.camera.screenToWorld(at);
     const visible =
       natural >= ICON_MIN_PX
@@ -601,18 +631,6 @@ export class GameClient {
         : ui.buildings.filter((b) => b.owner === ui.localPlayerId || b.level >= 3);
     const hit = buildingAtPoint(visible, map.width, point.x, point.y, (size * 0.6) / zoom);
     return hit?.id ?? null;
-  }
-
-  /** B: the build options for our land under the cursor (the right-click menu). */
-  private openBuildMenu(): void {
-    const map = this.map;
-    const point = this.hoverPoint;
-    if (!map || !point || ui.screen !== "game" || ui.phase !== "playing" || ui.menu) return;
-    const tile = this.camera.tileAt(point);
-    if (!tile) return;
-    const index = tileAt(map, tile.x, tile.y);
-    if (this.owner[index] !== ui.localPlayerId) return;
-    ui.menu = { kind: "context", x: point.x, y: point.y, tile: index, owner: ui.localPlayerId };
   }
 
   private key(action: KeyAction): void {
@@ -629,7 +647,8 @@ export class GameClient {
         this.confirmSpawn();
         break;
       case "escape":
-        if (ui.menu) this.closeMenu();
+        if (ui.placing) ui.placing = null;
+        else if (ui.menu) this.closeMenu();
         else this.pause();
         break;
       case "preset1":
@@ -650,9 +669,6 @@ export class GameClient {
         break;
       case "mobilize":
         this.mobilize();
-        break;
-      case "build":
-        this.openBuildMenu();
         break;
       case "diplomacyYes":
       case "diplomacyNo":
@@ -721,21 +737,21 @@ export class GameClient {
     requestAnimationFrame((next) => this.animationFrame(next));
   }
 
-  /** While the right-click menu is open on our land: where a building would go. */
-  private buildGhost(): { tile: number; ok: boolean; radius: number } | null {
-    const menu = ui.menu;
+  /** While a building is picked up: where it would go (the tile under the mouse). */
+  private buildGhost(): BuildGhost | null {
+    const type = ui.placing;
     const map = this.map;
-    if (menu?.kind !== "context" || menu.owner !== ui.localPlayerId || !map) return null;
-    if (!DEFAULT_RULES.buildings.enabled || !DEFAULT_RULES.economy.enabled) return null;
-    const problem = placementProblem(
-      DEFAULT_RULES,
-      map,
-      this.owner,
-      ui.buildings,
-      ui.localPlayerId,
-      menu.tile,
-    );
-    return { tile: menu.tile, ok: problem === null, radius: DEFAULT_RULES.buildings.minSpacing };
+    const point = this.hoverPoint;
+    if (!type || !map || !point) return null;
+    const cell = this.camera.tileAt(point);
+    if (!cell) return null;
+    const tile = tileAt(map, cell.x, cell.y);
+    return {
+      type,
+      tile,
+      ok: placementCheck(ui.buildContext, type, tile) === null,
+      radius: DEFAULT_RULES.buildings.minSpacing,
+    };
   }
 
   /** The current tick plus how far we are toward the next one (for smooth animations). */
@@ -758,7 +774,15 @@ export class GameClient {
 
     // The hover card: land only, in a running game, while no menu is open.
     const prev = ui.hover;
-    if (!point || !map || tile < 0 || !isLand(map, tile) || ui.screen !== "game" || ui.menu) {
+    if (
+      !point ||
+      !map ||
+      tile < 0 ||
+      !isLand(map, tile) ||
+      ui.screen !== "game" ||
+      ui.menu ||
+      ui.placing
+    ) {
       if (prev) ui.hover = null;
       return;
     }

@@ -2,8 +2,6 @@
   import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
   import { allianceStatus, formatCountdown } from "../../app/diplomacy.ts";
   import { donationOptions } from "../../app/economy.ts";
-  import { BUILD_BLOCK_TEXT, buildOptions } from "../../app/buildings.ts";
-  import type { BuildingType } from "../../../sim/rules.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, previewClick } from "../../app/preview.ts";
   import { teamName } from "../../app/teams.ts";
@@ -17,7 +15,6 @@
     onRenewAlliance: (ally: number) => void;
     onBreakAlliance: (ally: number) => void;
     onDonate: (to: number, resource: "troops" | "gold", percent: number) => void;
-    onBuild: (type: BuildingType, tile: number) => void;
     onClose: () => void;
   }
 
@@ -28,7 +25,6 @@
     onRenewAlliance,
     onBreakAlliance,
     onDonate,
-    onBuild,
     onClose,
   }: Props = $props();
   const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
@@ -68,12 +64,6 @@
     owner && !isMe && DEFAULT_RULES.economy.enabled && ui.friends.has(owner.id)
       ? donationOptions(ui.donationContext, owner, ui.attackPercent)
       : [],
-  );
-  /** Buildings on our own land (GAME_DESIGN.md §3.17). */
-  const builds = $derived(menu && isMe ? buildOptions(ui.buildContext, menu.tile) : []);
-  /** Placement problems are the same for every type: say it once. */
-  const placeProblem = $derived(
-    builds.find((b) => b.blocked && b.blocked !== "noGold")?.blocked ?? null,
   );
   /** Breaking needs a second click (it makes you a traitor). */
   let confirmBreak = $state(false);
@@ -176,33 +166,11 @@
           Nothing to do here right now.
         {/if}
       </div>
-    {:else if isMe && builds.length === 0}
+    {:else if isMe}
       <div class="info">
         {formatTroops(ui.me?.homeTroops ?? 0)} troops at home defend it. Click neutral or enemy land to
         act.
       </div>
-    {/if}
-
-    {#if builds.length > 0}
-      <div class="group-label">
-        Build here
-        {#if placeProblem}<span class="muted">· {BUILD_BLOCK_TEXT[placeProblem]}</span>{/if}
-      </div>
-      {#each builds as option (option.type)}
-        <button
-          type="button"
-          role="menuitem"
-          class="build"
-          disabled={option.blocked !== null}
-          onclick={() => act(() => onBuild(option.type, menu!.tile))}
-        >
-          <span class="bname">{option.name}</span>
-          <span class="role">{option.role}</span>
-          <span class="price" class:short={option.blocked === "noGold"}
-            >{formatTroops(option.price)}</span
-          >
-        </button>
-      {/each}
     {/if}
 
     {#if alliance && alliance.kind !== "none" && alliance.kind !== "teammate"}
@@ -449,24 +417,6 @@
 
   button.gold:not(:disabled) {
     color: var(--color-gold);
-  }
-
-  .bname {
-    font-weight: 600;
-  }
-
-  .role {
-    color: var(--text-muted);
-  }
-
-  .price {
-    margin-left: auto;
-    color: var(--color-gold);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .price.short {
-    color: var(--color-danger);
   }
 
   button.danger {

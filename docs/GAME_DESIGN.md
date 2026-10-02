@@ -671,7 +671,7 @@ boat attacks are.
 | Pay | gold up front (the HUD shows the price including the +25% per level owned) |
 | Construction | L1 5–15 s, upgrades 10–30 s (table). A building under construction does nothing; one being **upgraded keeps its old level working** until the upgrade finishes |
 | Level = health | an air strike or missile knocks a building down **one level** (L1 → destroyed). No HP, no repair: re-upgrade if you want the level back |
-| Captured tile | the building is **captured one level lower** (L1 → destroyed) — taking a Metropolis is a prize, losing one hurts twice. **Border Defense and Missile Silo are destroyed** instead (a wall doesn't change sides; a captured silo would be too swingy) |
+| Captured tile | **the taker adopts the building at its level** (user, 2.5 playtest — like OpenFront): taking a Metropolis is a prize, losing one hurts. An unfinished building is lost, an upgrade in progress is cancelled, tribes destroy what they take. **Border Defense and Missile Silo are destroyed** instead (a wall doesn't change sides; a captured silo would be too swingy) |
 | Eliminated owner | their buildings go to whoever takes the land (same rule) |
 | Cancel / sell | no selling (OpenFront has delete; it adds little). Cancelling a construction refunds 50% |
 | Disabled | struck buildings are **disabled for 20 s** (no effect, no actions), shown greyed |
@@ -826,7 +826,12 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
 
 **Visual progression.** Every building is one original icon with three drawings of growing
-detail and **1–3 level pips** under it; the tier reads without clicking. Construction:
+detail and **1–3 level pips** under it; the tier reads without clicking. *As built (2.5
+playtest revamp):* the drawings are SVG paths in `client/icons.ts` shared by the map and
+the HUD — Housing: a house → a street of two → a skyline with a tower; Factory: a
+saw-tooth workshop with one chimney → two chimneys and smoke → a wider plant with three.
+On the map they sit in a round dark badge ringed in the owner's colour, gold dots for the
+level, a gold outer ring at level III; 18–40 px depending on zoom. Construction:
 the icon fills in from the bottom with a thin progress ring; upgrade: a brief scaffold
 outline, then a soft pulse as the new icon and (if any) the larger range ring appear.
 Icons fade out when zoomed far out, except your own and level-III buildings.
@@ -836,9 +841,9 @@ showed nations never upgrading: level I gave the most per gold. Re-priced so eve
 step returns about as much per gold as the one below (Housing step II +60k capacity for
 90k, step III +160k for 220k; Factory each step pays back in ~3.5 min), plus its new
 ability. Other details decided while building: buildings are placed from the right-click
-menu (or **B**) at the clicked tile, with a dashed ring showing the 8-tile spacing (green /
-red) instead of a ghost that follows the mouse; a building captured by a **tribe** is
-destroyed (tribes never keep buildings, like OpenFront's); the growth cap (+20%) counts all
+menu at first — replaced after the playtest by the build bar with a building that follows
+the mouse (§3.17.13); captured buildings are adopted at their level (user); a building
+captured by a **tribe** is destroyed (tribes never keep buildings, like OpenFront's); the growth cap (+20%) counts all
 buildings; troop gifts need a shared border (D-023). **Nation AI:** a nation weighs every
 option — a new Housing or Factory (one building per 4,000 tiles) and the next level of each
 building — by value per gold (capacity 1 per troop, growth bonus over 1 min of peak growth,
@@ -890,10 +895,12 @@ tune the game's pace (crush curve, win share) rather than make L3 cheaper.
 
 #### 3.17.13 UI/UX
 
-- **Build:** right-click your own land → the context menu lists the 7 buildings (icon,
-  name, price, greyed with the reason when not possible); **B** opens the same list at the
-  cursor. Choosing one shows a ghost icon that follows the mouse with its zone/range ring
-  and the 8-tile spacing; click to place. No permanent build bar.
+- **Build (as built after the 2.5 playtest):** a **build bar** in the bottom command bar —
+  one tile per building with its icon and price (red when you can't afford it). Click a
+  tile and the building sticks to the mouse (snapped to the tile under it, with its
+  spacing ring green or red, plus zone/range rings later); click your land to place it,
+  right-click or Esc to put it back (OpenFront's way). The first version (a *Build here*
+  list in the right-click menu, key B) was dropped: the user didn't like it.
 - **Building card** (click a building — small glass card next to it, closes with Esc or a
   click on the map):
 

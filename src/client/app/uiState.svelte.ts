@@ -19,7 +19,7 @@ import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
-import type { Difficulty } from "../../sim/rules.ts";
+import type { BuildingType, Difficulty } from "../../sim/rules.ts";
 import { DEFAULT_DIFFICULTY, DEFAULT_NATIONS, DEFAULT_TRIBES, type MapSize } from "./setup.ts";
 import { DEFAULT_TEAMS, type GameMode } from "./teams.ts";
 import type { Toast } from "./toasts.ts";
@@ -82,6 +82,8 @@ class UiState {
   alliances = $state.raw<readonly AllianceSnapshot[]>([]);
   allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
   buildings = $state.raw<readonly BuildingSnapshot[]>([]);
+  /** The building picked up from the build bar, following the mouse until placed. */
+  placing = $state<BuildingType | null>(null);
   /**
    * The map and the client's copy of tile ownership (not reactive: the HUD reads them when
    * something reactive — the tick, the menu — changes).
@@ -124,6 +126,7 @@ class UiState {
     this.alliances = [];
     this.allianceRequests = [];
     this.buildings = [];
+    this.placing = null;
     this.myRequests = new Map();
     this.myDonations = new Map();
     this.dismissedRenewals = new Set();

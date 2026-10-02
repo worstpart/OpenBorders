@@ -334,6 +334,17 @@ building card with the upgrade preview — clean console. The card's *Upgrade* a
 buttons were exercised by tests but not yet clicked in the browser (the user was using the
 pane): first thing to check in the 2.5 playtest.
 
+**After the user's 2.5 playtest (same day):** "plays well, pricing is good". Asked for: a
+build bar in the bottom HUD with buildings that stick to the mouse until placed (like
+OpenFront) — built, replacing the right-click *Build here* list and key B; revamped icons
+(shared SVG art in `client/icons.ts`, round badges, gold level dots, bigger at 18–40 px);
+and **captured buildings adopted by the taker at their level** (was: one level lower).
+Headless after it — 8 nations (100): median 7.9 min, wins turtle 28 · opp 27 · exp 24 ·
+agg 21 (more even than before), 15 buildings captured per game; 10 nations + 100 tribes
+(50): 13.4 min, turtle 25 · exp 12 · opp 8 · agg 5, first L3 at 5:26. Browser: bar, ghost
+(green on your land, red elsewhere), placing, Esc and right-click to put it back, card
+*Upgrade* and *Cancel* (refund) — all clicked; clean console.
+
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 
 Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before

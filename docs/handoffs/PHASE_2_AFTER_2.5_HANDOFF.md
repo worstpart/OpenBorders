@@ -40,15 +40,19 @@ economy fit, UI). Decisions:
 
 - **Sim:** `rules.buildings` (+ `ai.build`), `sim/geometry.ts` (distance / withinRange /
   travelTicks), `systems/buildings.ts` (build, upgrade, cancelBuild; tick step 5b
-  `updateBuildings`: captures one level lower — tribes destroy what they take —
+  `updateBuildings`: captured buildings are **adopted at their level** (user) — tribes
+  destroy what they take, unfinished ones are lost —
   completions, per-player `bonus`), events `buildingStarted/Completed/Cancelled/Captured/
   Destroyed`, buildings in the hash and in every frame, `PlayerSnapshot.mobilizeDiscount` /
   `growthBonus`. Mobilize respects the Factory discount (`goldPerTroop`, `mobilizeCost`).
 - **AI (`ai/build.ts`):** value-per-gold goal over new buildings and upgrades, savings kept
   out of the war chest by personality, one construction at a time, deep sites.
-- **HUD:** right-click own land (or **B**) → *Build here* with prices; dashed spacing ring;
-  building icons with level pips and progress ring (`render/buildings.ts`, Canvas2D on the
-  label canvas — `LabelLayer.clear()` now runs first); click an icon → building card
+- **HUD (revised after the user's playtest):** a **build bar** in the command bar
+  (`BuildBar.svelte`): click a building, it follows the mouse (`ui.placing`, ghost with a
+  green/red spacing ring), click your land to place, right-click or Esc to put it back.
+  Icons: SVG art in `client/icons.ts` shared by the map (`render/buildings.ts`, Canvas2D
+  Path2D on the label canvas — `LabelLayer.clear()` runs first) and the HUD
+  (`BuildingIcon.svelte`); round badges, gold level dots. Click an icon → building card
   (`BuildingCard.svelte`: effects, progress + Cancel, Upgrade with price and gains); toasts
   for finished / captured / destroyed buildings; a "build" hint; "only over a shared border"
   on troop gifts.
@@ -57,18 +61,17 @@ economy fit, UI). Decisions:
 
 ## 4. Results (ROADMAP "Milestone 2.5 result")
 
-8 nations: median 7.5 min (2.4: 7.1); first L1 / L2 / L3 at 1:12 / 2:24 / 5:52.
-10 nations + 100 tribes: 13.3 min (2.4: 11.8); 1:16 / 2:56 / 5:13; turtles 19/50 (2.4: 24),
-**aggressors 2/50** (watch). Tick cost of buildings ~0.01 ms.
+After the adoption rule: 8 nations median 7.9 min (2.4: 7.1), wins even (turtle 28 · opp 27
+· exp 24 · agg 21); first L1 / L2 / L3 at 1:12 / 2:25 / 6:08. 10 nations + 100 tribes:
+13.4 min (2.4: 11.8); turtles 25/50, aggressors 5/50 (watch both). Tick cost ~0.01 ms.
 
 ## 5. Known issues / open items
 
 | Item | Where it goes |
 |---|---|
-| Building card *Upgrade* / *Cancel* buttons not yet clicked in the browser (tests cover them; the user was using the pane) | first check of the next session |
-| Icons are small at medium zoom (13 px minimum) | playtest: raise `MIN_SIZE` in `render/buildings.ts` (and `ICON_MIN_PX` in client.ts) if asked |
+| Icon size: 18–40 px (`ICON_*` in `render/buildings.ts`) | adjust if the playtest asks |
 | Aggressors rarely win tribe lobbies (2/50) | 2.10 balance (their saving share 40%) |
-| Ask the user to playtest 2.4 **and** 2.5 (gold, Mobilize, gifts, buildings) | start of 2.6 |
+| The user playtested 2.5: "plays well, pricing is good"; asked for the build bar, new icons and adoption (done). Ask how the new bar feels | start of 2.6 |
 | Spatial grid for buildings not built (linear scans are fine today) | 2.6 (zones) / 2B (SAM radii) |
 | From earlier: turtles in tribe lobbies; 2-team games decided early; no gold column on the leaderboard; EndCard team path; Renew-click glitch; large-map perf | see PHASE_2_AFTER_2.4_HANDOFF §3 |
 

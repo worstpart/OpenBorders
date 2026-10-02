@@ -266,7 +266,7 @@ describe("upgrades and cancelling", () => {
 });
 
 describe("capture", () => {
-  it("hands the building over one level lower", () => {
+  it("hands the building over at its level (the taker adopts it)", () => {
     const w = world();
     const id = builtHousing(w);
     send(w, 1, { type: "upgrade", buildingId: id });
@@ -274,33 +274,34 @@ describe("capture", () => {
     setOwner(w, at(4, 2), 2);
     const events = run(w, 1);
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "buildingCaptured", from: 1, to: 2, level: 1 }),
+      expect.objectContaining({ type: "buildingCaptured", from: 1, to: 2, level: 2 }),
     );
-    expect(w.buildings[0]).toMatchObject({ owner: 2, level: 1 });
-    expect(w.players[1]!.bonus.capacity).toBe(HOUSING[0].capacity);
+    expect(w.buildings[0]).toMatchObject({ owner: 2, level: 2 });
+    expect(w.players[1]!.bonus.capacity).toBe(HOUSING[1].capacity);
     expect(w.players[0]!.bonus.capacity).toBe(0);
   });
 
-  it("destroys a level-I building, one under construction, or anything a tribe takes", () => {
+  it("cancels an upgrade in progress: the taker gets the working level", () => {
     const w = world();
-    builtHousing(w);
+    const id = builtHousing(w);
+    send(w, 1, { type: "upgrade", buildingId: id });
     setOwner(w, at(4, 2), 2);
-    expect(run(w, 1)).toContainEqual(
-      expect.objectContaining({ type: "buildingDestroyed", by: 2, reason: "captured" }),
-    );
-    expect(w.buildings).toHaveLength(0);
-    expect(w.buildingAt[at(4, 2)]).toBe(-1);
+    run(w, 1);
+    expect(w.buildings[0]).toMatchObject({ owner: 2, level: 1, targetLevel: 1, readyTick: -1 });
+  });
 
+  it("destroys an unfinished building, or anything a tribe takes", () => {
     const building = world();
     send(building, 1, { type: "build", buildingType: "housing", tile: at(4, 2) });
     setOwner(building, at(4, 2), 2);
-    run(building, 1);
+    expect(run(building, 1)).toContainEqual(
+      expect.objectContaining({ type: "buildingDestroyed", by: 2, reason: "captured" }),
+    );
     expect(building.buildings).toHaveLength(0);
+    expect(building.buildingAt[at(4, 2)]).toBe(-1);
 
     const tribe = world({ players: ["human", "tribe"] });
-    const id = builtHousing(tribe);
-    send(tribe, 1, { type: "upgrade", buildingId: id });
-    run(tribe, HOUSING[1].buildTicks);
+    builtHousing(tribe);
     setOwner(tribe, at(4, 2), 2);
     run(tribe, 1);
     expect(tribe.buildings).toHaveLength(0);

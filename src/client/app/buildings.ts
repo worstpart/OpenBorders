@@ -102,6 +102,41 @@ export function buildOptions(ctx: BuildContext, tile: number): BuildOption[] {
   });
 }
 
+export interface BuildBarItem {
+  readonly type: BuildingType;
+  readonly name: string;
+  readonly role: string;
+  readonly price: number;
+  readonly affordable: boolean;
+}
+
+/** The build bar (GAME_DESIGN.md §3.17.13): every building with its current price. */
+export function buildBarItems(ctx: BuildContext): BuildBarItem[] {
+  const me = ctx.me;
+  if (!buildingsEnabled(ctx.rules) || !me) return [];
+  return BUILDING_TYPES.map((type) => {
+    const price = buildingPrice(ctx.rules, type, 1, levelsOwned(ctx.buildings, me.id, type));
+    return {
+      type,
+      name: levelRules(ctx.rules, type, 1).name,
+      role: BUILDING_ROLE[type],
+      price,
+      affordable: me.gold >= price,
+    };
+  });
+}
+
+/** Whether the building being placed may go on `tile` now, and why not. */
+export function placementCheck(
+  ctx: BuildContext,
+  type: BuildingType,
+  tile: number,
+): BuildBlock | null {
+  const option = buildOptions(ctx, tile).find((o) => o.type === type);
+  if (!option) return "notYourLand";
+  return option.blocked;
+}
+
 export const BUILD_BLOCK_TEXT: Record<BuildBlock, string> = {
   notYourLand: "not your land",
   water: "not on water",

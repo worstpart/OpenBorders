@@ -252,8 +252,11 @@ export interface BuildingLevelRules {
 export interface BuildingTypeRules {
   /** Levels I, II, III. */
   readonly levels: readonly [BuildingLevelRules, BuildingLevelRules, BuildingLevelRules];
-  /** When its tile is captured: drop a level (L1 → destroyed), or be destroyed outright. */
-  readonly onCapture: "downgrade" | "destroy";
+  /**
+   * When its tile is captured: the taker adopts it at its level (user, 2.5 playtest), or it
+   * is destroyed outright (e.g. Border Defense, 2.6: a wall doesn't change sides).
+   */
+  readonly onCapture: "adopt" | "destroy";
 }
 
 /** Buildings (GAME_DESIGN.md §3.17): three levels each, paid in gold. */
@@ -780,7 +783,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     types: {
       // The gold → army engine (OpenFront's City). A fixed bonus: small players gain the most.
       housing: {
-        onCapture: "downgrade",
+        onCapture: "adopt",
         levels: [
           { name: "Housing", cost: 40_000, buildTicks: 50, capacity: 30_000 },
           {
@@ -802,7 +805,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
       // Gold, and cheaper Mobilize. Each step pays for itself in ~3.5 min.
       factory: {
-        onCapture: "downgrade",
+        onCapture: "adopt",
         levels: [
           { name: "Factory", cost: 60_000, buildTicks: 50, income: 30 },
           {

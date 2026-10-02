@@ -26,8 +26,8 @@
     /** Gold (GAME_DESIGN.md §3.16): buy troops; give a friend troops or gold. */
     mobilize: () => void;
     donate: (to: number, resource: "troops" | "gold", percent: number) => void;
-    /** Buildings (GAME_DESIGN.md §3.17). */
-    build: (type: BuildingType, tile: number) => void;
+    /** Buildings (GAME_DESIGN.md §3.17): pick one up from the build bar to place it. */
+    pickBuilding: (type: BuildingType) => void;
     upgrade: (buildingId: number) => void;
     cancelBuild: (buildingId: number) => void;
     pause: () => void;
@@ -89,7 +89,7 @@
   <Toasts />
   <HintCard onDismiss={actions.dismissHint} />
   <AttackChips onRetreat={actions.retreat} onCounter={actions.counter} />
-  <CommandBar onMobilize={actions.mobilize} />
+  <CommandBar onMobilize={actions.mobilize} onPickBuilding={actions.pickBuilding} />
   <HoverCard />
   <ContextMenu
     onAttack={actions.attackTile}
@@ -98,7 +98,6 @@
     onRenewAlliance={actions.renewAlliance}
     onBreakAlliance={actions.breakAlliance}
     onDonate={actions.donate}
-    onBuild={actions.build}
     onClose={actions.closeMenu}
   />
   <BuildingCard

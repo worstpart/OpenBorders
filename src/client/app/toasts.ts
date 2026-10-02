@@ -231,13 +231,13 @@ export function toastsForEvents(
         const name = levelRules(DEFAULT_RULES, event.buildingType, event.level).name;
         if (event.from === me) {
           toasts.push({
-            text: `${nameOf(event.to)} captured your building — it's now their ${name}`,
+            text: `${nameOf(event.to)} took over your ${name}`,
             tone: "danger",
             player: event.to,
           });
         } else if (event.to === me) {
           toasts.push({
-            text: `You captured ${nameOf(event.from)}'s building: ${name}`,
+            text: `You took over ${nameOf(event.from)}'s ${name}`,
             tone: "success",
             player: event.from,
           });

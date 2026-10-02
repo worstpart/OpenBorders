@@ -62,7 +62,7 @@ mount(App, {
       breakAlliance: (ally) => client?.breakAlliance(ally),
       mobilize: () => client?.mobilize(),
       donate: (to, resource, percent) => client?.donate(to, resource, percent),
-      build: (type, tile) => client?.build(type, tile),
+      pickBuilding: (type) => client?.pickBuilding(type),
       upgrade: (buildingId) => client?.upgrade(buildingId),
       cancelBuild: (buildingId) => client?.cancelBuild(buildingId),
       pause: () => client?.pause(),

@@ -194,7 +194,7 @@ describe("building toasts and hint", () => {
     );
     expect(toasts.map((t) => t.text)).toEqual([
       "Developed Housing ready — +90K troop capacity, +5% troop growth",
-      "P3 captured your building — it's now their Factory",
+      "P3 took over your Factory",
       "You destroyed P4's Housing",
     ]);
   });

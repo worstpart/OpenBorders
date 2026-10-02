@@ -1,15 +1,29 @@
 /**
- * Building icons on the map (GAME_DESIGN.md §3.17.10): a small dark badge ringed in the
- * owner's colour, an original line drawing that grows with the level, and 1–3 level pips
- * under it — the tier reads without clicking. A building under construction is faded with
- * a progress ring; one being upgraded shows the ring at full strength.
+ * Building icons on the map (GAME_DESIGN.md §3.17.10): a round dark badge ringed in the
+ * owner's colour, the building's drawing for its level (icons.ts — the same art as
+ * the build bar), and 1–3 level pips under it; a level-III building gets a gold outer ring.
+ * The tier reads without clicking. A building under construction is faded with a progress
+ * ring; one being upgraded shows the ring at full strength.
+ *
+ * While the player is placing a building (the build bar), a ghost of it follows the mouse,
+ * snapped to the tile under it, with a ring showing the spacing: green where it may go,
+ * red where it may not.
  *
  * Drawn with Canvas2D on the label overlay (ARCHITECTURE.md §5.7 — instanced WebGL icons
  * can replace this if lobbies ever show thousands of buildings).
  */
 import type { BuildingSnapshot } from "../../sim/frame.ts";
 import type { BuildingType } from "../../sim/rules.ts";
+import { iconPath } from "../icons.ts";
 import type { MapView } from "./renderer.ts";
+
+export interface BuildGhost {
+  readonly type: BuildingType;
+  readonly tile: number;
+  readonly ok: boolean;
+  /** Spacing radius in tiles. */
+  readonly radius: number;
+}
 
 export interface BuildingDrawInput {
   readonly buildings: readonly BuildingSnapshot[];
@@ -21,19 +35,28 @@ export interface BuildingDrawInput {
   readonly colorOf: (id: number) => string;
   /** The building whose card is open (highlighted). */
   readonly selectedId: number | null;
-  /** While the build menu is open: where the building would go, and whether it may. */
-  readonly ghost: { readonly tile: number; readonly ok: boolean; readonly radius: number } | null;
+  /** The building being placed, if any. */
+  readonly ghost: BuildGhost | null;
 }
 
 /** Icon size in CSS px per unit of zoom (pixels per tile), and its bounds. */
-const SIZE_PER_ZOOM = 7;
-const MAX_SIZE = 30;
+export const ICON_PX_PER_ZOOM = 8;
+export const ICON_MAX_PX = 40;
 /** Below this size only your own and level-III buildings are drawn (at this size). */
-const MIN_SIZE = 13;
+export const ICON_MIN_PX = 18;
+
+const ICON_INK = "#f6f1e4";
+const GOLD = "#ffd166";
+
+/** The icon size (CSS px) at a zoom level. */
+export function iconSize(zoom: number): number {
+  return Math.min(ICON_MAX_PX, Math.max(ICON_MIN_PX, zoom * ICON_PX_PER_ZOOM));
+}
 
 export class BuildingLayer {
   private readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
+  private readonly paths = new Map<string, Path2D>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -52,24 +75,12 @@ export class BuildingLayer {
       x: ((tile % input.width) + 0.5 - view.centerX) * view.zoom + halfW,
       y: (Math.floor(tile / input.width) + 0.5 - view.centerY) * view.zoom + halfH,
     });
+    const size = iconSize(view.zoom);
+    const small = view.zoom * ICON_PX_PER_ZOOM < ICON_MIN_PX;
 
-    if (input.ghost) {
-      const at = toScreen(input.ghost.tile);
-      ctx.save();
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = input.ghost.ok ? "rgba(140, 240, 190, 0.9)" : "rgba(255, 140, 120, 0.9)";
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, Math.max(6, input.ghost.radius * view.zoom), 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    const natural = view.zoom * SIZE_PER_ZOOM;
     for (const b of input.buildings) {
       const mine = b.owner === input.localPlayerId;
-      if (natural < MIN_SIZE && !mine && b.level < 3) continue;
-      const size = Math.min(MAX_SIZE, Math.max(MIN_SIZE, natural));
+      if (small && !mine && b.level < 3) continue;
       const at = toScreen(b.tile);
       if (at.x < -size || at.y < -size || at.x > halfW * 2 + size || at.y > halfH * 2 + size) {
         continue;
@@ -80,156 +91,133 @@ export class BuildingLayer {
             1,
             Math.max(0, (input.tick - b.startTick) / Math.max(1, b.readyTick - b.startTick)),
           )
-        : 1;
-      drawBadge(
-        ctx,
-        at.x,
-        at.y,
-        size,
-        b,
-        input.colorOf(b.owner),
+        : null;
+      this.badge(at.x, at.y, size, b.type, b.level, {
+        color: input.colorOf(b.owner),
         mine,
         progress,
-        b.id === input.selectedId,
-      );
+        selected: b.id === input.selectedId,
+      });
     }
-  }
-}
 
-function drawBadge(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  b: BuildingSnapshot,
-  color: string,
-  mine: boolean,
-  progress: number,
-  selected: boolean,
-): void {
-  const half = size / 2;
-  const building = b.level === 0; // first construction: not working yet
-  ctx.save();
-  ctx.globalAlpha = building ? 0.55 : 1;
-  roundedRect(ctx, x - half, y - half, size, size, size * 0.26);
-  ctx.fillStyle = "rgba(14, 18, 26, 0.86)";
-  ctx.fill();
-  ctx.lineWidth = selected ? 3 : mine ? 2.2 : 1.6;
-  ctx.strokeStyle = selected ? "#ffffff" : color;
-  ctx.stroke();
-
-  // The drawing, in a box of ±1 around the centre.
-  const unit = size * 0.32;
-  ctx.translate(x, y - size * 0.02);
-  ctx.scale(unit, unit);
-  ctx.lineWidth = 0.17;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.strokeStyle = "#ffffff";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-  drawGlyph(ctx, b.type, Math.max(1, b.level));
-  ctx.restore();
-
-  // Level pips under the badge: filled up to the level, hollow for the rest.
-  const pip = Math.max(2.4, size * 0.11);
-  const gap = pip * 2.6;
-  const py = y + half + pip + 2;
-  ctx.save();
-  for (let k = 0; k < 3; k++) {
-    const px = x + (k - 1) * gap;
-    ctx.beginPath();
-    ctx.arc(px, py, pip, 0, Math.PI * 2);
-    if (k < b.level) {
-      ctx.fillStyle = mine ? "#ffd56a" : "#ffffff";
+    const ghost = input.ghost;
+    if (ghost) {
+      const at = toScreen(ghost.tile);
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = ghost.ok ? "rgba(140, 240, 190, 0.95)" : "rgba(255, 120, 100, 0.95)";
+      ctx.fillStyle = ghost.ok ? "rgba(140, 240, 190, 0.08)" : "rgba(255, 120, 100, 0.1)";
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, Math.max(size * 0.7, ghost.radius * view.zoom), 0, Math.PI * 2);
       ctx.fill();
-    } else {
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
       ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      this.badge(at.x, at.y, Math.max(26, size), ghost.type, 1, {
+        color: ghost.ok ? "#8cf0be" : "#ff7864",
+        mine: true,
+        progress: null,
+        selected: false,
+        pips: false,
+      });
+      ctx.restore();
     }
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(10, 14, 22, 0.7)";
-    if (k < b.level) ctx.stroke();
   }
-  ctx.restore();
 
-  // Construction / upgrade progress: a ring around the badge.
-  if (b.readyTick >= 0) {
+  private path(type: BuildingType, level: number): Path2D {
+    const key = `${type}:${level}`;
+    let path = this.paths.get(key);
+    if (!path) {
+      path = new Path2D(iconPath(type, level));
+      this.paths.set(key, path);
+    }
+    return path;
+  }
+
+  private badge(
+    x: number,
+    y: number,
+    size: number,
+    type: BuildingType,
+    level: number,
+    style: {
+      color: string;
+      mine: boolean;
+      /** Construction/upgrade progress 0..1, or null when idle. */
+      progress: number | null;
+      selected: boolean;
+      pips?: boolean;
+    },
+  ): void {
+    const ctx = this.context;
+    const r = size / 2;
     ctx.save();
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = "rgba(255, 213, 106, 0.95)";
-    ctx.beginPath();
-    ctx.arc(x, y, half + 4, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
+    if (level === 0) ctx.globalAlpha *= 0.6; // first construction: not working yet
 
-/** Original line drawings; more detail per level (one house → a town → a skyline). */
-function drawGlyph(ctx: CanvasRenderingContext2D, type: BuildingType, level: number): void {
-  if (type === "housing") {
-    if (level === 1) house(ctx, 0, 0.15, 1);
-    else if (level === 2) {
-      house(ctx, -0.42, 0.25, 0.75);
-      house(ctx, 0.42, 0.1, 0.9);
-    } else {
-      // A tower between two houses.
-      ctx.beginPath();
-      ctx.rect(-0.22, -0.95, 0.44, 1.75);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(0, -1.2);
-      ctx.lineTo(0, -0.95);
-      ctx.stroke();
-      house(ctx, -0.62, 0.35, 0.55);
-      house(ctx, 0.62, 0.35, 0.55);
-    }
-    return;
-  }
-  // Factory: a saw-tooth hall with one chimney per level.
-  ctx.beginPath();
-  ctx.moveTo(-0.95, 0.8);
-  ctx.lineTo(-0.95, 0.05);
-  ctx.lineTo(-0.45, -0.3);
-  ctx.lineTo(-0.45, 0.05);
-  ctx.lineTo(0.05, -0.3);
-  ctx.lineTo(0.05, 0.05);
-  ctx.lineTo(0.95, 0.05);
-  ctx.lineTo(0.95, 0.8);
-  ctx.closePath();
-  ctx.fill();
-  const chimneys = [0.55, 0.25, 0.8].slice(0, level);
-  for (const cx of chimneys) {
+    // A soft shadow lifts the badge off the map.
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = size * 0.25;
+    ctx.shadowOffsetY = size * 0.06;
+    const fill = ctx.createRadialGradient(x, y - r * 0.4, r * 0.1, x, y, r);
+    fill.addColorStop(0, "#2a3346");
+    fill.addColorStop(1, "#0e121a");
     ctx.beginPath();
-    ctx.rect(cx - 0.09, -0.85, 0.18, 0.95);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
     ctx.fill();
+    ctx.shadowColor = "transparent";
+
+    ctx.lineWidth = style.selected ? 3 : style.mine ? 2.4 : 1.8;
+    ctx.strokeStyle = style.selected ? "#ffffff" : style.color;
+    ctx.stroke();
+    if (level >= 3) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 2.6, 0, Math.PI * 2);
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = GOLD;
+      ctx.stroke();
+    }
+
+    // The drawing: 24 × 24 art scaled into ~62% of the badge.
+    const scale = (size * 0.62) / 24;
+    ctx.translate(x - 12 * scale, y - 12 * scale - size * 0.01);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = ICON_INK;
+    ctx.fill(this.path(type, level), "evenodd");
+    ctx.restore();
+
+    if (style.pips !== false && level > 0) {
+      const pip = Math.max(2.2, size * 0.085);
+      const gap = pip * 2.7;
+      const py = y + r + pip + 2.5;
+      ctx.save();
+      for (let k = 0; k < level; k++) {
+        ctx.beginPath();
+        ctx.arc(x + (k - (level - 1) / 2) * gap, py, pip, 0, Math.PI * 2);
+        ctx.fillStyle = style.mine ? GOLD : "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(10, 14, 22, 0.75)";
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (style.progress !== null) {
+      ctx.save();
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = GOLD;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4.5, -Math.PI / 2, -Math.PI / 2 + style.progress * Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
-}
-
-function house(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x - 0.6 * s, y + 0.65 * s);
-  ctx.lineTo(x - 0.6 * s, y - 0.05 * s);
-  ctx.lineTo(x, y - 0.65 * s);
-  ctx.lineTo(x + 0.6 * s, y - 0.05 * s);
-  ctx.lineTo(x + 0.6 * s, y + 0.65 * s);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function roundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
