@@ -342,6 +342,27 @@ export function bordersTarget(world: World, player: Player, target: PlayerId): b
   return false;
 }
 
+/**
+ * Everyone whose land touches the player's (0 = neutral land), in ascending order: who
+ * a click can reach. Used by the HUD; iterates the player's border once.
+ */
+export function landNeighbors(world: World, player: Player): PlayerId[] {
+  const { map, owner } = world;
+  const found = new Set<PlayerId>();
+  const check = (tile: number) => {
+    const o = owner[tile]!;
+    if (o !== player.id && isLand(map, tile)) found.add(o);
+  };
+  for (const tile of player.border) {
+    const x = tile % map.width;
+    if (tile >= map.width) check(tile - map.width);
+    if (tile + map.width < owner.length) check(tile + map.width);
+    if (x > 0) check(tile - 1);
+    if (x < map.width - 1) check(tile + 1);
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
 function isTargetLand(world: World, tile: number, target: PlayerId): boolean {
   return world.owner[tile] === target && isLand(world.map, tile);
 }

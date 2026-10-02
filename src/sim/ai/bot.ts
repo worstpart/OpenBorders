@@ -19,6 +19,7 @@
  *     "grow or strike?" tension the game is built on.
  * Personalities change the thresholds and preferences, not the rules.
  */
+import { expectedLandShare, tileCostOfAll as tileCostOfAllTiles } from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isLand, tileAt, Terrain } from "../map/gameMap.ts";
 import type { PersonalityRules } from "../rules.ts";
@@ -226,8 +227,7 @@ function armyToTakeAll(world: World, target: Player, style: PersonalityRules): n
 }
 
 function tileCostOfAll(world: World, target: Player): number {
-  const { combat } = world.rules;
-  return 0.6 * (combat.lossBase * 1.15 * target.tiles + combat.lossDensity * target.homeTroops);
+  return tileCostOfAllTiles(world.rules, target.tiles, target.homeTroops);
 }
 
 function chooseTarget(
@@ -254,7 +254,7 @@ function chooseTarget(
       style.attackMaxShare * bot.homeTroops,
     );
     const gain = Math.min(
-      expectedLandShare(world, army, defenders),
+      expectedLandShare(world.rules, army, defenders),
       army / tileCostOfAll(world, target),
     );
     if (gain < minGain) continue;
@@ -277,17 +277,4 @@ function chooseTarget(
     }
   }
   return best;
-}
-
-/**
- * Share of a defender's land an army is expected to take before it runs out. With
- * losses ∝ r = D/A, a fight follows A² − A₀² = k·(D² − D₀²) (k = lossDensity), so the
- * defenders left when the army is spent are D = √(D₀² − A₀²/k), and land falls in
- * proportion to defenders lost. A rough guide: it ignores growth and the per-tile base
- * cost, so it's padded by 15%.
- */
-export function expectedLandShare(world: World, army: number, defenders: number): number {
-  const k = world.rules.combat.lossDensity * 1.15;
-  const left = 1 - (army * army) / (k * defenders * defenders);
-  return left <= 0 ? 1 : 1 - Math.sqrt(left);
 }

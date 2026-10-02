@@ -43,6 +43,9 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /* HUD layout: the command bar's height, so attack chips stack right above it */
+  --command-bar-height: 112px;
+
   /* Motion: ease-out, nothing bounces */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-fast: 120ms;

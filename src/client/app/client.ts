@@ -14,8 +14,13 @@ import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts
 import { computeLabelPlacements, LabelLayer, type LabelPlacement } from "../render/labels.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
+import { DEFAULT_RULES } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
+import { nearestOwnedTile } from "./focus.ts";
+import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, playerColors } from "./players.ts";
+import { protectionSecondsLeft } from "./preview.ts";
+import { addToast, TOAST_MS, toastsForEvents, type ToastInput } from "./toasts.ts";
 import { ui } from "./uiState.svelte.ts";
 
 /** Phase 1 plays on one fixed procedural continent (ROADMAP Phase 1). */
@@ -49,6 +54,8 @@ export class GameClient {
   private latestFrame: TickFrame | null = null;
   private hoverPoint: ScreenPoint | null = null;
   private lastFrameTime = performance.now();
+  private readonly hints = new HintTracker(localHintStore);
+  private nextToastId = 1;
 
   constructor(elements: ClientElements) {
     this.mapCanvas = elements.mapCanvas;
@@ -57,6 +64,8 @@ export class GameClient {
     this.perf = new PerfOverlay(elements.overlayParent);
     this.controls = new Controls(elements.mapCanvas, {
       primaryClick: (at) => this.primaryClick(at),
+      secondaryClick: (at) => this.secondaryClick(at),
+      menuOpen: () => ui.menu !== null,
       pan: (dx, dy) => this.camera.panBy(dx, dy),
       zoom: (factor, anchor) => this.camera.zoomAt(factor, anchor),
       hover: (at) => (this.hoverPoint = at),
@@ -118,7 +127,7 @@ export class GameClient {
    */
   get debug() {
     return {
-      setSpeed: (multiplier: number) => this.host?.setSpeed(multiplier),
+      setSpeed: (multiplier: number) => this.setSpeed(multiplier),
       pause: () => this.host?.pause(),
       resume: () => this.host?.resume(),
       frame: () => this.latestFrame,
@@ -130,6 +139,75 @@ export class GameClient {
 
   retreat(attackId: number): void {
     this.host?.send({ type: "retreat", attackId });
+  }
+
+  /** Retreats every attack of ours on `target`. */
+  retreatFrom(target: number): void {
+    for (const attack of ui.attacks) {
+      if (attack.attacker === ui.localPlayerId && attack.target === target && !attack.retreating) {
+        this.retreat(attack.id);
+      }
+    }
+  }
+
+  /** Attacks (or expands into) the land at `tile` with `percent`% of our home troops. */
+  attackTile(tile: number, percent: number): void {
+    const me = ui.me;
+    if (!this.host || !this.map || ui.phase !== "playing" || !me?.alive) return;
+    if (!isLand(this.map, tile)) return;
+    const target = this.owner[tile]!;
+    if (target === me.id) return;
+    // Neutral land → expand; enemy land → attack. The simulation validates the rest.
+    this.host.send({
+      type: "attack",
+      target,
+      focusTile: tile,
+      percentBp: Math.round(percent * 100),
+    });
+  }
+
+  /**
+   * Answers an incoming attack by attacking its sender with the current percentage, aimed
+   * at their land nearest to where they attack: opposing armies cancel out first.
+   */
+  counter(attackId: number): void {
+    const attack = ui.attacks.find((a) => a.id === attackId);
+    const map = this.map;
+    if (!attack || !map) return;
+    const tile = nearestOwnedTile(
+      this.owner,
+      map.width,
+      map.height,
+      attack.focusTile,
+      attack.attacker,
+    );
+    if (tile >= 0) this.attackTile(tile, ui.attackPercent);
+  }
+
+  /** Opens the pause menu and stops the clock (solo games). */
+  pause(): void {
+    if (ui.screen !== "game") return;
+    this.host?.pause();
+    ui.paused = true;
+    ui.menu = { kind: "pause" };
+  }
+
+  /** Closes whatever menu is open; leaving the pause menu resumes the game. */
+  closeMenu(): void {
+    if (ui.menu?.kind === "pause") {
+      this.host?.resume();
+      ui.paused = false;
+    }
+    ui.menu = null;
+  }
+
+  setSpeed(multiplier: number): void {
+    this.host?.setSpeed(multiplier);
+    ui.speed = multiplier;
+  }
+
+  dismissHint(id: HintId): void {
+    this.hints.complete(id);
   }
 
   /** Ends the current game and returns to the start screen (the map stays). */
@@ -165,9 +243,12 @@ export class GameClient {
       this.renderer.applyTileChanges(frame.changedTiles, frame.changedOwners, frame.tick);
       this.labelsDirty = true;
     }
+    const me = ui.localPlayerId;
     for (const event of frame.events) {
-      if (event.type === "commandRejected" && event.playerId === ui.localPlayerId) {
+      if (event.type === "commandRejected" && event.playerId === me) {
         console.info(`Command "${event.command}" rejected: ${event.reason}`);
+      } else if (event.type === "attackStarted" && event.attacker === me) {
+        this.hints.complete(event.target === 0 ? "expand" : "attack");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
       } else if (event.type === "gameOver") {
@@ -175,7 +256,22 @@ export class GameClient {
         ui.gameOverReason = event.reason;
       }
     }
+    const toasts = toastsForEvents(frame.events, me, (id) => ui.playerName(id));
+    const protectionEnd = frame.playStartTick + DEFAULT_RULES.spawn.protectionTicks;
+    if (frame.phase === "playing" && frame.tick === protectionEnd) {
+      toasts.push({
+        text: "Spawn protection is over — players can attack each other",
+        tone: "info",
+      });
+    }
+    for (const toast of toasts) this.toast(toast);
     this.publish(frame);
+  }
+
+  private toast(input: ToastInput): void {
+    const id = this.nextToastId++;
+    ui.toasts = addToast(ui.toasts, { ...input, id });
+    setTimeout(() => (ui.toasts = ui.toasts.filter((t) => t.id !== id)), TOAST_MS);
   }
 
   /** Copies what the UI needs from a frame into the reactive UI state. */
@@ -185,24 +281,35 @@ export class GameClient {
     ui.playStartTick = frame.playStartTick;
     ui.players = frame.players;
     ui.attacks = frame.attacks;
+    const peaks = new Map<number, number>();
+    for (const attack of frame.attacks) {
+      peaks.set(attack.id, Math.max(attack.troops, ui.attackPeak.get(attack.id) ?? 0));
+    }
+    ui.attackPeak = peaks;
     this.renderer.setAttacks(frame.attacks, frame.players.length);
   }
 
   private primaryClick(at: ScreenPoint): void {
     const map = this.map;
     const tile = this.camera.tileAt(at);
-    if (!map || !tile || ui.screen !== "game" || !this.host) return;
+    if (!map || !tile || ui.screen !== "game" || !this.host || ui.menu) return;
     const index = tileAt(map, tile.x, tile.y);
     if (ui.phase === "spawn" && !ui.me?.ready) {
       this.host.send({ type: "spawn", tile: index });
       return;
     }
-    const me = ui.me;
-    if (ui.phase !== "playing" || !me?.alive || !isLand(map, index)) return;
-    const target = this.owner[index]!;
-    if (target === me.id) return; // own land: nothing to do (selection comes with the HUD)
-    // Neutral land → expand; enemy land → attack. The simulation validates the rest.
-    this.host.send({ type: "attack", target, focusTile: index, percentBp: ui.attackPercent * 100 });
+    this.attackTile(index, ui.attackPercent);
+  }
+
+  /** Right click: the context menu for the land under the cursor. */
+  private secondaryClick(at: ScreenPoint): void {
+    const map = this.map;
+    const tile = this.camera.tileAt(at);
+    if (!map || !tile || ui.screen !== "game" || ui.phase !== "playing" || ui.menu) return;
+    const index = tileAt(map, tile.x, tile.y);
+    if (!isLand(map, index)) return;
+    ui.menu = { kind: "context", x: at.x, y: at.y, tile: index, owner: this.owner[index]! };
+    this.hints.complete("menus");
   }
 
   private key(action: KeyAction): void {
@@ -219,7 +326,9 @@ export class GameClient {
         this.confirmSpawn();
         break;
       case "escape":
-        break; // the pause menu arrives in milestone 1.6
+        if (ui.menu) this.closeMenu();
+        else this.pause();
+        break;
       case "preset1":
       case "preset2":
       case "preset3":
@@ -256,6 +365,7 @@ export class GameClient {
     };
 
     this.updateHover();
+    this.updateHint();
     this.refreshLabels(startedAt);
     this.renderer.render(view, this.currentTick(), time / 1000);
     const players = this.latestFrame?.players ?? [];
@@ -280,9 +390,37 @@ export class GameClient {
   }
 
   private updateHover(): void {
-    const tile = this.hoverPoint && this.map ? this.camera.tileAt(this.hoverPoint) : null;
-    const owner = tile && this.map ? this.owner[tileAt(this.map, tile.x, tile.y)]! : 0;
+    const map = this.map;
+    const point = this.hoverPoint;
+    const cell = point && map ? this.camera.tileAt(point) : null;
+    const tile = cell && map ? tileAt(map, cell.x, cell.y) : -1;
+    const owner = tile >= 0 ? this.owner[tile]! : 0;
     this.renderer.setHoverOwner(owner);
+
+    // The hover card: land only, in a running game, while no menu is open.
+    const prev = ui.hover;
+    if (!point || !map || tile < 0 || !isLand(map, tile) || ui.screen !== "game" || ui.menu) {
+      if (prev) ui.hover = null;
+      return;
+    }
+    const same =
+      prev &&
+      prev.tile === tile &&
+      prev.owner === owner &&
+      prev.x === point.x &&
+      prev.y === point.y;
+    if (!same) ui.hover = { tile, owner, terrain: map.terrain[tile]!, x: point.x, y: point.y };
+  }
+
+  private updateHint(): void {
+    const me = ui.me;
+    const playing = ui.screen === "game" && ui.phase === "playing" && !!me?.alive && !ui.menu;
+    const canAttackPlayer =
+      playing &&
+      protectionSecondsLeft(ui.previewContext) === 0 &&
+      !!me?.neighbors?.some((id) => id !== 0);
+    const hint = this.hints.update({ playing, canAttackPlayer }, performance.now() / 1000);
+    if (hint !== ui.hint) ui.hint = hint;
   }
 
   private refreshLabels(now: number): void {

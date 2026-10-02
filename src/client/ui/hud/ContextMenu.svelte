@@ -1,0 +1,288 @@
+<script lang="ts">
+  import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
+  import { ODDS_LABEL, previewClick } from "../../app/preview.ts";
+  import { ui } from "../../app/uiState.svelte.ts";
+  import { formatPercent, formatTroops } from "../../format.ts";
+
+  interface Props {
+    onAttack: (tile: number, percent: number) => void;
+    onRetreatFrom: (target: number) => void;
+    onClose: () => void;
+  }
+
+  let { onAttack, onRetreatFrom, onClose }: Props = $props();
+
+  const WIDTH = 250;
+  let menuElement = $state<HTMLElement | null>(null);
+  let height = $state(0);
+  let viewportWidth = $state(1280);
+  let viewportHeight = $state(800);
+
+  const menu = $derived(ui.menu?.kind === "context" ? ui.menu : null);
+  const owner = $derived(menu && menu.owner !== 0 ? ui.players[menu.owner - 1] : undefined);
+  const isMe = $derived(menu?.owner === ui.localPlayerId);
+  const options = $derived(
+    menu
+      ? ATTACK_PRESETS.map((percent) => ({
+          percent,
+          preview: previewClick(ui.previewContext, menu.owner, percent),
+        }))
+      : [],
+  );
+  /** Why no attack option is available, if none is. */
+  const blocked = $derived(options[0]?.preview);
+  const canAct = $derived(
+    options.some((o) => o.preview.kind === "expand" || o.preview.kind === "attack"),
+  );
+  const myAttacks = $derived(
+    menu
+      ? ui.attacks.filter(
+          (a) => a.attacker === ui.localPlayerId && a.target === menu.owner && !a.retreating,
+        )
+      : [],
+  );
+  const left = $derived(menu ? Math.max(8, Math.min(menu.x, viewportWidth - WIDTH - 8)) : 0);
+  const top = $derived(menu ? Math.max(8, Math.min(menu.y, viewportHeight - height - 8)) : 0);
+
+  // Keyboard path: focus the first item when the menu opens; arrows move between items.
+  $effect(() => {
+    if (menu && menuElement) menuElement.querySelector<HTMLButtonElement>("button")?.focus();
+  });
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const items = [
+      ...(menuElement?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []),
+    ];
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = (at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  }
+
+  function act(run: () => void) {
+    run();
+    onClose();
+  }
+</script>
+
+<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
+
+{#if menu}
+  <!-- Clicking anywhere outside closes the menu without acting on the map. -->
+  <div
+    class="backdrop"
+    role="presentation"
+    onpointerdown={onClose}
+    oncontextmenu={(e) => e.preventDefault()}
+  ></div>
+  <div
+    class="menu"
+    role="menu"
+    tabindex="-1"
+    aria-label="Actions for {ui.playerName(menu.owner)}"
+    bind:this={menuElement}
+    bind:clientHeight={height}
+    style:left="{left}px"
+    style:top="{top}px"
+    style:width="{WIDTH}px"
+    style:--player-color={ui.colorOf(menu.owner)}
+    onkeydown={onKeydown}
+    oncontextmenu={(e) => e.preventDefault()}
+  >
+    <div class="head">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="name">{isMe ? "Your land" : ui.playerName(menu.owner)}</span>
+      {#if owner && !isMe}
+        <span class="muted"
+          >{formatTroops(owner.homeTroops)} · {formatPercent(owner.tiles / ui.landTiles)}</span
+        >
+      {/if}
+    </div>
+
+    {#if canAct}
+      <div class="group-label">{menu.owner === 0 ? "Expand with" : "Attack with"}</div>
+      {#each options as { percent, preview } (percent)}
+        {#if preview.kind === "expand" || preview.kind === "attack"}
+          <button
+            type="button"
+            role="menuitem"
+            class:current={percent === ui.attackPercent}
+            onclick={() => act(() => onAttack(menu.tile, percent))}
+          >
+            <span class="pct">{percent}%</span>
+            <span class="troops">{formatTroops(preview.army)}</span>
+            {#if preview.kind === "attack"}
+              <span class="odds {preview.outlook.odds}">{ODDS_LABEL[preview.outlook.odds]}</span>
+            {:else}
+              <span class="muted">~{preview.tiles.toLocaleString("en-US")} tiles</span>
+            {/if}
+          </button>
+        {/if}
+      {/each}
+    {:else if blocked && !isMe}
+      <div class="info">
+        {#if blocked.kind === "notReachable"}
+          You don't border {menu.owner === 0 ? "this land" : "them"} yet.
+        {:else if blocked.kind === "protected"}
+          Spawn protection: {Math.ceil(blocked.seconds)} s.
+        {:else if blocked.kind === "noTroops"}
+          No troops at home to send.
+        {:else}
+          Nothing to do here right now.
+        {/if}
+      </div>
+    {:else if isMe}
+      <div class="info">
+        {formatTroops(ui.me?.homeTroops ?? 0)} troops at home defend it. Click neutral or enemy land to
+        act.
+      </div>
+    {/if}
+
+    {#if myAttacks.length > 0}
+      <div class="divider"></div>
+      <button type="button" role="menuitem" onclick={() => act(() => onRetreatFrom(menu.owner))}>
+        {menu.owner === 0 ? "Stop expanding" : `Retreat from ${ui.playerName(menu.owner)}`}
+        <span class="muted">
+          {formatTroops(myAttacks.reduce((sum, a) => sum + a.troops, 0))}{menu.owner === 0
+            ? ""
+            : " −20%"}
+        </span>
+      </button>
+    {/if}
+  </div>
+{/if}
+
+<style>
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+  }
+
+  .menu {
+    position: absolute;
+    pointer-events: auto;
+    padding: var(--space-1);
+    background: var(--surface-glass-strong);
+    backdrop-filter: blur(var(--surface-blur));
+    border: 1px solid var(--surface-hairline);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    font-size: var(--text-sm);
+    outline: none;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    font-size: var(--text-md);
+  }
+
+  .dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--player-color);
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 650;
+  }
+
+  .head .muted {
+    margin-left: auto;
+    font-size: var(--text-sm);
+  }
+
+  .group-label {
+    padding: var(--space-1) var(--space-2);
+    color: var(--text-muted);
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    height: 30px;
+    padding: 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  button:hover,
+  button:focus-visible {
+    background: rgb(255 255 255 / 0.1);
+    outline: none;
+  }
+
+  button.current .pct {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .pct {
+    width: 36px;
+    font-weight: 650;
+    color: var(--text-secondary);
+  }
+
+  .troops {
+    width: 52px;
+  }
+
+  button .muted,
+  button .odds {
+    margin-left: auto;
+  }
+
+  .muted {
+    color: var(--text-muted);
+  }
+
+  .odds {
+    padding: 1px var(--space-2);
+    border-radius: 999px;
+    font-weight: 650;
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .odds.overwhelming,
+  .odds.advantage {
+    color: var(--color-success);
+  }
+
+  .odds.even {
+    color: var(--color-warning);
+  }
+
+  .odds.costly,
+  .odds.hopeless {
+    color: var(--color-danger);
+  }
+
+  .info {
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    color: var(--text-secondary);
+    line-height: 1.45;
+  }
+
+  .divider {
+    height: 1px;
+    margin: var(--space-1) var(--space-2);
+    background: var(--surface-hairline);
+  }
+</style>

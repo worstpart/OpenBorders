@@ -70,7 +70,7 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 | 1.3 ✅ | **Expansion & combat** — attack/retreat commands, directed priority, budgets & losses, merge/cancel, capture flash, fronts | Scenario tests on tiny maps pass; playable expansion & attacks in the browser |
 | 1.4 ✅ | **Encirclement, elimination, victory** | Tests for each rule; full solo game reachable end-to-end |
 | 1.5 ✅ | **AI opponents** — personalities, staggered thinking; headless runner | 100 bots-only games finish with a winner, no exceptions, within tick budget |
-| 1.6 | **HUD & interaction** — command bar, attack % control, chips, leaderboard, toasts, hover card, context menu, start/pause/end screens, hints | Every control verified in the browser; keyboard paths work |
+| 1.6 ✅ | **HUD & interaction** — command bar, attack % control, chips, leaderboard, toasts, hover card, context menu, start/pause/end screens, hints | Every control verified in the browser; keyboard paths work |
 | 1.7 | **Playtest & tune** — balance via headless metrics + play sessions, performance pass | Matches ≈ 8–12 min, budgets met, stable commit tagged *phase-1* |
 
 **Milestone 1.5 result** (`npm run headless -- --games 100`, reference map, 8 bots, 86 s on
@@ -78,6 +78,12 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 median 12.7 min (under 8: 1 · 8–12: 33 · 12–16: 51 · 16–20: 13 · 20–30: 1 · 50: 1). Leader at
 minute 3 won 32%. Wins by personality: opportunist 32, expander 29, turtle 24, aggressor 15.
 Tick 0.71 ms avg, worst p99 8.7 ms, worst single tick 30 ms.
+
+**Milestone 1.6 result:** command bar with the sweet-spot troop bar and send preview,
+attack chips with odds / threat and Counter, hover card with battle preview, right-click
+menu, leaderboard + clock, toasts, pause menu with game speed, contextual hints — all
+verified in the browser (mouse and keyboard paths: 1–5, Q/E, Esc, menu arrows/Enter,
+Tab in the pause menu). As built: GAME_DESIGN §5.1, ARCHITECTURE §6. 139 tests.
 
 **Notes collected for 1.7 (tuning):**
 - Troop management dominates: a scripted player that only attacks at ≥ 50% of capacity
@@ -92,6 +98,10 @@ Tick 0.71 ms avg, worst p99 8.7 ms, worst single tick 30 ms.
   GC) — profile them.
 - Aggressors win least (15%) — they deplete themselves; consider tuning their thresholds.
 - One game in 100 ran 50 min — look at what kept it going.
+- Odds thresholds (GAME_DESIGN §5.1 as built) are a first guess — check in play that
+  "Even" and "Costly" match what players experience.
+- A Counter with a depleted pool is tiny (the button shows its size); consider whether
+  the HUD should suggest a % for countering.
 
 ---
 

@@ -329,6 +329,20 @@ touch them.
 UI stores update at most once per tick; anything faster (smooth bars, counters) is done
 with CSS/Svelte tweens, not more updates. No per-frame DOM writes.
 
+**As built (milestone 1.6).** `app/uiState.svelte.ts` is the one reactive store; `client.ts`
+writes it from tick frames and owns every action (attack a tile, retreat, counter, pause,
+speed). Components only read it and call actions (exception: the attack % and
+leaderboard collapse are pure UI choices). The only per-frame write is the hover card's
+cursor position, and only when the mouse actually moves to another pixel. HUD logic lives
+in plain, unit-tested modules next to the store — `troopBar.ts` (sweet-spot model),
+`preview.ts` (what a click would do; mirrors the sim's checks), `toasts.ts` (which events
+become toasts), `hints.ts` (contextual hint order, finished hints kept in localStorage),
+`focus.ts` (aim a counter-attack) — so the Svelte files stay presentational. Battle odds
+come from `sim/battle.ts`, the same estimate the bots use. Tick frames carry each human
+player's land neighbours (`PlayerSnapshot.neighbors`, null for bots to save work) so the
+HUD knows what a click can reach. While a menu is open, `input/controls.ts` passes only
+Escape to the game, so Tab / Enter / Space / arrows work on the menu's buttons.
+
 ---
 
 ## 7. Multiplayer plan (Phase 3) — *Proposed* (D-006)
@@ -385,6 +399,7 @@ simulation and a local turn scheduler.
 │  │  ├─ tick.ts              the ordered list of systems
 │  │  ├─ commands.ts          command types + validation
 │  │  ├─ frame.ts             what a tick reports (deltas, stats, events, hash)
+│  │  ├─ battle.ts            battle estimates shared by bots and the HUD's odds labels
 │  │  ├─ map/                 GameMap, terrain, neighbors, procedural generation
 │  │  ├─ systems/             spawn, attacks, encirclement, elimination, troops, victory
 │  │  ├─ ai/                  bot brains (emit commands only)

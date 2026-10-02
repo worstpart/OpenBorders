@@ -389,6 +389,44 @@ and a keyboard path, and hovering always tells you what a click would do.
 - **Overlays:** spawn prompt, pause menu, victory/defeat card with match stats and
   *Play again*.
 
+**As built (milestone 1.6):**
+- **Command bar:** home troops / capacity, troops in the field, growth per second; the
+  troop bar shows a soft green **sweet-spot zone** (35–65%, where growth is within ~10% of
+  its peak), a white **½ tick**, the **hatched slice** a click would send, and field troops
+  as a faint striped segment. A status line names the state in plain words — *Low —
+  rebuilding slowly · Near half — fastest growth · Above half — growth slowing · Full — not
+  growing. Send troops!* — and at full capacity the whole card pulses amber. Presets
+  10–100 (keys 1–5) plus the live troop count; a non-preset value (Q/E, Shift+wheel) is
+  shown next to it.
+- **Odds** (`sim/battle.ts`, the same estimate the bots use): the expected share of the
+  target's land an army takes — limited by Lanchester's law *and* by the per-tile cost of
+  their land. *Overwhelming* = takes everything with ≥ 2× their home troops (half the
+  losses, a flood) · *Advantage* = takes everything · *Even* = 40–99% · *Costly* = 10–40% ·
+  *Hopeless* = under 10%. Shown on the hover card, the right-click menu and outgoing
+  chips ("takes ~35% of their land"). Incoming chips show the same estimate as a
+  **threat** (Critical · High · Serious · Moderate · Low).
+- **Attack chips:** outgoing — target, a shrinking bar of the army left (vs its peak),
+  troops, tiles taken, odds, × retreat. Incoming — coral chip with the threat and a
+  **Counter** button that attacks the sender with your current % (aimed at their land
+  nearest their attack): opposing armies cancel out, the cheap defence the bots use.
+- **Hover card:** owner, terrain (highland/mountain warn "slower, costlier"), troops,
+  land, bot personality, "Attacking you" / "You're attacking", and what a click would
+  do: expand (with an upper bound of tiles) or attack (army, odds, expected outcome) — or
+  why it can't (not bordering, spawn protection countdown, no troops).
+- **Right-click menu:** the same preview for every preset (pick one to send it), retreat
+  from that player / stop expanding. Arrow keys + Enter work; Esc or a click outside
+  closes it.
+- **Top right:** match clock (with a speed badge when not 1×), menu button, collapsible
+  leaderboard (top 5 by land + you with your real rank, players left).
+- **Toasts** (max 3, 4.5 s): attacks on you, your eliminations, other eliminations,
+  encirclements of ≥ 25 tiles involving you, your attack cancelled out / ran out, match
+  start, end of spawn protection. Small slivers cut off along fronts are not news.
+- **Pause menu (Esc):** pauses the simulation; resume, game speed 1×/2×/4×, the controls
+  list, and "Leave match" (asks for a second click).
+- **Hints** (bottom left, one at a time; each disappears when done or after ~14 s for the
+  explanatory ones; remembered in this browser): expand → (attack, as soon as you border
+  a player after spawn protection) → sweet spot → right-click & Esc.
+
 ### 5.2 Visual language
 
 - **Glass cards** over the map: dark translucent surface (~72% opacity) with backdrop

@@ -24,12 +24,19 @@ export type KeyAction =
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
+  /** Right click (without dragging): the context menu. */
+  secondaryClick(at: ScreenPoint): void;
   pan(dx: number, dy: number): void;
   zoom(factor: number, anchor: ScreenPoint): void;
   hover(at: ScreenPoint | null): void;
   key(action: KeyAction): void;
   /** Shift + wheel: change the attack percentage by this many steps (+ = more). */
   adjustPercent(steps: number): void;
+  /**
+   * True while a menu has the keyboard: only Escape reaches the game, so Tab, Enter and
+   * Space work on the menu's buttons and the map stays still.
+   */
+  menuOpen(): boolean;
 }
 
 const KEY_ACTIONS: Record<string, KeyAction> = {
@@ -134,7 +141,9 @@ export class Controls {
     const p = this.point(e);
     if (this.target.hasPointerCapture(e.pointerId)) this.target.releasePointerCapture(e.pointerId);
     const event = this.gesture.up(p.x, p.y);
-    if (event.type === "click" && event.button === 0) this.handlers.primaryClick(p);
+    if (event.type !== "click") return;
+    if (event.button === 0) this.handlers.primaryClick(p);
+    else if (event.button === 2) this.handlers.secondaryClick(p);
   }
 
   private onWheel(e: WheelEvent): void {
@@ -154,6 +163,14 @@ export class Controls {
     const target = e.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)))
       return;
+    if (this.handlers.menuOpen()) {
+      this.heldPanKeys.clear();
+      if (e.code === "Escape" && !e.repeat) {
+        e.preventDefault();
+        this.handlers.key("escape");
+      }
+      return;
+    }
     if (e.code in PAN_KEYS) {
       this.heldPanKeys.add(e.code);
       e.preventDefault();

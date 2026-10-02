@@ -1,9 +1,21 @@
 <script lang="ts" module>
   /** What the UI may ask the game to do (it never changes game state itself). */
+  import type { HintId } from "../app/hints.ts";
+
   export interface AppActions {
     play: (opponents: number) => void;
     confirmSpawn: () => void;
     retreat: (attackId: number) => void;
+    /** Retreat every attack on this player (0 = stop expanding). */
+    retreatFrom: (target: number) => void;
+    /** Attack or expand at a tile with this share (%) of home troops. */
+    attackTile: (tile: number, percent: number) => void;
+    /** Answer an incoming attack by attacking its sender. */
+    counter: (attackId: number) => void;
+    pause: () => void;
+    closeMenu: () => void;
+    setSpeed: (multiplier: number) => void;
+    dismissHint: (id: HintId) => void;
     playAgain: () => void;
   }
 </script>
@@ -11,9 +23,16 @@
 <script lang="ts">
   import { ui } from "../app/uiState.svelte.ts";
   import AttackChips from "./hud/AttackChips.svelte";
+  import CommandBar from "./hud/CommandBar.svelte";
+  import ContextMenu from "./hud/ContextMenu.svelte";
+  import HintCard from "./hud/HintCard.svelte";
+  import HoverCard from "./hud/HoverCard.svelte";
+  import Leaderboard from "./hud/Leaderboard.svelte";
   import SpawnPrompt from "./hud/SpawnPrompt.svelte";
+  import Toasts from "./hud/Toasts.svelte";
   import YouChip from "./hud/YouChip.svelte";
   import EndCard from "./screens/EndCard.svelte";
+  import PauseMenu from "./screens/PauseMenu.svelte";
   import StartScreen from "./screens/StartScreen.svelte";
 
   interface Props {
@@ -40,9 +59,20 @@
   </main>
 {:else}
   <YouChip />
+  <Leaderboard onMenu={actions.pause} />
   <SpawnPrompt onConfirm={actions.confirmSpawn} />
-  <AttackChips onRetreat={actions.retreat} />
+  <Toasts />
+  <HintCard onDismiss={actions.dismissHint} />
+  <AttackChips onRetreat={actions.retreat} onCounter={actions.counter} />
+  <CommandBar />
+  <HoverCard />
+  <ContextMenu
+    onAttack={actions.attackTile}
+    onRetreatFrom={actions.retreatFrom}
+    onClose={actions.closeMenu}
+  />
   <EndCard onPlayAgain={actions.playAgain} />
+  <PauseMenu onResume={actions.closeMenu} onSpeed={actions.setSpeed} onLeave={actions.playAgain} />
 {/if}
 
 <style>

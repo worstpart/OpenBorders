@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedLandShare } from "../../../src/sim/ai/bot.ts";
+import { expectedLandShare } from "../../../src/sim/battle.ts";
 import type { StampedCommand } from "../../../src/sim/commands.ts";
 import type { SimEvent } from "../../../src/sim/events.ts";
 import { tileAt } from "../../../src/sim/map/gameMap.ts";
@@ -162,12 +162,12 @@ describe("bots", () => {
 
   it("predict how much land an army takes before it runs out (Lanchester)", () => {
     const k = DEFAULT_RULES.combat.lossDensity * 1.15;
-    expect(expectedLandShare(world0(), 0, 1_000)).toBe(0);
-    expect(expectedLandShare(world0(), Math.sqrt(k) * 1_000, 1_000)).toBe(1);
-    const half = expectedLandShare(world0(), 0.75 * 1_000, 1_000);
+    expect(expectedLandShare(world0().rules, 0, 1_000)).toBe(0);
+    expect(expectedLandShare(world0().rules, Math.sqrt(k) * 1_000, 1_000)).toBe(1);
+    const half = expectedLandShare(world0().rules, 0.75 * 1_000, 1_000);
     expect(half).toBeGreaterThan(0.2);
     expect(half).toBeLessThan(0.35);
-    expect(expectedLandShare(world0(), 900, 1_000)).toBeGreaterThan(half);
+    expect(expectedLandShare(world0().rules, 900, 1_000)).toBeGreaterThan(half);
   });
 });
 

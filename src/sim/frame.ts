@@ -5,6 +5,7 @@
  */
 import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
+import { landNeighbors } from "./systems/attacks.ts";
 import type { Phase, PlayerId, PlayerKind, World } from "./world.ts";
 
 export interface PlayerSnapshot {
@@ -24,6 +25,11 @@ export interface PlayerSnapshot {
   readonly personality: string | null;
   /** Tick the player was eliminated, or -1. */
   readonly eliminatedTick: number;
+  /**
+   * Whose land touches this player's (0 = neutral), ascending — what a click can reach.
+   * Humans only (the HUD needs it); null for bots, to save the work every tick.
+   */
+  readonly neighbors: readonly PlayerId[] | null;
 }
 
 export interface AttackSnapshot {
@@ -68,6 +74,7 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     peakTiles: p.peakTiles,
     personality: p.brain?.personality ?? null,
     eliminatedTick: p.eliminatedTick,
+    neighbors: p.kind === "human" && p.alive ? landNeighbors(world, p) : null,
   }));
 }
 
