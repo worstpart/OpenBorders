@@ -6,8 +6,8 @@
 | Phase | Goal | Status |
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
-| **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | 🟡 |
-| **2 — Gameplay depth** | Economy, buildings, naval transport, diplomacy, better AI, more maps | ⬜ |
+| **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, then economy, buildings, naval, more maps | ⬜ next |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -30,7 +30,7 @@
 
 ---
 
-## Phase 1 — Playable prototype 🟡
+## Phase 1 — Playable prototype ✅
 
 ### The vertical slice — exactly what's in
 
@@ -71,7 +71,7 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 | 1.4 ✅ | **Encirclement, elimination, victory** | Tests for each rule; full solo game reachable end-to-end |
 | 1.5 ✅ | **AI opponents** — personalities, staggered thinking; headless runner | 100 bots-only games finish with a winner, no exceptions, within tick budget |
 | 1.6 ✅ | **HUD & interaction** — command bar, attack % control, chips, leaderboard, toasts, hover card, context menu, start/pause/end screens, hints | Every control verified in the browser; keyboard paths work |
-| 1.7 | **Playtest & tune** — balance via headless metrics + play sessions, performance pass | Matches ≈ 8–12 min, budgets met, stable commit tagged *phase-1* |
+| 1.7 ✅ | **Playtest & tune** — balance via headless metrics + play sessions, performance pass | Matches ≈ 8–12 min, budgets met, stable commit tagged *phase-1* |
 
 **Milestone 1.5 result** (`npm run headless -- --games 100`, reference map, 8 bots, 86 s on
 7 worker threads): **100/100 games finished with a winner**, 0 errors, 0 timeouts. Length
@@ -85,7 +85,8 @@ menu, leaderboard + clock, toasts, pause menu with game speed, contextual hints 
 verified in the browser (mouse and keyboard paths: 1–5, Q/E, Esc, menu arrows/Enter,
 Tab in the pause menu). As built: GAME_DESIGN §5.1, ARCHITECTURE §6. 139 tests.
 
-**Milestone 1.7 progress (2026-10-02)** — headless runner gained `--rules` (try rule
+**Milestone 1.7 result (2026-10-02)** — the user played, approved the feel ("feels good"),
+and Phase 1 was tagged `phase-1`. The headless runner gained `--rules` (try rule
 overrides from a JSON file), `--personality`, a 90%-land metric and a length histogram.
 
 | 200 bot games | Before 1.7 | After |

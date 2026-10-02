@@ -11,9 +11,11 @@ presentation. Not affiliated with OpenFront.
 
 ## Status
 
-**Phase 1 — Playable prototype: in progress** (milestone progress in
-[docs/ROADMAP.md](docs/ROADMAP.md)). Phase 0 (research) is complete. A new working
-session starts by reading the latest handoff in `docs/handoffs/`.
+**Phase 1 — Playable prototype: complete** (git tag `phase-1`): spawn, expand, fight 1–16
+bots, encircle, win or lose, with a full HUD. **Next: Phase 2** — big lobbies (up to 125
+opponents), Tribes & Nations, alliances, teams (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
+A new working session starts by reading the latest handoff in `docs/handoffs/`
+(currently [PHASE_1_HANDOFF.md](docs/handoffs/PHASE_1_HANDOFF.md)).
 
 ## Running it
 
