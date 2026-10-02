@@ -13,8 +13,8 @@
  *   `);
  */
 import { createMap, Terrain } from "../../src/sim/map/gameMap.ts";
-import type { GameRules, Personality } from "../../src/sim/rules.ts";
-import { startingTroops, troopCapacity } from "../../src/sim/systems/troops.ts";
+import type { Difficulty, GameRules, Personality } from "../../src/sim/rules.ts";
+import { capacityOf, startingTroops } from "../../src/sim/systems/troops.ts";
 import {
   createWorld,
   NEUTRAL,
@@ -75,11 +75,14 @@ export function parseAscii(ascii: string): ParsedAscii {
 export interface AsciiWorldOptions {
   /**
    * Player kinds; defaults to "human" (passive: they only do what the test commands),
-   * as many as the highest digit on the map. Bots think and act on their own.
+   * as many as the highest digit on the map. Bots (nations) and tribes think and act on
+   * their own.
    */
-  players?: PlayerKind[];
-  /** Personality for every bot (default: chosen from the seed). */
+  players?: (PlayerKind | "tribe")[];
+  /** Personality for every nation (default: chosen from the seed). */
   personality?: Personality;
+  /** Difficulty for every nation (default: hard). */
+  difficulty?: Difficulty;
   /** Home troops per player (index 0 = player 1); defaults to each player's starting troops. */
   homeTroops?: number[];
   rules?: GameRules;
@@ -103,8 +106,10 @@ export function worldFromAscii(ascii: string, options: AsciiWorldOptions = {}): 
     map: createMap(parsed.width, parsed.height, parsed.terrain),
     players: kinds.map((kind, k) => ({
       name: `P${k + 1}`,
-      kind,
+      kind: kind === "tribe" ? ("bot" as const) : kind,
+      tier: kind === "tribe" ? ("tribe" as const) : undefined,
       personality: options.personality,
+      difficulty: options.difficulty,
     })),
     rules: options.rules,
   });
@@ -120,9 +125,10 @@ export function worldFromAscii(ascii: string, options: AsciiWorldOptions = {}): 
   for (const player of world.players) {
     player.spawnTile = parsed.owners.indexOf(player.id);
     player.ready = true;
-    player.capacity = troopCapacity(world.rules, player.tiles);
+    player.capacity = capacityOf(world.rules, player);
     player.homeTroops =
-      options.homeTroops?.[player.id - 1] ?? startingTroops(world.rules, player.tiles);
+      options.homeTroops?.[player.id - 1] ??
+      startingTroops(world.rules, player.tiles, player.capacity);
     if (player.tiles === 0) player.alive = false;
   }
   world.phase = "playing";

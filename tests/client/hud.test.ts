@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nearestOwnedTile } from "../../src/client/app/focus.ts";
+import { describeBot } from "../../src/client/app/players.ts";
 import { HintTracker, type HintId, type HintStore } from "../../src/client/app/hints.ts";
 import { previewClick, type PreviewContext } from "../../src/client/app/preview.ts";
 import { addToast, toastsForEvents, type Toast } from "../../src/client/app/toasts.ts";
@@ -47,7 +48,9 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
     capacity: 20_000,
     growthPerTick: 0,
     peakTiles: 100,
+    tier: "nation",
     personality: null,
+    difficulty: "hard",
     eliminatedTick: -1,
     neighbors: null,
     ...overrides,
@@ -55,8 +58,8 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
 }
 
 describe("click preview", () => {
-  const me = player({ id: 1, kind: "human", homeTroops: 12_000, neighbors: [0, 2] });
-  const players = [me, player({ id: 2 }), player({ id: 3 })];
+  const me = player({ id: 1, kind: "human", tier: null, homeTroops: 12_000, neighbors: [0, 2, 4] });
+  const players = [me, player({ id: 2 }), player({ id: 3 }), player({ id: 4, tier: "tribe" })];
   const ctx = (overrides: Partial<PreviewContext> = {}): PreviewContext => ({
     rules: DEFAULT_RULES,
     phase: "playing",
@@ -75,6 +78,17 @@ describe("click preview", () => {
     const preview = previewClick(ctx(), 2, 100);
     expect(preview.kind).toBe("attack");
     if (preview.kind === "attack") expect(preview.outlook.odds).toBe("advantage");
+  });
+
+  it("shows that a tribe's land is cheaper to take (same troops, better odds)", () => {
+    const nation = previewClick(ctx(), 2, 75);
+    const tribe = previewClick(ctx(), 4, 75);
+    if (nation.kind !== "attack" || tribe.kind !== "attack") throw new Error("not attacks");
+    expect(tribe.outlook.landShare).toBeGreaterThan(nation.outlook.landShare);
+    expect(describeBot(players[3]!)).toBe("Tribe · weak filler");
+    expect(describeBot({ tier: "nation", difficulty: "medium", personality: "turtle" })).toBe(
+      "Nation · Medium · turtle",
+    );
   });
 
   it("explains why a click would do nothing", () => {

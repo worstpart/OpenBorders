@@ -17,10 +17,12 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-009 | Procedurally generated map for Phase 1 | **Accepted** 2026-10-01 |
 | D-010 | Directed attacks and encirclement in Phase 1 | **Accepted** 2026-10-01 |
 | D-011 | Show real troop numbers; troops in the field count toward the cap | Accepted |
-| D-012 | AI uses the same commands and gets no resource bonuses | Accepted |
+| D-012 | AI uses the same commands and gets no resource bonuses (except Tribes, D-017) | Accepted, amended 2026-10-02 |
 | D-013 | Require Node 24 LTS for development | **Accepted** 2026-10-01 (installed 24.19.0) |
 | D-015 | A handoff document after every phase; each phase starts in a fresh chat | **Accepted** 2026-10-01 |
 | D-014 | Working title "Borderline" as a placeholder | **Proposed** |
+| D-016 | Phase 2 order: big lobbies → Tribes & Nations → alliances → teams | **Accepted** 2026-10-02 |
+| D-017 | Tribes are weaker by stats; Nations stay fair | **Accepted** 2026-10-02 |
 
 ---
 
@@ -152,6 +154,9 @@ sweet spot still increases regeneration.
 Bots issue the same commands, see the same information, and get no troop/gold
 multipliers at any difficulty. Difficulty comes from reaction time and decision quality.
 
+*Amended by D-017 (2026-10-02):* this still holds for **Nations** (the real opponents);
+**Tribes** — filler bots — are deliberately weaker by stats.
+
 ---
 
 ## D-013 — Node 24 LTS required · Accepted 2026-10-01
@@ -199,3 +204,26 @@ only make sense with many players, and alliances need many opponents to matter.
 
 **Open within it.** Whether tribes get stat handicaps (OpenFront's do) or stay fair and
 are simply simpler (D-012) — decided in the 2.1 design note.
+
+---
+
+## D-017 — Tribes are weaker by stats; Nations stay fair · Accepted 2026-10-02
+
+**Context.** Milestone 2.1 adds two AI tiers (D-016). OpenFront's Tribes are weak by
+stats (a third of the troops, half the growth, cheaper to attack); D-012 said no bot gets
+stat changes. Asked in the 2.0 report: "(a) fair tribes, simply simpler, or (b) weaker
+tribes like OpenFront's" — the user chose **(b)**.
+
+**Decision.** Tribes get stat handicaps, with our own numbers in `rules.tribe`
+(GAME_DESIGN §3.13): smaller troop capacity, slower growth, and land that costs less to
+take for anyone who isn't a tribe. They play a simple, slow AI. **Nations** keep D-012:
+no bonuses or penalties at any difficulty; difficulty is reaction time + decision quality.
+Humans are never handicapped.
+
+**Consequences.** Tribes reliably act as "food" that fills the map and makes attacking
+pay; a lobby's real opposition is its Nations. The HUD must show who is a tribe (hover
+card, leaderboard) so players can tell easy prey from rivals. Battle estimates (`battle.ts`)
+include the tribe discount so the odds the HUD shows stay true.
+
+**Alternatives.** (a) fair tribes that are only simpler — rejected by the user; tribes
+would still hold full armies and stall attackers.

@@ -8,6 +8,10 @@
  * can give, so the rest are generated: each next color is the candidate farthest — in a
  * perceptual color space (OKLab) — from every color already in use, the terrain colors
  * and the local player's blue (GAME_DESIGN.md §5.3).
+ *
+ * Tribes (milestone 2.1) get dull browns and tans instead — earthy, low-saturation colors
+ * that read as "filler" at a glance, so the bright nations stand out (as in OpenFront).
+ * Nation colors are kept away from those browns.
  */
 
 export const LOCAL_PLAYER_COLOR = "#3f8cff";
@@ -24,7 +28,6 @@ const HAND_PICKED_COLORS = [
   "#29b3e0", // sky
   "#a3203f", // crimson
   "#b54fd1", // magenta
-  "#9a4b28", // rust
   "#3b4252", // slate
   "#f28c8c", // salmon
   "#c9c23a", // olive
@@ -33,6 +36,8 @@ const HAND_PICKED_COLORS = [
 
 /** Colors a territory must not be mistaken for: plains, highland, mountain (terrainTexture.ts). */
 const RESERVED_COLORS = ["#94a874", "#bcb28e", "#a8a49e"];
+/** Where the tribe browns live (nation colors keep their distance). */
+const TRIBE_REGION = ["#6b5a45", "#8a7558", "#a08a68", "#5a4a3a"];
 
 const BOT_NAMES = [
   "Azure", "Ember", "Rowan", "Sable", "Juniper", "Corsa", "Halden", "Marrow",
@@ -54,23 +59,99 @@ const BOT_NAMES = [
   "Arbor", "Bastion", "Cairn", "Dorran", "Embry", "Fable", "Gant", "Harrow",
 ]; // prettier-ignore
 
-/** Picks `count` distinct bot names, shuffled with the given random source. */
-export function pickBotNames(count: number, random: () => number): string[] {
-  const names = [...BOT_NAMES];
+/** Invented country names for nations (GAME_DESIGN.md §3.13); tribes use BOT_NAMES. */
+const NATION_NAMES = [
+  "Valdorra", "Kestria", "Doravia", "Solmere", "Tyrhenia", "Calvaro", "Norvane", "Esteral",
+  "Brenmark", "Ostravia", "Quelmar", "Ardenne", "Velloria", "Marovia", "Silvaine", "Torvald",
+  "Corvenna", "Halvoria", "Lunmere", "Dravonia", "Sereth", "Umbria Nova", "Kaldoon", "Westmarch",
+  "Pellucia", "Ravenmoor", "Istria Vale", "Grenholm", "Aurevon", "Zantara",
+]; // prettier-ignore
+
+export const MAX_NATIONS = 25;
+
+/** Picks `count` distinct nation names. */
+export function pickNationNames(count: number, random: () => number): string[] {
+  return shuffled(NATION_NAMES, random).slice(0, count);
+}
+
+/** "Tribe" or "Nation · Medium · turtle", for the hover card. */
+export function describeBot(p: {
+  tier: string | null;
+  difficulty: string | null;
+  personality: string | null;
+}): string {
+  if (p.tier === "tribe") return "Tribe · weak filler";
+  const difficulty = p.difficulty ? p.difficulty[0]!.toUpperCase() + p.difficulty.slice(1) : "";
+  return ["Nation", difficulty, p.personality].filter(Boolean).join(" · ");
+}
+
+function shuffled(list: readonly string[], random: () => number): string[] {
+  const names = [...list];
   for (let i = names.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [names[i], names[j]] = [names[j]!, names[i]!];
   }
-  return names.slice(0, count);
+  return names;
+}
+
+/** Picks `count` distinct bot names, shuffled with the given random source. */
+export function pickBotNames(count: number, random: () => number): string[] {
+  return shuffled(BOT_NAMES, random).slice(0, count);
 }
 
 let botColors: string[] = [...HAND_PICKED_COLORS];
+let tribeColors: string[] = [];
 
-/** Colors indexed by player id (index 0 = neutral). Player 1 is the local player. */
-export function playerColors(playerCount: number): string[] {
-  const bots = Math.max(0, playerCount - 1);
-  if (bots > botColors.length) botColors = generateBotColors(bots);
-  return ["#000000", LOCAL_PLAYER_COLOR, ...botColors.slice(0, bots)];
+/**
+ * Colors indexed by player id (index 0 = neutral), from each player's tier in id order.
+ * Player 1 is the local player. Nations take the bright colors in order, tribes browns.
+ */
+export function playerColors(tiers: readonly ("human" | "nation" | "tribe")[]): string[] {
+  const nations = tiers.slice(1).filter((t) => t !== "tribe").length;
+  const tribes = tiers.length - 1 - nations;
+  if (nations > botColors.length) botColors = generateBotColors(nations);
+  if (tribes > tribeColors.length) tribeColors = generateTribeColors(Math.max(tribes, 64));
+  let nextNation = 0;
+  let nextTribe = 0;
+  return [
+    "#000000",
+    LOCAL_PLAYER_COLOR,
+    ...tiers
+      .slice(1)
+      .map((t) => (t === "tribe" ? tribeColors[nextTribe++]! : botColors[nextNation++]!)),
+  ];
+}
+
+/** Dull browns, tans and khakis, farthest-first so neighbours rarely look alike. */
+export function generateTribeColors(count: number): string[] {
+  const candidates: { hex: string; lab: Lab; nearest: number }[] = [];
+  // Darker than the highland terrain (L ≈ 0.75) so tribe land still reads as owned.
+  for (const lightness of [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.69]) {
+    for (const chroma of [0.025, 0.045, 0.065]) {
+      for (let hue = 35; hue <= 95; hue += 6) {
+        const angle = (hue * Math.PI) / 180;
+        const lab: Lab = [lightness, chroma * Math.cos(angle), chroma * Math.sin(angle)];
+        const rgb = labToRgb(lab);
+        if (rgb) candidates.push({ hex: rgbToHex(rgb), lab, nearest: Infinity });
+      }
+    }
+  }
+  const avoid = [LOCAL_PLAYER_COLOR, ...RESERVED_COLORS].map(hexToLab);
+  for (const c of candidates)
+    for (const a of avoid) c.nearest = Math.min(c.nearest, labDistance(c.lab, a));
+  const colors: string[] = [];
+  while (colors.length < count && candidates.length > 0) {
+    let best = 0;
+    for (let k = 1; k < candidates.length; k++) {
+      if (candidates[k]!.nearest > candidates[best]!.nearest) best = k;
+    }
+    const [pick] = candidates.splice(best, 1);
+    colors.push(pick!.hex);
+    for (const c of candidates) c.nearest = Math.min(c.nearest, labDistance(c.lab, pick!.lab));
+  }
+  // More tribes than candidates: reuse the palette (borders still separate them).
+  for (let k = 0; colors.length < count; k++) colors.push(colors[k]!);
+  return colors;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -86,7 +167,9 @@ const CANDIDATE_HUE_STEP = 6;
 /** The hand-picked colors, then generated ones until there are `count`. Deterministic. */
 export function generateBotColors(count: number): string[] {
   const colors = [...HAND_PICKED_COLORS];
-  const used: Lab[] = [LOCAL_PLAYER_COLOR, ...RESERVED_COLORS, ...colors].map(hexToLab);
+  const used: Lab[] = [LOCAL_PLAYER_COLOR, ...RESERVED_COLORS, ...TRIBE_REGION, ...colors].map(
+    hexToLab,
+  );
   const candidates: { hex: string; lab: Lab; nearest: number }[] = [];
   for (const lightness of CANDIDATE_LIGHTNESS) {
     for (const chroma of CANDIDATE_CHROMA) {

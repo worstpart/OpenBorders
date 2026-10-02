@@ -10,8 +10,16 @@ import type { World } from "../../../src/sim/world.ts";
 import { worldFromAscii } from "../../helpers/asciiMap.ts";
 
 /** Bots think every tick, no randomness in fronts, no growth, no victory: exact scenarios. */
+const EVERY_TICK = { thinkMinTicks: 1, thinkMaxTicks: 1 };
 const RULES = makeRules({
-  ai: { thinkMinTicks: 1, thinkMaxTicks: 1 },
+  ai: {
+    difficulties: {
+      easy: { ...DEFAULT_RULES.ai.difficulties.easy, ...EVERY_TICK },
+      medium: { ...DEFAULT_RULES.ai.difficulties.medium, ...EVERY_TICK },
+      hard: { ...DEFAULT_RULES.ai.difficulties.hard, ...EVERY_TICK },
+    },
+  },
+  tribe: EVERY_TICK,
   attack: { noiseShare: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
   victory: { landShare: 2 },

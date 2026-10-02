@@ -4,7 +4,7 @@
   import type { MapSize } from "../app/setup.ts";
 
   export interface AppActions {
-    /** Start a game with the start screen's choices (ui.opponents, ui.mapSize). */
+    /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
     play: () => void;
     /** Generate the map of this size (shows the loading screen meanwhile). */
     selectMap: (size: MapSize) => void;

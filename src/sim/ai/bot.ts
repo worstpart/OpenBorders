@@ -18,14 +18,23 @@
  *     they don't grow, and the longer they sit there the less it demands ("boredom"). Attacking leaves it depleted and open to a counter-attack: the
  *     "grow or strike?" tension the game is built on.
  * Personalities change the thresholds and preferences, not the rules.
+ *
+ * That is how a **nation** plays (GAME_DESIGN.md §3.13); its difficulty sets how often it
+ * thinks and whether it counters and reinforces. **Tribes** — weak filler bots — think
+ * every 4–8 s and only expand, or make small attacks on neighbours they can beat.
  */
-import { expectedLandShare, tileCostOfAll as tileCostOfAllTiles } from "../battle.ts";
+import {
+  attackLossFactor,
+  expectedLandShare,
+  tileCostOfAll as tileCostOfAllTiles,
+} from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isLand, tileAt, Terrain } from "../map/gameMap.ts";
-import { terrainValue, type PersonalityRules } from "../rules.ts";
+import { terrainValue, type DifficultyRules, type PersonalityRules } from "../rules.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
+  isTribe,
   NEUTRAL,
   nextScratchStamp,
   type Attack,
@@ -40,14 +49,25 @@ export function thinkBots(world: World): void {
   for (const bot of world.players) {
     const brain = bot.brain;
     if (!brain || !bot.alive || bot.tiles === 0) continue;
+    const tribe = brain.tier === "tribe";
+    const pace = tribe ? world.rules.tribe : ai.difficulties[brain.difficulty];
     if (brain.nextThinkTick < 0) {
       // First think: staggered so bots don't all act on the same tick.
-      brain.nextThinkTick = world.tick + world.rng.nextIntBetween(1, ai.thinkMaxTicks);
+      brain.nextThinkTick = world.tick + world.rng.nextIntBetween(1, pace.thinkMaxTicks);
       continue;
     }
     if (world.tick < brain.nextThinkTick) continue;
-    brain.nextThinkTick = world.tick + world.rng.nextIntBetween(ai.thinkMinTicks, ai.thinkMaxTicks);
-    const command = decide(world, bot, ai.personalities[brain.personality], brain.idleThinks);
+    brain.nextThinkTick =
+      world.tick + world.rng.nextIntBetween(pace.thinkMinTicks, pace.thinkMaxTicks);
+    const command = tribe
+      ? decideTribe(world, bot)
+      : decide(
+          world,
+          bot,
+          ai.personalities[brain.personality],
+          ai.difficulties[brain.difficulty],
+          brain.idleThinks,
+        );
     if (command) world.pendingCommands.push({ playerId: bot.id, command });
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
     brain.idleThinks = !command && wasting ? brain.idleThinks + 1 : 0;
@@ -69,6 +89,7 @@ function decide(
   world: World,
   bot: Player,
   style: PersonalityRules,
+  skill: DifficultyRules,
   idleThinks: number,
 ): Command | null {
   const ai = world.rules.ai;
@@ -78,7 +99,7 @@ function decide(
 
   // 1. Counter the biggest incoming army we can match (not just the biggest one: a huge
   //    army we can't stop mustn't keep us from stopping a small one).
-  const counterable = incoming
+  const counterable = (skill.counters ? incoming : [])
     .filter((a) => bot.homeTroops >= ai.counterAbove * a.troops)
     .sort((a, b) => b.troops - a.troops || a.id - b.id);
   for (const threat of counterable) {
@@ -96,7 +117,10 @@ function decide(
     if (attack.target === NEUTRAL) continue;
     const defender = getPlayer(world, attack.target)!;
     if (attack.troops < ai.retreatBelow * defender.homeTroops) {
-      const boost = fill >= style.attackAt ? reinforce(world, bot, style, attack, around) : null;
+      const boost =
+        skill.reinforces && fill >= style.attackAt
+          ? reinforce(world, bot, style, attack, around)
+          : null;
       return boost ?? { type: "retreat", attackId: attack.id };
     }
   }
@@ -124,9 +148,14 @@ function decide(
 
   // 3 + 5. Attack a neighbour we can beat, once we've regrown enough.
   if (fill < style.attackAt || isSpawnProtected(world)) return null;
-  const war = mine.find((a) => a.target !== NEUTRAL);
-  if (war) return reinforce(world, bot, style, war, around); // one war at a time
-  const choice = chooseTarget(world, bot, style, around, incoming, idleThinks);
+  // One war at a time against a nation; tribes are eaten several at once (§3.13).
+  const wars = mine.filter((a) => a.target !== NEUTRAL);
+  const nationWar = wars.find((a) => !isTribe(getPlayer(world, a.target)));
+  if (nationWar) return skill.reinforces ? reinforce(world, bot, style, nationWar, around) : null;
+  if (wars.length >= ai.maxTribeWars) {
+    return skill.reinforces ? reinforce(world, bot, style, wars[0]!, around) : null;
+  }
+  const choice = chooseTarget(world, bot, style, around, incoming, idleThinks, wars);
   if (!choice) return null;
   return attackCommand(choice.target.id, choice.focus, choice.share);
 }
@@ -264,7 +293,7 @@ function reinforce(
 ): Command | null {
   const target = getPlayer(world, war.target)!;
   if (!target.alive) return null;
-  const missing = armyToTakeAll(world, target, style) - war.troops;
+  const missing = armyToTakeAll(world, bot, target, style) - war.troops;
   if (missing <= 0 || missing > style.attackMaxShare * bot.homeTroops) return null;
   const focus =
     world.owner[war.focusTile] === target.id ? war.focusTile : around.neighborFront.get(target.id);
@@ -278,12 +307,25 @@ function reinforce(
  * costs at least half the base loss, a bit more on rough terrain), with a margin for
  * their regrowth during the attack.
  */
-function armyToTakeAll(world: World, target: Player, style: PersonalityRules): number {
-  return Math.max(style.attackEdge * Math.max(1, target.homeTroops), tileCostOfAll(world, target));
+function armyToTakeAll(world: World, bot: Player, target: Player, style: PersonalityRules): number {
+  return Math.max(
+    style.attackEdge * Math.max(1, target.homeTroops),
+    tileCostOfAll(world, bot, target),
+  );
 }
 
-function tileCostOfAll(world: World, target: Player): number {
-  return tileCostOfAllTiles(world.rules, target.tiles, target.homeTroops);
+function tileCostOfAll(world: World, bot: Player, target: Player): number {
+  return tileCostOfAllTiles(
+    world.rules,
+    target.tiles,
+    target.homeTroops,
+    lossFactor(world, bot, target),
+  );
+}
+
+/** Tribes' land is cheaper to take for everyone else (D-017). */
+function lossFactor(world: World, bot: Player, target: Player): number {
+  return attackLossFactor(world.rules, isTribe(bot), isTribe(target));
 }
 
 function chooseTarget(
@@ -293,6 +335,7 @@ function chooseTarget(
   around: Surroundings,
   incoming: Attack[],
   idleThinks: number,
+  wars: Attack[],
 ): { target: Player; focus: number; share: number } | null {
   const ai = world.rules.ai;
   const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
@@ -302,16 +345,16 @@ function chooseTarget(
   let bestScore = 0;
   for (const [id, frontTile] of around.neighborFront) {
     const target = getPlayer(world, id)!;
-    if (!target.alive) continue;
+    if (!target.alive || wars.some((a) => a.target === id)) continue;
     const defenders = Math.max(1, target.homeTroops);
     // Send enough to take everything if we can afford it, otherwise all we're willing to.
     const army = Math.min(
-      armyToTakeAll(world, target, style),
+      armyToTakeAll(world, bot, target, style),
       style.attackMaxShare * bot.homeTroops,
     );
     const gain = Math.min(
-      expectedLandShare(world.rules, army, defenders),
-      army / tileCostOfAll(world, target),
+      expectedLandShare(world.rules, army, defenders, lossFactor(world, bot, target)),
+      army / tileCostOfAll(world, bot, target),
     );
     if (gain < minGain) continue;
     const busy = world.attacks.some((a) => a.attacker === id && a.retreatTick < 0);
@@ -323,7 +366,8 @@ function chooseTarget(
       (1 + (busy ? style.preferBusyTargets : 0)) *
       (hostile ? 1.5 : 1) *
       (2 - Math.min(1, targetFill)) * // depleted players are vulnerable
-      (gain >= 0.99 ? 2 : 1); // finishing a player off shrinks the field
+      (gain >= 0.99 ? 2 : 1) * // finishing a player off shrinks the field
+      (isTribe(target) ? ai.tribePreference : 1); // eat the tribes first
     if (score > bestScore) {
       bestScore = score;
       // Aim at the heart of their land (their start) if they still hold it: it splits
@@ -333,4 +377,46 @@ function chooseTarget(
     }
   }
   return best;
+}
+
+/**
+ * A tribe's whole mind (GAME_DESIGN.md §3.13): expand while open land is near; otherwise,
+ * once regrown, attack a random neighbour it can beat with a small share of its troops.
+ * No counters, no reinforcing, no retreats — tribes are cheap and predictable.
+ */
+function decideTribe(world: World, bot: Player): Command | null {
+  const rules = world.rules.tribe;
+  const ai = world.rules.ai;
+  const fill = bot.capacity > 0 ? bot.homeTroops / bot.capacity : 0;
+  const around = survey(world, bot);
+  const mine = world.attacks.filter((a) => a.attacker === bot.id && a.retreatTick < 0);
+
+  if (around.neutralFront >= 0) {
+    if (fill < rules.expandAt) return null;
+    const expansion = mine.find((a) => a.target === NEUTRAL);
+    const plan = planExpansion(world, bot, 0.5 * bot.homeTroops);
+    const topUpBelow = Math.max(ai.expansionTopUpBelow, plan.perTick * ai.expansionTopUpTicks);
+    if (expansion && expansion.troops >= topUpBelow) return null;
+    const focus = expansionFocus(world, bot, around);
+    return attackCommand(NEUTRAL, focus, plan.army / Math.max(1, bot.homeTroops));
+  }
+
+  if (fill < rules.attackAt || isSpawnProtected(world)) return null;
+  if (mine.some((a) => a.target !== NEUTRAL)) return null; // one war at a time
+  const army = rules.attackShare * bot.homeTroops;
+  const beatable: [PlayerId, number][] = [];
+  for (const [id, frontTile] of around.neighborFront) {
+    const target = getPlayer(world, id)!;
+    if (!target.alive) continue;
+    const gain = expectedLandShare(
+      world.rules,
+      army,
+      Math.max(1, target.homeTroops),
+      lossFactor(world, bot, target),
+    );
+    if (gain >= rules.minLandGain) beatable.push([id, frontTile]);
+  }
+  if (beatable.length === 0) return null;
+  const [target, focus] = beatable[world.rng.nextInt(beatable.length)]!;
+  return attackCommand(target, focus, rules.attackShare);
 }

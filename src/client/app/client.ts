@@ -14,11 +14,11 @@ import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts
 import { computeLabelPlacements, LabelLayer, type LabelPlacement } from "../render/labels.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
-import { DEFAULT_RULES } from "../../sim/rules.ts";
+import { DEFAULT_RULES, type Difficulty } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
-import { pickBotNames, playerColors } from "./players.ts";
+import { pickBotNames, pickNationNames, playerColors } from "./players.ts";
 import { protectionSecondsLeft } from "./preview.ts";
 import { MAP_SIZES, type MapSize } from "./setup.ts";
 import {
@@ -101,8 +101,12 @@ export class GameClient {
     ui.screen = "start";
   }
 
-  /** Starts a single-player game against `opponents` bots. */
-  async startGame(opponents: number): Promise<void> {
+  /** Starts a single-player game against nations and tribes (GAME_DESIGN.md §3.13). */
+  async startGame(lobby: {
+    nations: number;
+    tribes: number;
+    difficulty: Difficulty;
+  }): Promise<void> {
     const map = this.map;
     if (!map) throw new Error("startGame() before loadMap()");
     this.host?.dispose();
@@ -110,9 +114,21 @@ export class GameClient {
     const random = () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
     const players: PlayerSetup[] = [
       { name: "You", kind: "human" },
-      ...pickBotNames(opponents, random).map((name) => ({ name, kind: "bot" as const })),
+      ...pickNationNames(lobby.nations, random).map((name) => ({
+        name,
+        kind: "bot" as const,
+        tier: "nation" as const,
+        difficulty: lobby.difficulty,
+      })),
+      ...pickBotNames(lobby.tribes, random).map((name) => ({
+        name,
+        kind: "bot" as const,
+        tier: "tribe" as const,
+      })),
     ];
-    const colors = playerColors(players.length);
+    const colors = playerColors(
+      players.map((p) => (p.kind === "human" ? "human" : (p.tier ?? "nation"))),
+    );
     const host = new LocalHost({ localPlayerId: LOCAL_PLAYER_ID });
     this.host = host;
     host.onFrame((frame, timing) => this.onFrame(frame, timing));
@@ -403,7 +419,13 @@ export class GameClient {
     this.labels.draw(
       view,
       this.placements,
-      players.map((p) => ({ id: p.id, name: p.name, troops: p.homeTroops, alive: p.alive })),
+      players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        troops: p.homeTroops,
+        alive: p.alive,
+        tribe: p.tier === "tribe",
+      })),
     );
 
     this.perf.recordFrame(performance.now() - startedAt, this.renderer.lastUploadMs);

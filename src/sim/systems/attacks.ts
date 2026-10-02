@@ -12,11 +12,13 @@
  * better odds — and a long border takes more tiles per tick only because more tiles are
  * on it. Directed attacks: border tiles nearer the click point join the front earlier.
  */
+import { attackLossFactor } from "../battle.ts";
 import { isLand, isValidTile, tileX, tileY } from "../map/gameMap.ts";
 import { detPow } from "../math/detmath.ts";
 import { terrainValue } from "../rules.ts";
 import {
   getPlayer,
+  isTribe,
   NEUTRAL,
   nextScratchStamp,
   setOwner,
@@ -300,7 +302,13 @@ export function tileCost(world: World, attack: Attack, tile: number): number {
   const { combat } = world.rules;
   const defender = getPlayer(world, attack.target)!;
   const ratio = clamp(outnumbering(world, attack), combat.lossRatioMin, combat.lossRatioMax);
+  const tribeDiscount = attackLossFactor(
+    world.rules,
+    isTribe(getPlayer(world, attack.attacker)),
+    isTribe(defender),
+  );
   return (
+    tribeDiscount *
     terrainValue(combat.terrainLoss, terrain) *
     ratio *
     (combat.lossBase + combat.lossDensity * defenderDensity(defender))

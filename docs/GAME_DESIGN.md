@@ -370,6 +370,46 @@ research: 400 filler bots). Design note written before building; results below.
 snowbally. But **turtles win 70–80%** (34% in 8-bot games): with many small neighbours,
 patience and mountain lines beat attacking. Left for 2.1 (Tribes & Nations).
 
+### 3.13 Tribes & Nations (milestone 2.1)
+
+Two AI tiers (D-016; ideas from OpenFront, research §3.21–3.22; our own numbers and code).
+**Tribes** are many weak filler bots — "food" that fills the map. **Nations** are the
+real opponents: today's personality bots with a difficulty level. Tribes are weaker by
+stats; Nations get no bonuses or penalties (D-017, D-012).
+
+| | Tribe | Nation |
+|---|---|---|
+| Troop capacity | **⅓** of normal | normal |
+| Growth | **½** of normal | normal |
+| Attacked by a non-tribe | attacker loses **0.7×** per tile | normal |
+| Thinks every | 4–8 s | Easy 6–10 s · Medium 4–7 s · Hard 2–5 s |
+| Decisions | expand while open land is near; otherwise, at ≥ 55% of capacity, attack a random weak neighbour with 30% of its troops; never counters, reinforces or retreats | everything in §3.11; Easy never counters or reinforces, Medium counters but doesn't reinforce, Hard does both |
+| Names | the invented names list | invented country names |
+| Colours | **dull browns and tans** (low saturation, darker than highland terrain), labels lighter | bright colours, kept away from the browns; labels bold |
+| Targets (nations) | — | tribe targets weigh **3×**; up to **3 wars on tribes** at once, one war at a time against a nation |
+
+- Why handicaps by stats (user's choice, D-017): full-strength tribes would hold full
+  armies everywhere, so attacking them would cost as much as attacking a nation and the
+  map would stall. A third of the troops and cheaper land make them the obvious first
+  targets — the early game becomes "eat the tribes, then fight the nations".
+- The tribe discount is part of the battle estimate (`battle.ts`), so the HUD's odds and
+  the nations' target choice both know a tribe is cheaper.
+- Lobby: the start screen sets **Nations** (0–25, default 7), **Tribes** (0–125, quick
+  picks 0 · 25 · 50 · 100, default 25), **Difficulty** (Easy · Medium · Hard, default
+  Medium) and the map; at most 125 opponents in all.
+- Done when (ROADMAP): mixed lobbies (e.g. 100 tribes + 10 nations) feel right; tribes
+  don't win, nations do.
+
+**As built (results, ROADMAP 2.1).** In 10 nations + 100 tribes, nations win every game
+at every difficulty (150/150). A first version took 17–19 min: nations fought each other
+from minute 2 (a nation that sends most of its pool is crushed in seconds by the next
+one — the crush curve — and a tribe then absorbs the last scraps), and the last nation
+ate the ~50 remaining tribes one at a time. Preferring tribes (×3) and eating up to three
+at once brought games to **Hard 9.7 · Medium 12.6 · Easy 16.7 min** (median). With
+tribes in the lobby turtles no longer dominate (Medium: turtle 17, expander 16,
+aggressor 10, opportunist 7 of 50). The tribe colours were the user's request after the
+first look ("dull brown/tan like OpenFront").
+
 ---
 
 ## 4. Interaction model

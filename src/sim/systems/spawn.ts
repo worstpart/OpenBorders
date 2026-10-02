@@ -11,7 +11,7 @@
  */
 import { distanceSquared, isLand, isValidTile, tileAt, tileX, tileY } from "../map/gameMap.ts";
 import { NEUTRAL, setOwner, type Player, type World } from "../world.ts";
-import { startingTroops, troopCapacity } from "./troops.ts";
+import { capacityOf, startingTroops } from "./troops.ts";
 
 /** Handles the `spawn` command. Returns a rejection reason, or null on success. */
 export function applySpawnCommand(world: World, player: Player, tile: number): string | null {
@@ -75,8 +75,8 @@ function spawnRandomly(world: World, player: Player): void {
 function claimSpawn(world: World, player: Player, center: number, automatic: boolean): void {
   for (const tile of spawnDisc(world, center)) setOwner(world, tile, player.id);
   player.spawnTile = center;
-  player.capacity = troopCapacity(world.rules, player.tiles);
-  player.homeTroops = startingTroops(world.rules, player.tiles);
+  player.capacity = capacityOf(world.rules, player);
+  player.homeTroops = startingTroops(world.rules, player.tiles, player.capacity);
   world.events.push({ type: "spawned", playerId: player.id, tile: center, automatic });
 }
 

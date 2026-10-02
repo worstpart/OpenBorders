@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { describeBot } from "../../app/players.ts";
   import { ODDS_LABEL, outcomeText, previewClick } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
@@ -72,7 +73,7 @@
       <div class="stats">
         <span>{formatTroops(owner.homeTroops)} troops</span>
         <span>{formatPercent(owner.tiles / ui.landTiles)} land</span>
-        {#if owner.personality}<span class="muted personality">Bot · {owner.personality}</span>{/if}
+        {#if owner.tier}<span class="muted personality">{describeBot(owner)}</span>{/if}
       </div>
       {#if attacksMe}<div class="badge danger">Attacking you</div>{/if}
       {#if myAttack}<div class="badge">

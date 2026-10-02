@@ -35,7 +35,10 @@ mount(App, {
   target: requireElement("#ui", HTMLDivElement),
   props: {
     actions: {
-      play: () => client?.startGame(ui.opponents).catch(reportFatal),
+      play: () =>
+        client
+          ?.startGame({ nations: ui.nations, tribes: ui.tribes, difficulty: ui.difficulty })
+          .catch(reportFatal),
       selectMap: (size) => {
         if (size === ui.mapSize) return;
         ui.mapSize = size;

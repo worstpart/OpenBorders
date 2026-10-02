@@ -9,7 +9,8 @@ import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
-import { DEFAULT_OPPONENTS, type MapSize } from "./setup.ts";
+import type { Difficulty } from "../../sim/rules.ts";
+import { DEFAULT_DIFFICULTY, DEFAULT_NATIONS, DEFAULT_TRIBES, type MapSize } from "./setup.ts";
 import type { Toast } from "./toasts.ts";
 
 export type Screen = "loading" | "start" | "game";
@@ -43,7 +44,9 @@ class UiState {
   screen = $state<Screen>("loading");
   fatalError = $state<string | null>(null);
   /** Start-screen choices (kept across games; pure UI choices like the attack %). */
-  opponents = $state(DEFAULT_OPPONENTS);
+  nations = $state(DEFAULT_NATIONS);
+  tribes = $state(DEFAULT_TRIBES);
+  difficulty = $state<Difficulty>(DEFAULT_DIFFICULTY);
   mapSize = $state<MapSize>("normal");
   phase = $state<Phase>("spawn");
   tick = $state(0);

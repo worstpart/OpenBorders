@@ -1,7 +1,8 @@
 /**
  * Headless bots-only games (ROADMAP milestone 1.5; balance work in 1.7).
  *
- *   node tools/headless.ts [--games 20] [--bots 8] [--seed 1] [--map-seed 2]
+ *   node tools/headless.ts [--games 20] [--bots 8] [--tribes 0] [--difficulty hard]
+ *                          [--seed 1] [--map-seed 2]
  *                          [--width 1100 --height 700] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
@@ -14,7 +15,8 @@
  *
  * --rules takes a JSON file of rule overrides, deep-merged into DEFAULT_RULES (e.g.
  * {"troops": {"growthFloor": 20}}), to try a balance change before editing rules.ts.
- * --personality gives every bot the same personality.
+ * --personality gives every nation the same personality. --bots is the number of nations
+ * (the smart bots of GAME_DESIGN §3.11/§3.13); --tribes adds that many weak filler bots.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -25,7 +27,13 @@ import { parseArgs } from "node:util";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import type { GameMap } from "../src/sim/map/gameMap.ts";
 import { generateContinent } from "../src/sim/map/generate.ts";
-import { PERSONALITIES, type GameRules, type Personality } from "../src/sim/rules.ts";
+import {
+  DIFFICULTIES,
+  PERSONALITIES,
+  type Difficulty,
+  type GameRules,
+  type Personality,
+} from "../src/sim/rules.ts";
 import { runTick, TICK_STEPS, type TickStep } from "../src/sim/tick.ts";
 import { createWorld, type World } from "../src/sim/world.ts";
 import { loadRules } from "./rulesFile.ts";
@@ -33,6 +41,8 @@ import { loadRules } from "./rulesFile.ts";
 interface Options {
   games: number;
   bots: number;
+  tribes: number;
+  difficulty: Difficulty;
   firstSeed: number;
   mapSeed: number;
   width: number;
@@ -46,6 +56,8 @@ export interface GameReport {
   seed: number;
   winner: string | null;
   winnerPersonality: string | null;
+  /** "nation" or "tribe". */
+  winnerTier: string | null;
   reason: string;
   minutes: number;
   /** When all land was owned… */
@@ -77,6 +89,8 @@ async function main(): Promise<void> {
     options: {
       games: { type: "string", default: "20" },
       bots: { type: "string", default: "8" },
+      tribes: { type: "string", default: "0" },
+      difficulty: { type: "string", default: "hard" },
       seed: { type: "string", default: "1" },
       "map-seed": { type: "string", default: "2" },
       width: { type: "string", default: "1100" },
@@ -92,6 +106,8 @@ async function main(): Promise<void> {
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
+    tribes: Number(args.tribes),
+    difficulty: parseDifficulty(args.difficulty!),
     firstSeed: Number(args.seed),
     mapSeed: Number(args["map-seed"]),
     width: Number(args.width),
@@ -144,11 +160,19 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     seed,
     map,
     rules: options.rules,
-    players: Array.from({ length: options.bots }, (_, k) => ({
-      name: `Bot ${k + 1}`,
-      kind: "bot" as const,
-      personality: options.personality,
-    })),
+    players: [
+      ...Array.from({ length: options.bots }, (_, k) => ({
+        name: `Nation ${k + 1}`,
+        kind: "bot" as const,
+        personality: options.personality,
+        difficulty: options.difficulty,
+      })),
+      ...Array.from({ length: options.tribes }, (_, k) => ({
+        name: `Tribe ${k + 1}`,
+        kind: "bot" as const,
+        tier: "tribe" as const,
+      })),
+    ],
   });
   const times: number[] = [];
   const stepTotal = new Map<TickStep, number>(TICK_STEPS.map((step) => [step, 0]));
@@ -216,7 +240,9 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   return {
     seed,
     winner: winner?.name ?? null,
-    winnerPersonality: winner?.brain?.personality ?? null,
+    winnerPersonality:
+      winner?.brain?.tier === "tribe" ? null : (winner?.brain?.personality ?? null),
+    winnerTier: winner?.brain?.tier ?? null,
     reason: error ? "error" : reason,
     minutes: round(playTicks / TICKS_PER_SECOND / 60),
     landRaceMinutes:
@@ -273,13 +299,18 @@ function summarize(
   const finished = reports.filter((r) => r.winner !== null);
   const minutes = finished.map((r) => r.minutes).sort((a, b) => a - b);
   const wins = new Map<string, number>();
+  const tierWins = new Map<string, number>();
   for (const r of finished) {
+    tierWins.set(r.winnerTier ?? "?", (tierWins.get(r.winnerTier ?? "?") ?? 0) + 1);
+    if (r.winnerTier === "tribe") continue;
     wins.set(r.winnerPersonality ?? "?", (wins.get(r.winnerPersonality ?? "?") ?? 0) + 1);
   }
   const leaderKnown = reports.filter((r) => r.leaderAt3Won !== null);
   const summary = {
     games: options.games,
-    bots: options.bots,
+    nations: options.bots,
+    tribes: options.tribes,
+    difficulty: options.difficulty,
     map: `${options.width}x${options.height} seed ${options.mapSeed}`,
     finishedWithWinner: finished.length,
     errors: reports.filter((r) => r.error).length,
@@ -297,6 +328,7 @@ function summarize(
     leaderAt3WinsShare: leaderKnown.length
       ? round(leaderKnown.filter((r) => r.leaderAt3Won).length / leaderKnown.length, 2)
       : null,
+    winsByTier: Object.fromEntries(tierWins),
     winsByPersonality: Object.fromEntries(wins),
     rejectedCommands: reports.reduce((s, r) => s + r.rejected, 0),
     tickMs: {
@@ -344,6 +376,13 @@ function histogram(sorted: number[], edges: number[]): Record<string, number> {
     out[label] = (out[label] ?? 0) + 1;
   }
   return out;
+}
+
+function parseDifficulty(value: string): Difficulty {
+  if (!(DIFFICULTIES as readonly string[]).includes(value)) {
+    throw new Error(`unknown difficulty "${value}" (one of ${DIFFICULTIES.join(", ")})`);
+  }
+  return value as Difficulty;
 }
 
 function parsePersonality(value: string | undefined): Personality | undefined {

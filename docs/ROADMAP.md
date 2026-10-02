@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, then economy, buildings, naval, more maps | 🟡 2.0 ✅ |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, then economy, buildings, naval, more maps | 🟡 2.0 ✅ 2.1 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -153,7 +153,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | # | Milestone | Done when |
 |---|---|---|
 | 2.0 ✅ | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
-| 2.1 | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
+| 2.1 ✅ | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
 | 2.2 | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | |
@@ -196,7 +196,31 @@ time per tick step (`systemsMs`, slowest tick's steps).
 - **Balance finding for 2.1:** in big lobbies turtles win 70–80% of games (8-bot games:
   34%). With 125 small neighbours, waiting for big edges and defending on mountains beats
   attacking; aggressors almost never win. Tribes & Nations (2.1) replace most of these bots
-  anyway — the Nation AI must be checked against this.
+  anyway — the Nation AI must be checked against this. *(2.1: with tribes in the lobby the
+  wins spread out again — see below.)*
+
+**Milestone 2.1 result (2026-10-02)** — Tribes & Nations; design note GAME_DESIGN §3.13,
+decision **D-017** (the user chose weaker tribes: ⅓ capacity, ½ growth, 0.7× losses for
+whoever attacks them; nations stay fair, D-012). Start screen: Nations 0–25, Tribes 0–125
+(quick picks 0 · 25 · 50 · 100), difficulty Easy · Medium · Hard. Tribes are dull
+browns/tans with lighter labels (user request); the hover card says "Tribe · weak filler"
+or "Nation · Medium · turtle"; the HUD's odds include the tribe discount. Headless:
+`--tribes N --difficulty d` (`--bots` = nations), wins by tier.
+
+| Headless games | Winner | Median (longest) | 90% land | Leader at min 3 wins | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 10 nations + 100 tribes, Easy (50) | nation 50/50 | 16.7 min (25) | 1.1 min | 38% | 0.74 / 6.8 ms |
+| … Medium (50) | nation 50/50 | 12.6 min (24.5) | 1.1 min | 24% | 0.78 / 7.3 ms |
+| … Hard (50) | nation 50/50 | **9.7 min** (24.5) | 1.1 min | 28% | 0.86 / 6.7 ms |
+| 15 nations + 110 tribes, Medium, Large (30) | nation 30/30 | 16.4 min (23.9) | 1.5 min | 10% | 1.6 / 15.7 ms* |
+| 8 nations, no tribes (100, regression) | — | 7.1 min (15.5) | 2.1 min | 33% | 0.73 / 6.5 ms |
+
+* 7 games in parallel; Large-map spikes are encirclement floods (see 2.0). The 8-nation
+run is identical to Phase 1's: lobbies without tribes play exactly as before. No errors in
+any run. Browser: 10 nations + 100 tribes on Normal at 4× — clean console, readable map.
+
+Open for later: tribes don't yet react to alliances or traitors (2.2); nations don't
+yet decide about alliances (2.2).
 
 ## Phase 3 — Multiplayer
 
@@ -242,8 +266,8 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Win at 80% land | 70% or last standing, anti-stall | ✅ | — | L | |
 | Overtime / Doomsday Clock | Declining threshold (70% → 50% after 15 min) | ✅ | — | L–M | Pulled into 1.7 to end stalemates |
 | Terrain affects cost & speed | Same 3 classes | ✅ | — | L | |
-| Tribes (400 filler bots) | Phase 1: 7 bots with personalities; Phase 2: Tribes, up to 125 opponents | ✅ (basic) | P2 (2.0–2.1) | M | D-016 |
-| Nations (smart AI, 4 difficulties, stat bonuses) | No stat bonuses; difficulty = speed + decisions | Basic | P2 (2.1) | H | D-016 |
+| Tribes (400 filler bots) | Up to 125 tribes: ⅓ capacity, ½ growth, cheaper to attack, simple AI, brown colours | ✅ (basic) | ✅ 2.1 | M | D-016, D-017 |
+| Nations (smart AI, 4 difficulties, stat bonuses) | Up to 25 nations; no stat bonuses; Easy/Medium/Hard = speed + decisions | Basic | ✅ 2.1 | H | D-016, D-017 |
 | Leaderboard table | Mini top-5 + you | ✅ | Full stats P4 | L | |
 | Event feed | Toasts | ✅ | — | L | |
 | 22-step tutorial | Contextual hints | ✅ (hints) | P4 onboarding | M | |

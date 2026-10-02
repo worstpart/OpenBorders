@@ -21,6 +21,8 @@ export interface LabelPlayer {
   name: string;
   troops: number;
   alive: boolean;
+  /** Tribes (weak filler bots) get a lighter label, so the nations stand out. */
+  tribe?: boolean;
 }
 
 const CELL = 4;
@@ -212,18 +214,19 @@ export class LabelLayer {
       )
         continue;
 
+      const weight = player.tribe ? 500 : 700;
       let size = Math.min(MAX_NAME_PX, radiusPx * 0.55);
-      ctx.font = `650 ${size}px ${this.font}`;
+      ctx.font = `${weight} ${size}px ${this.font}`;
       const nameWidth = ctx.measureText(player.name).width;
       if (nameWidth > radiusPx * 1.8) size *= (radiusPx * 1.8) / nameWidth;
       const alpha = Math.max(0, Math.min(1, (size - MIN_READABLE_PX) / 3));
       if (alpha <= 0) continue;
 
       ctx.globalAlpha = alpha;
-      ctx.font = `650 ${size}px ${this.font}`;
+      ctx.font = `${weight} ${size}px ${this.font}`;
       ctx.lineWidth = Math.max(2, size * 0.18);
       ctx.strokeStyle = "rgba(10, 14, 22, 0.55)";
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = player.tribe ? "rgba(255, 255, 255, 0.8)" : "#ffffff";
       const nameY = sy - size * 0.38;
       ctx.strokeText(player.name, sx, nameY);
       ctx.fillText(player.name, sx, nameY);

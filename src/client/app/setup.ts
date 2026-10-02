@@ -1,14 +1,25 @@
 /**
- * The choices on the start screen (milestone 2.0, GAME_DESIGN.md §3.12): how many
- * opponents and which map size.
+ * The choices on the start screen (GAME_DESIGN.md §3.12–3.13): how many nations and
+ * tribes, the nations' difficulty, and the map size.
  */
 import { REFERENCE_MAP_HEIGHT, REFERENCE_MAP_WIDTH } from "../../sim/map/generate.ts";
+import type { Difficulty } from "../../sim/rules.ts";
+import { MAX_NATIONS, MAX_OPPONENTS } from "./players.ts";
 
-export { MAX_OPPONENTS } from "./players.ts";
+export { MAX_NATIONS, MAX_OPPONENTS };
 
-export const DEFAULT_OPPONENTS = 7;
-/** Quick picks next to the stepper (clicking +/− 125 times is no fun). */
-export const OPPONENT_PRESETS = [7, 25, 50, 125] as const;
+export const DEFAULT_NATIONS = 7;
+export const DEFAULT_TRIBES = 25;
+export const DEFAULT_DIFFICULTY: Difficulty = "medium";
+/** Quick picks next to the tribes stepper (clicking + 100 times is no fun). */
+export const TRIBE_PRESETS = [0, 25, 50, 100] as const;
+
+/** Nations and tribes together stay within 1..MAX_OPPONENTS; nations win ties. */
+export function clampLobby(nations: number, tribes: number): { nations: number; tribes: number } {
+  const n = Math.max(0, Math.min(MAX_NATIONS, nations));
+  const t = Math.max(0, Math.min(MAX_OPPONENTS - n, tribes));
+  return n + t === 0 ? { nations: 1, tribes: 0 } : { nations: n, tribes: t };
+}
 
 export type MapSize = "normal" | "large";
 

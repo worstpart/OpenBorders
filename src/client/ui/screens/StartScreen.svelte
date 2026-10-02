@@ -1,12 +1,15 @@
 <script lang="ts">
   import {
+    clampLobby,
     landPerPlayer,
     MAP_SIZES,
+    MAX_NATIONS,
     MAX_OPPONENTS,
-    OPPONENT_PRESETS,
+    TRIBE_PRESETS,
     type MapSize,
   } from "../../app/setup.ts";
   import { ui } from "../../app/uiState.svelte.ts";
+  import { DIFFICULTIES, type Difficulty } from "../../../sim/rules.ts";
 
   interface Props {
     onPlay: () => void;
@@ -15,12 +18,21 @@
 
   let { onPlay, onSelectMap }: Props = $props();
   let starting = $state(false);
-  const perPlayer = $derived(landPerPlayer(ui.landTiles, ui.opponents));
-  const crowded = $derived(ui.mapSize === "normal" && ui.opponents >= 50);
+  const opponents = $derived(ui.nations + ui.tribes);
+  const perPlayer = $derived(landPerPlayer(ui.landTiles, opponents));
+  const crowded = $derived(ui.mapSize === "normal" && opponents >= 50);
 
-  function setOpponents(value: number): void {
-    ui.opponents = Math.max(1, Math.min(MAX_OPPONENTS, value));
+  function setLobby(nations: number, tribes: number): void {
+    const lobby = clampLobby(nations, tribes);
+    ui.nations = lobby.nations;
+    ui.tribes = lobby.tribes;
   }
+
+  const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+    easy: "Easy",
+    medium: "Medium",
+    hard: "Hard",
+  };
 
   function play(): void {
     if (starting) return;
@@ -29,36 +41,65 @@
   }
 </script>
 
+{#snippet stepper(label: string, value: number, min: number, max: number, set: (v: number) => void)}
+  <div class="stepper" role="group" aria-label={label}>
+    <button
+      type="button"
+      aria-label="Fewer {label.toLowerCase()}"
+      disabled={value <= min}
+      onclick={() => set(value - 1)}>−</button
+    >
+    <output aria-live="polite">{value}</output>
+    <button
+      type="button"
+      aria-label="More {label.toLowerCase()}"
+      disabled={value >= max}
+      onclick={() => set(value + 1)}>+</button
+    >
+  </div>
+{/snippet}
+
 <section class="card" aria-labelledby="title">
   <h1 id="title">Borderline</h1>
   <p class="tagline">Start small. Expand. Outlast everyone.</p>
 
   <div class="row">
-    <span id="opponents-label">Opponents</span>
-    <div class="stepper" role="group" aria-labelledby="opponents-label">
-      <button
-        type="button"
-        aria-label="Fewer opponents"
-        disabled={ui.opponents <= 1}
-        onclick={() => setOpponents(ui.opponents - 1)}>−</button
-      >
-      <output aria-live="polite">{ui.opponents}</output>
-      <button
-        type="button"
-        aria-label="More opponents"
-        disabled={ui.opponents >= MAX_OPPONENTS}
-        onclick={() => setOpponents(ui.opponents + 1)}>+</button
-      >
-    </div>
+    <span title="Smart opponents — the real rivals">Nations</span>
+    {@render stepper(
+      "Nations",
+      ui.nations,
+      ui.tribes > 0 ? 0 : 1,
+      Math.min(MAX_NATIONS, MAX_OPPONENTS - ui.tribes),
+      (v) => setLobby(v, ui.tribes),
+    )}
   </div>
-  <div class="segmented presets" role="group" aria-label="Quick pick">
-    {#each OPPONENT_PRESETS as preset (preset)}
+  <div class="row">
+    <span title="Weak filler bots: fewer troops, slower growth, cheap to conquer">Tribes</span>
+    {@render stepper("Tribes", ui.tribes, ui.nations > 0 ? 0 : 1, MAX_OPPONENTS - ui.nations, (v) =>
+      setLobby(ui.nations, v),
+    )}
+  </div>
+  <div class="segmented presets" role="group" aria-label="Quick pick: tribes">
+    {#each TRIBE_PRESETS as preset (preset)}
       <button
         type="button"
-        aria-pressed={ui.opponents === preset}
-        onclick={() => setOpponents(preset)}>{preset}</button
+        aria-pressed={ui.tribes === preset}
+        onclick={() => setLobby(ui.nations, preset)}>{preset}</button
       >
     {/each}
+  </div>
+
+  <div class="row">
+    <span id="difficulty-label">Nations play</span>
+    <div class="segmented" role="group" aria-labelledby="difficulty-label">
+      {#each DIFFICULTIES as difficulty (difficulty)}
+        <button
+          type="button"
+          aria-pressed={ui.difficulty === difficulty}
+          onclick={() => (ui.difficulty = difficulty)}>{DIFFICULTY_LABEL[difficulty]}</button
+        >
+      {/each}
+    </div>
   </div>
 
   <div class="row">
@@ -74,8 +115,8 @@
     </div>
   </div>
   <p class="info" class:warn={crowded}>
-    ≈ {perPlayer.toLocaleString("en-US")} tiles of land per player{#if crowded}
-      · a Large map gives big lobbies more room{/if}
+    {opponents} opponents · ≈ {perPlayer.toLocaleString("en-US")} tiles of land each{#if crowded}&nbsp;·
+      a Large map gives big lobbies more room{/if}
   </p>
 
   <button type="button" class="play" onclick={play} disabled={starting}>

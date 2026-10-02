@@ -2,7 +2,7 @@
   import { battleOutlook } from "../../../sim/battle.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { troopsToSend } from "../../app/attackPercent.ts";
-  import { ODDS_LABEL, outcomeText, THREAT_LABEL } from "../../app/preview.ts";
+  import { lossFactorOf, ODDS_LABEL, outcomeText, THREAT_LABEL } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
 
@@ -22,7 +22,13 @@
   /** Odds of an army against a player's current home troops. */
   function outlook(army: number, defender: number) {
     const p = ui.players[defender - 1];
-    return battleOutlook(DEFAULT_RULES, army, p?.homeTroops ?? 0, p?.tiles ?? 0);
+    return battleOutlook(
+      DEFAULT_RULES,
+      army,
+      p?.homeTroops ?? 0,
+      p?.tiles ?? 0,
+      lossFactorOf(DEFAULT_RULES, ui.me, p),
+    );
   }
 
   function remaining(id: number, troops: number): string {
@@ -37,7 +43,13 @@
   <ul class="chips" aria-label="Active attacks">
     {#each incoming as attack (attack.id)}
       {@const threat = me
-        ? battleOutlook(DEFAULT_RULES, attack.troops, me.homeTroops, me.tiles)
+        ? battleOutlook(
+            DEFAULT_RULES,
+            attack.troops,
+            me.homeTroops,
+            me.tiles,
+            lossFactorOf(DEFAULT_RULES, ui.players[attack.attacker - 1], me),
+          )
         : null}
       <li class="chip incoming" style:--player-color={ui.colorOf(attack.attacker)}>
         <span class="dot" aria-hidden="true"></span>

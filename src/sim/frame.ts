@@ -6,7 +6,8 @@
 import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
 import { landNeighbors } from "./systems/attacks.ts";
-import type { Phase, PlayerId, PlayerKind, World } from "./world.ts";
+import type { Difficulty } from "./rules.ts";
+import type { BotTier, Phase, PlayerId, PlayerKind, World } from "./world.ts";
 
 export interface PlayerSnapshot {
   readonly id: PlayerId;
@@ -21,8 +22,12 @@ export interface PlayerSnapshot {
   readonly capacity: number;
   readonly growthPerTick: number;
   readonly peakTiles: number;
-  /** Bots only. */
+  /** Bots only: nation or tribe (GAME_DESIGN.md §3.13). */
+  readonly tier: BotTier | null;
+  /** Nations only. */
   readonly personality: string | null;
+  /** Nations only. */
+  readonly difficulty: Difficulty | null;
   /** Tick the player was eliminated, or -1. */
   readonly eliminatedTick: number;
   /**
@@ -72,7 +77,9 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     capacity: p.capacity,
     growthPerTick: p.lastGrowth,
     peakTiles: p.peakTiles,
-    personality: p.brain?.personality ?? null,
+    tier: p.brain?.tier ?? null,
+    personality: p.brain?.tier === "nation" ? p.brain.personality : null,
+    difficulty: p.brain?.tier === "nation" ? p.brain.difficulty : null,
     eliminatedTick: p.eliminatedTick,
     neighbors: p.kind === "human" && p.alive ? landNeighbors(world, p) : null,
   }));

@@ -234,6 +234,14 @@ interface World {
 AI runs **inside** the deterministic simulation (like OpenFront), so bots cost no
 network traffic and behave identically on every machine.
 
+**Tribes & Nations (milestone 2.1).** Bots have `brain.tier` ("nation" | "tribe") and,
+for nations, `brain.difficulty`. Tribe handicaps live in exactly three places: capacity
+and growth (`troops.ts`, `capacityOf`), the per-tile loss of whoever attacks them
+(`attacks.ts` `tileCost`, via `battle.ts` `attackLossFactor` — the same factor the HUD
+and the bots use in their estimates). `PlayerSnapshot` carries `tier` and `difficulty`.
+Tribes never draw a personality from the RNG, so adding tribes doesn't change the nations'
+draws, and lobbies without tribes are bit-identical to Phase 1.
+
 **Timing probe (milestone 2.0).** `runTick(world, turn, probe?)` calls `probe(step)` after
 each step (`TICK_STEPS`: commands, collisions, attacks, encircle, eliminate, troops, bots,
 victory, frame). The simulation still never reads a clock; the headless runner times the

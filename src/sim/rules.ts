@@ -201,10 +201,56 @@ export interface PersonalityRules {
   readonly preferBusyTargets: number;
 }
 
-export interface AiRules {
-  /** Bots think every thinkMinTicks..thinkMaxTicks ticks (2–5 s), randomly staggered. */
+export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+
+/**
+ * A nation's difficulty (GAME_DESIGN.md §3.13): reaction time and decision quality only —
+ * never stats (D-012).
+ */
+export interface DifficultyRules {
+  /** Thinks every thinkMinTicks..thinkMaxTicks ticks, randomly staggered. */
   readonly thinkMinTicks: number;
   readonly thinkMaxTicks: number;
+  /** Answers incoming armies with a counter-attack. */
+  readonly counters: boolean;
+  /** Tops up wars that can still be won (otherwise lets them run out). */
+  readonly reinforces: boolean;
+}
+
+/**
+ * Tribes (GAME_DESIGN.md §3.13, D-017): many weak filler bots, weaker by stats and simple.
+ */
+export interface TribeRules {
+  /** Share of the normal troop capacity. */
+  readonly capacityShare: number;
+  /** Share of the normal troop growth. */
+  readonly growthShare: number;
+  /** Anyone but a tribe pays this share of the normal losses per tribe tile taken. */
+  readonly lossWhenAttacked: number;
+  /** Thinks every thinkMinTicks..thinkMaxTicks ticks. */
+  readonly thinkMinTicks: number;
+  readonly thinkMaxTicks: number;
+  /** Expands once home troops reach this share of capacity… */
+  readonly expandAt: number;
+  /** …and attacks a neighbour (when no open land is near) from this share… */
+  readonly attackAt: number;
+  /** …sending this share of its home troops… */
+  readonly attackShare: number;
+  /** …if that army is expected to take at least this share of the target's land. */
+  readonly minLandGain: number;
+}
+
+export interface AiRules {
+  /** Nations by difficulty. */
+  readonly difficulties: Readonly<Record<Difficulty, DifficultyRules>>;
+  /**
+   * Nations weigh tribe targets this many times higher: eat the tribes first, then fight
+   * the other nations (GAME_DESIGN.md §3.13).
+   */
+  readonly tribePreference: number;
+  /** Wars on tribes a nation runs at once (against nations: one at a time). */
+  readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
   readonly counterAbove: number;
   /** ...sending this many times its size (the armies cancel; the rest pushes on). */
@@ -260,6 +306,7 @@ export interface GameRules {
   readonly elimination: EliminationRules;
   readonly victory: VictoryRules;
   readonly ai: AiRules;
+  readonly tribe: TribeRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -359,8 +406,16 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     minLandShare: 0.5,
   },
   ai: {
-    thinkMinTicks: 20,
-    thinkMaxTicks: 50,
+    // Hard is how every bot played in Phase 1 (2–5 s, full logic).
+    difficulties: {
+      easy: { thinkMinTicks: 60, thinkMaxTicks: 100, counters: false, reinforces: false },
+      medium: { thinkMinTicks: 40, thinkMaxTicks: 70, counters: true, reinforces: false },
+      hard: { thinkMinTicks: 20, thinkMaxTicks: 50, counters: true, reinforces: true },
+    },
+    // Milestone 2.1 trace (10 nations + 100 tribes): without these, nations fought each
+    // other from minute 2 and the survivor then ate ~50 tribes one by one (~3 a minute).
+    tribePreference: 3,
+    maxTribeWars: 3,
     counterAbove: 1.1,
     counterSize: 1.3,
     retreatBelow: 0.3,
@@ -418,6 +473,22 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
     },
   },
+  tribe: {
+    // OpenFront's tribes have a third of the troops and half the growth (research §3.4);
+    // ours match, so they are "food": the obvious first targets once the land runs out.
+    capacityShare: 1 / 3,
+    growthShare: 0.5,
+    // Taking a tribe's land costs nations and humans 30% less (tribes fight each other at
+    // full cost), so eating tribes pays even against their full home pool.
+    lossWhenAttacked: 0.7,
+    // Slow and simple (4–8 s): cheap to run with a hundred of them.
+    thinkMinTicks: 40,
+    thinkMaxTicks: 80,
+    expandAt: 0.3,
+    attackAt: 0.55,
+    attackShare: 0.3,
+    minLandGain: 0.1,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -431,6 +502,7 @@ export function makeRules(overrides: {
   elimination?: Partial<EliminationRules>;
   victory?: Partial<VictoryRules>;
   ai?: Partial<AiRules>;
+  tribe?: Partial<TribeRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -443,6 +515,7 @@ export function makeRules(overrides: {
     elimination: { ...DEFAULT_RULES.elimination, ...overrides.elimination },
     victory: { ...DEFAULT_RULES.victory, ...overrides.victory },
     ai: { ...DEFAULT_RULES.ai, ...overrides.ai },
+    tribe: { ...DEFAULT_RULES.tribe, ...overrides.tribe },
   });
 }
 

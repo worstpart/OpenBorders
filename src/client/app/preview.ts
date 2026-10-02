@@ -4,7 +4,12 @@
  * simulation's checks so the HUD never promises something the game will reject, and it
  * uses the same battle estimates as the bots (sim/battle.ts).
  */
-import { battleOutlook, type BattleOutlook, type Odds } from "../../sim/battle.ts";
+import {
+  attackLossFactor,
+  battleOutlook,
+  type BattleOutlook,
+  type Odds,
+} from "../../sim/battle.ts";
 import type { PlayerSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
 import type { Phase, PlayerId } from "../../sim/world.ts";
@@ -58,8 +63,23 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
   return {
     kind: "attack",
     army,
-    outlook: battleOutlook(ctx.rules, army, defender.homeTroops, defender.tiles),
+    outlook: battleOutlook(
+      ctx.rules,
+      army,
+      defender.homeTroops,
+      defender.tiles,
+      lossFactorOf(ctx.rules, me, defender),
+    ),
   };
+}
+
+/** Taking a tribe's land is cheaper for anyone but a tribe (D-017). */
+export function lossFactorOf(
+  rules: GameRules,
+  attacker: PlayerSnapshot | undefined,
+  defender: PlayerSnapshot | undefined,
+): number {
+  return attackLossFactor(rules, attacker?.tier === "tribe", defender?.tier === "tribe");
 }
 
 export const ODDS_LABEL: Record<Odds, string> = {

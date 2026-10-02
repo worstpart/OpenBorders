@@ -6,7 +6,13 @@ import type { SimEvent } from "./events.ts";
 import type { GameMap } from "./map/gameMap.ts";
 import { Rng } from "./math/rng.ts";
 import type { StampedCommand } from "./commands.ts";
-import { DEFAULT_RULES, PERSONALITIES, type GameRules, type Personality } from "./rules.ts";
+import {
+  DEFAULT_RULES,
+  PERSONALITIES,
+  type Difficulty,
+  type GameRules,
+  type Personality,
+} from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
 import type { TileQueue } from "./systems/tileQueue.ts";
 
@@ -16,6 +22,8 @@ export const NEUTRAL: PlayerId = 0;
 
 export type Phase = "spawn" | "playing" | "ended";
 export type PlayerKind = "human" | "bot";
+/** What kind of bot (GAME_DESIGN.md §3.13): a smart, fair nation or a weak filler tribe. */
+export type BotTier = "nation" | "tribe";
 
 export interface Player {
   readonly id: PlayerId;
@@ -62,13 +70,21 @@ export interface Player {
 export interface PlayerSetup {
   readonly name: string;
   readonly kind: PlayerKind;
-  /** Bots only; chosen at random (from the game seed) when left out. */
+  /** Bots only: nation (default) or tribe. */
+  readonly tier?: BotTier;
+  /** Nations only; chosen at random (from the game seed) when left out. */
   readonly personality?: Personality;
+  /** Nations only; "hard" (Phase 1's bots) when left out. */
+  readonly difficulty?: Difficulty;
 }
 
 /** A bot's own state (GAME_DESIGN.md §3.11). */
 export interface BotBrain {
+  readonly tier: BotTier;
+  /** Nations play their personality; tribes ignore it (always "expander", never drawn). */
   readonly personality: Personality;
+  /** Nations' reaction time and decision quality (tribes: unused). */
+  readonly difficulty: Difficulty;
   /** Next tick the bot thinks, or -1 until the match starts. */
   nextThinkTick: number;
   /** Consecutive thinks spent at the troop cap without acting (see AiRules.boredomThinks). */
@@ -161,14 +177,7 @@ export function createWorld(setup: GameSetup): World {
     eliminatedTick: -1,
     lastLostTo: 0,
     encircleDirty: true,
-    brain:
-      p.kind === "bot"
-        ? {
-            personality: p.personality ?? PERSONALITIES[rng.nextInt(PERSONALITIES.length)]!,
-            nextThinkTick: -1,
-            idleThinks: 0,
-          }
-        : null,
+    brain: p.kind === "bot" ? createBrain(p, rng) : null,
   }));
   return {
     tick: 0,
@@ -190,6 +199,26 @@ export function createWorld(setup: GameSetup): World {
     changes: new TileChangeLog(),
     events: [],
   };
+}
+
+function createBrain(setup: PlayerSetup, rng: Rng): BotBrain {
+  const tier = setup.tier ?? "nation";
+  return {
+    tier,
+    // Tribes don't draw a personality, so adding tribes never shifts the nations' draws.
+    personality:
+      tier === "tribe"
+        ? "expander"
+        : (setup.personality ?? PERSONALITIES[rng.nextInt(PERSONALITIES.length)]!),
+    difficulty: setup.difficulty ?? "hard",
+    nextThinkTick: -1,
+    idleThinks: 0,
+  };
+}
+
+/** Tribes are the weak filler bots (D-017). */
+export function isTribe(player: Player | undefined): boolean {
+  return player?.brain?.tier === "tribe";
 }
 
 /** The player with this id, or undefined for neutral/unknown ids. */
