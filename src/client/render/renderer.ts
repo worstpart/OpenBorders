@@ -8,9 +8,12 @@
  *   terrain  RGBA8, static, mipmapped (color + hillshade)
  *   owner    RG16UI: owner id and the tick it was captured (for the capture flash)
  *   palette  RGBA8: one color per player id
+ *   war      R8, players × players: 1 where a player is attacking another (fronts glow)
  * Ownership changes mark 32×32-tile blocks dirty; only dirty blocks are uploaded.
+ * Water tiles carry the owner id WATER (renderer only), so coasts never count as
+ * neutral land: expansion fronts glow toward land, not the sea.
  */
-import type { GameMap } from "../../sim/map/gameMap.ts";
+import { Terrain, type GameMap } from "../../sim/map/gameMap.ts";
 import mapFragmentSource from "./shaders/map.frag?raw";
 import mapVertexSource from "./shaders/map.vert?raw";
 import { buildTerrainTexels, OCEAN_COLOR } from "./terrainTexture.ts";
@@ -33,6 +36,16 @@ const BLOCK = 32;
 /** Border width in CSS pixels. */
 const BORDER_CSS_PX = 1.25;
 const PALETTE_ROW = 256;
+/** Owner id the renderer uses for water tiles (never a real player id in Phase 1). */
+const WATER = 0xffff;
+
+/** The parts of an attack the renderer needs to draw fronts. */
+export interface FrontInfo {
+  attacker: number;
+  /** 0 = neutral land. */
+  target: number;
+  retreating: boolean;
+}
 
 type UniformName =
   | "uViewport"
@@ -46,7 +59,10 @@ type UniformName =
   | "uHoverOwner"
   | "uLocalOwner"
   | "uBorderPx"
-  | "uOcean";
+  | "uOcean"
+  | "uWar"
+  | "uWarSize"
+  | "uSeconds";
 
 interface MapState {
   width: number;
@@ -67,6 +83,9 @@ export class MapRenderer {
   private terrainTexture: WebGLTexture | null = null;
   private ownerTexture: WebGLTexture | null = null;
   private paletteTexture: WebGLTexture | null = null;
+  private warTexture: WebGLTexture | null = null;
+  private warSize = 0;
+  private warKey = "";
   private map: MapState | null = null;
   private hoverOwner = 0;
   private localOwner = 0;
@@ -96,6 +115,9 @@ export class MapRenderer {
       "uLocalOwner",
       "uBorderPx",
       "uOcean",
+      "uWar",
+      "uWarSize",
+      "uSeconds",
     ];
     this.uniforms = Object.fromEntries(
       names.map((name) => [name, gl.getUniformLocation(this.program, name)]),
@@ -138,7 +160,9 @@ export class MapRenderer {
     gl.generateMipmap(gl.TEXTURE_2D);
 
     const ownerCapture = new Uint16Array(width * height * 2);
-    for (let tile = 0; tile < owner.length; tile++) ownerCapture[tile * 2] = owner[tile]!;
+    for (let tile = 0; tile < owner.length; tile++) {
+      ownerCapture[tile * 2] = map.terrain[tile] === Terrain.Water ? WATER : owner[tile]!;
+    }
     this.ownerTexture = createTexture(gl, gl.NEAREST, gl.NEAREST);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -206,6 +230,26 @@ export class MapRenderer {
     );
   }
 
+  /** Which players are attacking whom (and who is expanding), for the front glow. */
+  setAttacks(attacks: readonly FrontInfo[], playerCount: number): void {
+    const active = attacks.filter((a) => !a.retreating);
+    const size = playerCount + 1;
+    const key = size + ":" + active.map((a) => a.attacker + ">" + a.target).join(",");
+    if (key === this.warKey) return;
+    this.warKey = key;
+    const cells = new Uint8Array(size * size);
+    for (const a of active) cells[a.target * size + a.attacker] = 255; // row = target, column = attacker
+    const { gl } = this;
+    if (!this.warTexture || this.warSize !== size) {
+      if (this.warTexture) gl.deleteTexture(this.warTexture);
+      this.warTexture = createTexture(gl, gl.NEAREST, gl.NEAREST);
+      this.warSize = size;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.warTexture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, size, size, 0, gl.RED, gl.UNSIGNED_BYTE, cells);
+  }
+
   setHoverOwner(owner: number): void {
     this.hoverOwner = owner;
   }
@@ -214,14 +258,24 @@ export class MapRenderer {
     this.localOwner = owner;
   }
 
-  /** Draws one frame. `tick` may be fractional (current tick + progress toward the next). */
-  render(view: MapView, tick: number): void {
+  /**
+   * Draws one frame. `tick` may be fractional (current tick + progress toward the next);
+   * `seconds` is wall-clock time for pulsing effects.
+   */
+  render(view: MapView, tick: number, seconds: number): void {
     const { gl } = this;
     const ratio = this.canvas.width / Math.max(1, this.canvas.clientWidth);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.uploadDirtyBlocks();
 
-    if (!this.map || !this.terrainTexture || !this.ownerTexture || !this.paletteTexture) {
+    if (!this.warTexture) this.setAttacks([], 0);
+    if (
+      !this.map ||
+      !this.terrainTexture ||
+      !this.ownerTexture ||
+      !this.paletteTexture ||
+      !this.warTexture
+    ) {
       gl.clearColor(OCEAN_COLOR[0] / 255, OCEAN_COLOR[1] / 255, OCEAN_COLOR[2] / 255, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       return;
@@ -238,9 +292,12 @@ export class MapRenderer {
     gl.uniform1ui(u.uLocalOwner, this.localOwner);
     gl.uniform1f(u.uBorderPx, BORDER_CSS_PX * ratio);
     gl.uniform3f(u.uOcean, OCEAN_COLOR[0] / 255, OCEAN_COLOR[1] / 255, OCEAN_COLOR[2] / 255);
+    gl.uniform1ui(u.uWarSize, this.warSize);
+    gl.uniform1f(u.uSeconds, seconds % 3600);
     bindTexture(gl, 0, this.terrainTexture, u.uTerrain);
     bindTexture(gl, 1, this.ownerTexture, u.uOwner);
     bindTexture(gl, 2, this.paletteTexture, u.uPalette);
+    bindTexture(gl, 3, this.warTexture, u.uWar);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -248,6 +305,7 @@ export class MapRenderer {
   dispose(): void {
     this.deleteMapTextures();
     if (this.paletteTexture) this.gl.deleteTexture(this.paletteTexture);
+    if (this.warTexture) this.gl.deleteTexture(this.warTexture);
     this.gl.deleteProgram(this.program);
     this.gl.deleteVertexArray(this.vao);
   }

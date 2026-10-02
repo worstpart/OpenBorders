@@ -3,11 +3,13 @@
   export interface AppActions {
     play: (opponents: number) => void;
     confirmSpawn: () => void;
+    retreat: (attackId: number) => void;
   }
 </script>
 
 <script lang="ts">
   import { ui } from "../app/uiState.svelte.ts";
+  import AttackChips from "./hud/AttackChips.svelte";
   import SpawnPrompt from "./hud/SpawnPrompt.svelte";
   import YouChip from "./hud/YouChip.svelte";
   import StartScreen from "./screens/StartScreen.svelte";
@@ -37,6 +39,7 @@
 {:else}
   <YouChip />
   <SpawnPrompt onConfirm={actions.confirmSpawn} />
+  <AttackChips onRetreat={actions.retreat} />
 {/if}
 
 <style>

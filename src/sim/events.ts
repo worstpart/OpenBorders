@@ -15,6 +15,26 @@ export type SimEvent =
       readonly automatic: boolean;
     }
   | {
+      readonly type: "attackStarted";
+      readonly attackId: number;
+      readonly attacker: PlayerId;
+      /** 0 = expanding into neutral land. */
+      readonly target: PlayerId;
+    }
+  | {
+      readonly type: "attackEnded";
+      readonly attackId: number;
+      readonly attacker: PlayerId;
+      readonly target: PlayerId;
+      /**
+       * spent: out of troops · complete: nothing left to take · retreated: came home
+       * after a retreat · cancelled: destroyed by the target's opposing attack.
+       */
+      readonly reason: "spent" | "complete" | "retreated" | "cancelled";
+      /** Troops that made it home. */
+      readonly survivors: number;
+    }
+  | {
       readonly type: "commandRejected";
       readonly playerId: PlayerId;
       readonly command: Command["type"];

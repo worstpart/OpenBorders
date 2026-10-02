@@ -42,6 +42,18 @@ export function hashWorld(world: World): number {
       .addInt(p.tiles)
       .addNumber(p.capacity);
   }
+  h.addInt(world.nextAttackId).addInt(world.attacks.length);
+  for (const a of world.attacks) {
+    h.addInt(a.id)
+      .addInt(a.attacker)
+      .addInt(a.target)
+      .addNumber(a.troops)
+      .addInt(a.focusTile)
+      .addInt(a.tilesTaken)
+      .addInt(a.retreatTick)
+      .addInt(a.front.size)
+      .addNumber(a.front.peekTime());
+  }
   for (const word of world.rng.getState()) h.addInt(word);
   return h.digest();
 }

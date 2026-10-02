@@ -5,7 +5,7 @@
 import { LocalHost } from "../../host/localHost.ts";
 import type { FrameTiming } from "../../host/host.ts";
 import type { TickFrame } from "../../sim/frame.ts";
-import { tileAt, type GameMap } from "../../sim/map/gameMap.ts";
+import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
 import type { PlayerSetup } from "../../sim/world.ts";
 import { Camera } from "../camera/camera.ts";
@@ -13,6 +13,7 @@ import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts
 import { computeLabelPlacements, LabelLayer, type LabelPlacement } from "../render/labels.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
+import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { pickBotNames, playerColors } from "./players.ts";
 import { ui } from "./uiState.svelte.ts";
 
@@ -59,6 +60,7 @@ export class GameClient {
       zoom: (factor, anchor) => this.camera.zoomAt(factor, anchor),
       hover: (at) => (this.hoverPoint = at),
       key: (action) => this.key(action),
+      adjustPercent: (steps) => (ui.attackPercent = stepPercent(ui.attackPercent, steps)),
     });
     new ResizeObserver(() => this.resize()).observe(elements.mapCanvas);
     this.resize();
@@ -107,6 +109,10 @@ export class GameClient {
     ui.screen = "game";
   }
 
+  retreat(attackId: number): void {
+    this.host?.send({ type: "retreat", attackId });
+  }
+
   confirmSpawn(): void {
     const me = ui.me;
     if (ui.screen === "game" && ui.phase === "spawn" && me?.spawned && !me.ready) {
@@ -138,16 +144,25 @@ export class GameClient {
     ui.phase = frame.phase;
     ui.playStartTick = frame.playStartTick;
     ui.players = frame.players;
+    ui.attacks = frame.attacks;
+    this.renderer.setAttacks(frame.attacks, frame.players.length);
   }
 
   private primaryClick(at: ScreenPoint): void {
     const map = this.map;
     const tile = this.camera.tileAt(at);
     if (!map || !tile || ui.screen !== "game" || !this.host) return;
+    const index = tileAt(map, tile.x, tile.y);
     if (ui.phase === "spawn" && !ui.me?.ready) {
-      this.host.send({ type: "spawn", tile: tileAt(map, tile.x, tile.y) });
+      this.host.send({ type: "spawn", tile: index });
+      return;
     }
-    // Expanding and attacking arrive in milestone 1.3.
+    const me = ui.me;
+    if (ui.phase !== "playing" || !me?.alive || !isLand(map, index)) return;
+    const target = this.owner[index]!;
+    if (target === me.id) return; // own land: nothing to do (selection comes with the HUD)
+    // Neutral land → expand; enemy land → attack. The simulation validates the rest.
+    this.host.send({ type: "attack", target, focusTile: index, percentBp: ui.attackPercent * 100 });
   }
 
   private key(action: KeyAction): void {
@@ -165,6 +180,19 @@ export class GameClient {
         break;
       case "escape":
         break; // the pause menu arrives in milestone 1.6
+      case "preset1":
+      case "preset2":
+      case "preset3":
+      case "preset4":
+      case "preset5":
+        ui.attackPercent = presetPercent(Number(action.slice(-1)) - 1);
+        break;
+      case "percentDown":
+        ui.attackPercent = stepPercent(ui.attackPercent, -1);
+        break;
+      case "percentUp":
+        ui.attackPercent = stepPercent(ui.attackPercent, 1);
+        break;
     }
   }
 
@@ -189,7 +217,7 @@ export class GameClient {
 
     this.updateHover();
     this.refreshLabels(startedAt);
-    this.renderer.render(view, this.currentTick());
+    this.renderer.render(view, this.currentTick(), time / 1000);
     const players = this.latestFrame?.players ?? [];
     this.labels.draw(
       view,

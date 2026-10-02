@@ -7,6 +7,7 @@ import type { GameMap } from "./map/gameMap.ts";
 import { Rng } from "./math/rng.ts";
 import { DEFAULT_RULES, type GameRules } from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
+import type { TileQueue } from "./systems/tileQueue.ts";
 
 /** 1..n for players; 0 means neutral (unowned). */
 export type PlayerId = number;
@@ -24,12 +25,20 @@ export interface Player {
   spawnTile: number;
   /** A human has confirmed their spawn (the match starts when all humans have). */
   ready: boolean;
-  /** Troops at home, defending (T). Integer. */
+  /**
+   * Troops at home, defending (T). Troop amounts are plain numbers computed only with
+   * + − × ÷ (deterministic on every engine); the HUD rounds them for display.
+   */
   homeTroops: number;
-  /** Troops away inside attacks (F). Integer. Counts toward capacity. */
+  /** Troops away inside attacks (F): the sum of this player's armies. Counts toward capacity. */
   fieldTroops: number;
   /** Tiles owned (L). Kept in sync by setOwner. */
   tiles: number;
+  /**
+   * Owned tiles that touch a tile with a different owner (another player, neutral land,
+   * water or the map edge). Kept in sync by setOwner; derived from ownership, so not hashed.
+   */
+  readonly border: Set<number>;
   /** Troop capacity (M) as of the last tick. */
   capacity: number;
   /** Troops gained in the last tick (shown on the HUD). */
@@ -64,10 +73,37 @@ export interface World {
   winner: PlayerId | null;
   /** XOR of ownerTileHash over all tiles, maintained incrementally by setOwner. */
   ownerHash: number;
+  /** Active attacks, in launch order (the order they are processed in). */
+  attacks: Attack[];
+  nextAttackId: number;
+  /** Scratch marks for de-duplicating tiles inside one operation (not game state). */
+  readonly scratchMarks: Int32Array;
+  scratchStamp: number;
 
   // Per-tick output, cleared at the start of every tick (not part of the game state).
   readonly changes: TileChangeLog;
   readonly events: SimEvent[];
+}
+
+/** An army advancing into one target's land (a player, or neutral land when target = 0). */
+export interface Attack {
+  readonly id: number;
+  readonly attacker: PlayerId;
+  readonly target: PlayerId;
+  /** Troops still in this army. */
+  troops: number;
+  /** The tile the attack is aimed at (directed attacks); the latest click when merged. */
+  focusTile: number;
+  readonly startTick: number;
+  tilesTaken: number;
+  /** Tick at which a retreating army gets home, or -1 while advancing. */
+  retreatTick: number;
+  /** Finished this tick; removed from world.attacks before the tick ends. */
+  ended: boolean;
+  /** Tiles on the front, by the tick they can be taken (may hold superseded entries). */
+  readonly front: TileQueue;
+  /** The current ready time of each tile on the front (the entry that counts). */
+  readonly scheduled: Map<number, number>;
 }
 
 export const MAX_PLAYERS = 0xffff; // owner ids are stored in a Uint16Array
@@ -86,6 +122,7 @@ export function createWorld(setup: GameSetup): World {
     homeTroops: 0,
     fieldTroops: 0,
     tiles: 0,
+    border: new Set<number>(),
     capacity: 0,
     lastGrowth: 0,
   }));
@@ -100,6 +137,10 @@ export function createWorld(setup: GameSetup): World {
     rng: new Rng(setup.seed),
     winner: null,
     ownerHash: 0,
+    attacks: [],
+    nextAttackId: 1,
+    scratchMarks: new Int32Array(setup.map.width * setup.map.height),
+    scratchStamp: 0,
     changes: new TileChangeLog(),
     events: [],
   };
@@ -110,16 +151,79 @@ export function getPlayer(world: World, id: PlayerId): Player | undefined {
   return world.players[id - 1];
 }
 
-/** Sets a tile's owner, keeping tile counts, the ownership hash and the change log in sync. */
+/**
+ * Sets a tile's owner, keeping tile counts, border sets, the ownership hash and the
+ * change log in sync.
+ */
 export function setOwner(world: World, tile: number, newOwner: PlayerId): void {
   const oldOwner = world.owner[tile]!;
   if (oldOwner === newOwner) return;
   world.owner[tile] = newOwner;
-  if (oldOwner !== NEUTRAL) world.players[oldOwner - 1]!.tiles--;
+  if (oldOwner !== NEUTRAL) {
+    const previous = world.players[oldOwner - 1]!;
+    previous.tiles--;
+    previous.border.delete(tile);
+  }
   if (newOwner !== NEUTRAL) world.players[newOwner - 1]!.tiles++;
   world.ownerHash =
     (world.ownerHash ^ ownerTileHash(tile, oldOwner) ^ ownerTileHash(tile, newOwner)) >>> 0;
   world.changes.push(tile);
+
+  const { width } = world.map;
+  const x = tile % width;
+  refreshBorder(world, tile);
+  if (tile >= width) refreshBorder(world, tile - width);
+  if (tile + width < world.owner.length) refreshBorder(world, tile + width);
+  if (x > 0) refreshBorder(world, tile - 1);
+  if (x < width - 1) refreshBorder(world, tile + 1);
+}
+
+/** True if any 4-neighbor of `tile` has a different owner than `owner` (or is off the map). */
+export function touchesOtherOwner(world: World, tile: number, owner: PlayerId): boolean {
+  const { width } = world.map;
+  const x = tile % width;
+  const o = world.owner;
+  return (
+    tile < width ||
+    tile + width >= o.length ||
+    x === 0 ||
+    x === width - 1 ||
+    o[tile - width] !== owner ||
+    o[tile + width] !== owner ||
+    o[tile - 1] !== owner ||
+    o[tile + 1] !== owner
+  );
+}
+
+/** True if any 4-neighbor of `tile` is owned by `owner`. */
+export function touchesOwner(world: World, tile: number, owner: PlayerId): boolean {
+  const { width } = world.map;
+  const x = tile % width;
+  const o = world.owner;
+  return (
+    (tile >= width && o[tile - width] === owner) ||
+    (tile + width < o.length && o[tile + width] === owner) ||
+    (x > 0 && o[tile - 1] === owner) ||
+    (x < width - 1 && o[tile + 1] === owner)
+  );
+}
+
+function refreshBorder(world: World, tile: number): void {
+  const owner = world.owner[tile]!;
+  if (owner === NEUTRAL) return;
+  const border = world.players[owner - 1]!.border;
+  if (touchesOtherOwner(world, tile, owner)) border.add(tile);
+  else border.delete(tile);
+}
+
+/** A fresh stamp for world.scratchMarks: tiles marked with it count as "seen" in one operation. */
+export function nextScratchStamp(world: World): number {
+  world.scratchStamp++;
+  if (world.scratchStamp === 0x7fffffff) {
+    world.scratchMarks.fill(0);
+    world.scratchStamp = 1;
+  }
+  return world.scratchStamp;
 }
 
 /** Tiles whose owner changed during the current tick (a tile may appear more than once). */

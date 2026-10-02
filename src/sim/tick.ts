@@ -4,6 +4,12 @@
  */
 import type { Command, StampedCommand, Turn } from "./commands.ts";
 import { buildFrame, type TickFrame } from "./frame.ts";
+import {
+  advanceAttacks,
+  applyAttackCommand,
+  applyRetreatCommand,
+  resolveCollisions,
+} from "./systems/attacks.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
 import { growTroops } from "./systems/troops.ts";
 import { getPlayer, type Player, type World } from "./world.ts";
@@ -22,8 +28,10 @@ export function runTick(world: World, turn: Turn): TickFrame {
   if (world.phase === "spawn") updateSpawnPhase(world);
 
   if (world.phase === "playing") {
-    // 2. resolve attack collisions  — milestone 1.3
-    // 3. advance attacks            — milestone 1.3
+    // 2. Opposing armies cancel out.
+    resolveCollisions(world);
+    // 3. Fronts advance; retreating armies come home.
+    advanceAttacks(world);
     // 4. eliminate                  — milestone 1.4
     // 5. encircle                   — milestone 1.4
     // 6. troops
@@ -54,6 +62,16 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applySpawnCommand(world, player, command.tile);
     case "confirmSpawn":
       return applyConfirmSpawn(world, player);
+    case "attack":
+      return applyAttackCommand(
+        world,
+        player,
+        command.target,
+        command.focusTile,
+        command.percentBp,
+      );
+    case "retreat":
+      return applyRetreatCommand(world, player, command.attackId);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

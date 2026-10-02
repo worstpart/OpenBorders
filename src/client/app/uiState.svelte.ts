@@ -3,8 +3,9 @@
  * (ARCHITECTURE.md §6); components never change game state directly — they call the
  * session's actions.
  */
-import type { PlayerSnapshot } from "../../sim/frame.ts";
+import type { AttackSnapshot, PlayerSnapshot } from "../../sim/frame.ts";
 import type { Phase, PlayerId } from "../../sim/world.ts";
+import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 
 export type Screen = "loading" | "start" | "game";
 
@@ -20,9 +21,16 @@ class UiState {
   /** Colors by player id. */
   colors = $state.raw<readonly string[]>([]);
   players = $state.raw<readonly PlayerSnapshot[]>([]);
+  attacks = $state.raw<readonly AttackSnapshot[]>([]);
+  /** Share of home troops a click sends (client-side choice; sent with each command). */
+  attackPercent = $state(DEFAULT_ATTACK_PERCENT);
 
   get me(): PlayerSnapshot | undefined {
     return this.players[this.localPlayerId - 1];
+  }
+
+  playerName(id: PlayerId): string {
+    return id === 0 ? "Neutral land" : (this.players[id - 1]?.name ?? `Player ${id}`);
   }
 }
 

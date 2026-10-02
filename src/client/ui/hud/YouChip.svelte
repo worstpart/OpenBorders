@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatPercent, formatTroops } from "../../format.ts";
+  import { troopsToSend } from "../../app/attackPercent.ts";
   import { ui } from "../../app/uiState.svelte.ts";
 
   const me = $derived(ui.me);
@@ -19,6 +20,12 @@
     <span class="stat" title="Rank by land">#{rank}</span>
     <span class="stat" title="Troops at home / capacity">
       {formatTroops(me.homeTroops)} / {formatTroops(me.capacity)}
+    </span>
+    <span
+      class="send"
+      title="A click sends this share of your home troops (keys 1–5, Q/E, Shift+wheel)"
+    >
+      Send {ui.attackPercent}% · {formatTroops(troopsToSend(me.homeTroops, ui.attackPercent))}
     </span>
   </div>
 {/if}
@@ -55,5 +62,12 @@
 
   .stat {
     color: var(--text-secondary);
+  }
+
+  .send {
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-control);
+    background: rgb(255 255 255 / 0.08);
+    font-weight: 600;
   }
 </style>

@@ -21,6 +21,17 @@ export interface PlayerSnapshot {
   readonly growthPerTick: number;
 }
 
+export interface AttackSnapshot {
+  readonly id: number;
+  readonly attacker: PlayerId;
+  /** 0 = expanding into neutral land. */
+  readonly target: PlayerId;
+  readonly troops: number;
+  readonly tilesTaken: number;
+  readonly focusTile: number;
+  readonly retreating: boolean;
+}
+
 export interface TickFrame {
   readonly tick: number;
   readonly phase: Phase;
@@ -29,6 +40,7 @@ export interface TickFrame {
   readonly changedTiles: Int32Array;
   readonly changedOwners: Uint16Array;
   readonly players: readonly PlayerSnapshot[];
+  readonly attacks: readonly AttackSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Hash of the full game state after this tick. */
@@ -62,6 +74,15 @@ export function buildFrame(world: World): TickFrame {
     changedTiles,
     changedOwners,
     players: snapshotPlayers(world),
+    attacks: world.attacks.map((a) => ({
+      id: a.id,
+      attacker: a.attacker,
+      target: a.target,
+      troops: a.troops,
+      tilesTaken: a.tilesTaken,
+      focusTile: a.focusTile,
+      retreating: a.retreatTick >= 0,
+    })),
     events: world.events.slice(),
     winner: world.winner,
     hash: hashWorld(world),

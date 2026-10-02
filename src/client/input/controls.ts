@@ -9,7 +9,18 @@ export interface ScreenPoint {
   y: number;
 }
 
-export type KeyAction = "centerOnMe" | "confirm" | "togglePerf" | "escape";
+export type KeyAction =
+  | "centerOnMe"
+  | "confirm"
+  | "togglePerf"
+  | "escape"
+  | "preset1"
+  | "preset2"
+  | "preset3"
+  | "preset4"
+  | "preset5"
+  | "percentDown"
+  | "percentUp";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -17,6 +28,8 @@ export interface ControlHandlers {
   zoom(factor: number, anchor: ScreenPoint): void;
   hover(at: ScreenPoint | null): void;
   key(action: KeyAction): void;
+  /** Shift + wheel: change the attack percentage by this many steps (+ = more). */
+  adjustPercent(steps: number): void;
 }
 
 const KEY_ACTIONS: Record<string, KeyAction> = {
@@ -26,6 +39,18 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   F3: "togglePerf",
   Backquote: "togglePerf",
   Escape: "escape",
+  Digit1: "preset1",
+  Digit2: "preset2",
+  Digit3: "preset3",
+  Digit4: "preset4",
+  Digit5: "preset5",
+  Numpad1: "preset1",
+  Numpad2: "preset2",
+  Numpad3: "preset3",
+  Numpad4: "preset4",
+  Numpad5: "preset5",
+  KeyQ: "percentDown",
+  KeyE: "percentUp",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {
@@ -114,8 +139,13 @@ export class Controls {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    if (e.shiftKey) return; // reserved for the attack percentage (milestone 1.3)
     const pixels = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 16 : e.deltaY;
+    if (e.shiftKey) {
+      // Some browsers report Shift+wheel as horizontal scrolling.
+      const delta = pixels !== 0 ? pixels : e.deltaX;
+      if (delta !== 0) this.handlers.adjustPercent(delta < 0 ? 1 : -1);
+      return;
+    }
     this.handlers.zoom(Math.exp(-pixels * WHEEL_ZOOM_RATE), this.point(e));
   }
 
