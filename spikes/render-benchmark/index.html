@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Territory Render Benchmark</title>
+<!--
+  Phase 0 spike: compares two ways of drawing a large, constantly changing
+  territory grid. Not production code. Open directly in a browser:
+    index.html?w=2000&h=1000&players=64&changes=8000&run=8000
+  Results appear in the panel and on window.__bench.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0d1117; color: #e6edf3;
+    font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel { position: absolute; top: 12px; left: 12px; max-width: min(560px, calc(100vw - 24px));
+    background: rgba(13,17,23,.88); border: 1px solid #30363d; border-radius: 10px; padding: 12px 14px; }
+  #panel h1 { font-size: 14px; margin: 0 0 6px; }
+  #status { color: #8b949e; margin-bottom: 6px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c2d"></canvas>
+<canvas id="cgl"></canvas>
+<div id="panel">
+  <h1>Territory render benchmark</h1>
+  <div id="status">Generating world…</div>
+  <table id="results"><thead><tr>
+    <th>Mode</th><th>Avg FPS</th><th>p95 frame</th><th>Tick CPU avg</th><th>Tick CPU p95</th><th>Frame CPU avg</th>
+  </tr></thead><tbody></tbody></table>
+  <div style="margin-top:8px"><button id="rerun">Run again</button></div>
+</div>
+<script>
+'use strict';
+const qs = new URLSearchParams(location.search);
+const CFG = {
+  w: +(qs.get('w') || 2000),
+  h: +(qs.get('h') || 1000),
+  players: Math.min(1000, +(qs.get('players') || 64)),
+  changes: +(qs.get('changes') || 8000), // tile ownership changes per simulation tick
+  runMs: +(qs.get('run') || 8000),
+  tickMs: 100, // 10 simulation ticks per second, like the game will use
+  // fx=1: newly captured tiles animate in over FX_TICKS ticks (a capture flash
+  // fading to the owner colour) — the kind of polish the real game needs.
+  fx: qs.get('fx') === '1',
+};
+const FX_TICKS = 5;
+const W = CFG.w, H = CFG.h, N = W * H;
+const statusEl = document.getElementById('status');
+
+// ---------- Shared synthetic world ----------
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rand = makeRng(12345);
+
+function valueNoise(cell) {
+  const gw = Math.ceil(W / cell) + 2, gh = Math.ceil(H / cell) + 2;
+  const g = new Float32Array(gw * gh);
+  for (let i = 0; i < g.length; i++) g[i] = rand();
+  const out = new Float32Array(N);
+  for (let y = 0; y < H; y++) {
+    const fy = y / cell, iy = fy | 0, ty = fy - iy, sy = ty * ty * (3 - 2 * ty);
+    for (let x = 0; x < W; x++) {
+      const fx = x / cell, ix = fx | 0, tx = fx - ix, sx = tx * tx * (3 - 2 * tx);
+      const a = g[iy * gw + ix], b = g[iy * gw + ix + 1];
+      const c = g[(iy + 1) * gw + ix], d = g[(iy + 1) * gw + ix + 1];
+      const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+      out[y * W + x] = top + (bot - top) * sy;
+    }
+  }
+  return out;
+}
+
+const owner = new Uint16Array(N); // 0 = unowned
+const land = new Uint8Array(N);
+// Tick (mod 65536) at which each tile last changed owner; drives the fx mode.
+const capturedAt = new Uint16Array(N).fill(0);
+let tickNo = 1000; // start well past FX_TICKS so initial tiles are "old"
+
+function generateWorld() {
+  const n1 = valueNoise(Math.max(16, (W / 12) | 0)), n2 = valueNoise(Math.max(8, (W / 50) | 0));
+  for (let i = 0; i < N; i++) land[i] = (0.65 * n1[i] + 0.35 * n2[i]) > 0.47 ? 1 : 0;
+  // Voronoi regions around random land seeds stand in for player territories.
+  const seeds = [];
+  while (seeds.length < CFG.players) {
+    const t = (rand() * N) | 0;
+    if (land[t]) seeds.push([t % W, (t / W) | 0]);
+  }
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (!land[i]) continue;
+      let best = 0, bd = Infinity;
+      for (let s = 0; s < seeds.length; s++) {
+        const dx = seeds[s][0] - x, dy = seeds[s][1] - y, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = s; }
+      }
+      // Leave ~15% of land neutral so both renderers draw terrain too.
+      owner[i] = bd > (W * H) / (CFG.players * 2.2) ? 0 : best + 1;
+    }
+  }
+}
+
+// Each tick flips CFG.changes tiles in small clustered discs spread across the
+// whole map. Spread-out changes are the worst case for dirty-row uploads,
+// which is what a busy 100+ player game looks like.
+const changed = new Int32Array(CFG.changes + 64);
+let changedCount = 0, dirtyMin = 0, dirtyMax = -1;
+function simulateTick() {
+  tickNo++;
+  changedCount = 0; dirtyMin = H; dirtyMax = -1;
+  let guard = 0;
+  while (changedCount < CFG.changes && guard++ < CFG.changes * 8) {
+    const t = (rand() * N) | 0;
+    const o = owner[t];
+    if (o === 0) continue;
+    const x = t % W, y = (t / W) | 0;
+    let no = 0;
+    for (let k = 0; k < 12 && no === 0; k++) {
+      const nx = x + ((rand() * 60) | 0) - 30, ny = y + ((rand() * 60) | 0) - 30;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const c = owner[ny * W + nx];
+      if (c !== 0 && c !== o) no = c;
+    }
+    if (no === 0) continue;
+    for (let dy = -3; dy <= 3 && changedCount < CFG.changes; dy++) {
+      const yy = y + dy; if (yy < 0 || yy >= H) continue;
+      for (let dx = -3; dx <= 3; dx++) {
+        if (dx * dx + dy * dy > 10) continue;
+        const xx = x + dx; if (xx < 0 || xx >= W) continue;
+        const i = yy * W + xx;
+        if (!land[i] || owner[i] === no) continue;
+        owner[i] = no;
+        capturedAt[i] = tickNo & 0xffff;
+        changed[changedCount++] = i;
+        if (yy < dirtyMin) dirtyMin = yy;
+        if (yy > dirtyMax) dirtyMax = yy;
+        if (changedCount >= CFG.changes) break;
+      }
+    }
+  }
+}
+
+// Player palette: evenly spaced hues, two lightness bands.
+function hsl(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+const fillRGB = [], borderRGB = [];
+for (let p = 0; p <= 1023; p++) {
+  const h = (p * 137.508) % 360, l = p % 2 ? 0.58 : 0.66;
+  fillRGB.push(hsl(h, 0.55, l));
+  borderRGB.push(hsl(h, 0.65, l - 0.22));
+}
+const WATER = [41, 69, 97], NEUTRAL = [204, 194, 168], BG = [13, 17, 23], FLASH = [255, 250, 235];
+let lastTickAt = 0; // performance.now() of the most recent tick, for fractional-tick animation
+const tickFraction = now => tickNo + Math.min(1, (now - lastTickAt) / CFG.tickMs);
+
+// ---------- Camera: continuous pan + zoom so every frame must redraw ----------
+function camera(now, vw, vh) {
+  const t = now / 1000;
+  const fit = Math.min(vw / W, vh / H);
+  const zoom = fit * Math.pow(2, 3.2 * (0.5 + 0.5 * Math.sin(t * 0.45))); // fit-to-map .. ~9x
+  return { zoom, x: W / 2 + W * 0.3 * Math.sin(t * 0.13), y: H / 2 + H * 0.3 * Math.cos(t * 0.11) };
+}
+function sizeCanvas(c) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return [w, h];
+}
+
+// ---------- Mode A: Canvas 2D (CPU writes pixels, putImageData uploads them) ----------
+function createCanvas2D() {
+  const canvas = document.getElementById('c2d');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const off = document.createElement('canvas'); off.width = W; off.height = H;
+  const offCtx = off.getContext('2d', { alpha: false });
+  const img = offCtx.createImageData(W, H);
+  const px = new Uint32Array(img.data.buffer);
+  const pack = c => (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // little-endian RGBA
+  const FILL = new Uint32Array(1024), BORDER = new Uint32Array(1024);
+  for (let p = 0; p < 1024; p++) { FILL[p] = pack(fillRGB[p]); BORDER[p] = pack(borderRGB[p]); }
+  const CW = pack(WATER), CN = pack(NEUTRAL);
+  const color = i => {
+    if (!land[i]) return CW;
+    const o = owner[i];
+    if (o === 0) return CN;
+    const x = i % W;
+    const edge = (x > 0 && owner[i - 1] !== o) || (x < W - 1 && owner[i + 1] !== o) ||
+      (i >= W && owner[i - W] !== o) || (i < N - W && owner[i + W] !== o);
+    return edge ? BORDER[o] : FILL[o];
+  };
+  for (let i = 0; i < N; i++) px[i] = color(i);
+  offCtx.putImageData(img, 0, 0);
+  // fx: tiles changed in the last FX_TICKS ticks must be re-blended and
+  // re-uploaded EVERY FRAME — Canvas2D has no other way to animate pixels.
+  const recent = [];
+  const blend = (c, k) => {
+    const r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255;
+    return (255 << 24) | ((b + (FLASH[2] - b) * k) << 16) | ((g + (FLASH[1] - g) * k) << 8) | (r + (FLASH[0] - r) * k);
+  };
+  return {
+    canvas,
+    applyTick() {
+      if (dirtyMax < 0) return;
+      if (CFG.fx) {
+        recent.push({ tick: tickNo, tiles: changed.slice(0, changedCount), y0: dirtyMin, y1: dirtyMax });
+        while (recent.length && tickNo - recent[0].tick > FX_TICKS + 1) recent.shift();
+      }
+      for (let k = 0; k < changedCount; k++) {
+        const i = changed[k];
+        px[i] = color(i);
+        // Neighbours can gain or lose border status when a tile flips.
+        if (i % W > 0) px[i - 1] = color(i - 1);
+        if (i % W < W - 1) px[i + 1] = color(i + 1);
+        if (i >= W) px[i - W] = color(i - W);
+        if (i < N - W) px[i + W] = color(i + W);
+      }
+      const y0 = Math.max(0, dirtyMin - 1), y1 = Math.min(H - 1, dirtyMax + 1);
+      offCtx.putImageData(img, 0, 0, 0, y0, W, y1 - y0 + 1);
+    },
+    draw(now) {
+      if (CFG.fx && recent.length) {
+        const tf = tickFraction(now);
+        let y0 = H, y1 = -1;
+        for (const e of recent) {
+          const k = Math.max(0, 1 - (tf - e.tick) / FX_TICKS); // 1 = fresh flash, 0 = settled
+          for (let j = 0; j < e.tiles.length; j++) {
+            const i = e.tiles[j];
+            px[i] = k > 0 ? blend(color(i), k) : color(i);
+          }
+          if (e.y0 < y0) y0 = e.y0;
+          if (e.y1 > y1) y1 = e.y1;
+        }
+        offCtx.putImageData(img, 0, 0, 0, y0, W, y1 - y0 + 1);
+      }
+      const [vw, vh] = sizeCanvas(canvas);
+      const cam = camera(now, vw, vh);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = `rgb(${BG})`;
+      ctx.fillRect(0, 0, vw, vh);
+      ctx.imageSmoothingEnabled = false;
+      ctx.setTransform(cam.zoom, 0, 0, cam.zoom, vw / 2 - cam.x * cam.zoom, vh / 2 - cam.y * cam.zoom);
+      ctx.drawImage(off, 0, 0);
+    },
+  };
+}
+
+// ---------- Mode B: WebGL2 (owner IDs live in a GPU texture, shader colours them) ----------
+function createWebGL2() {
+  const canvas = document.getElementById('cgl');
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+  if (!gl) throw new Error('WebGL2 not available');
+  const vs = `#version 300 es
+    const vec2 P[3] = vec2[3](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    void main() { gl_Position = vec4(P[gl_VertexID], 0.0, 1.0); }`;
+  const fs = `#version 300 es
+    precision highp float; precision highp usampler2D;
+    uniform usampler2D uOwner; uniform usampler2D uLand; uniform sampler2D uPalette;
+    uniform usampler2D uCaptured;
+    uniform vec2 uMap, uView, uCam; uniform float uZoom;
+    uniform vec3 uWater, uNeutral, uBg, uFlash;
+    uniform int uFx; uniform float uTickF, uFxTicks;
+    out vec4 frag;
+    void main() {
+      vec2 world = vec2((gl_FragCoord.x - 0.5 * uView.x) / uZoom + uCam.x,
+                        (0.5 * uView.y - gl_FragCoord.y) / uZoom + uCam.y);
+      ivec2 t = ivec2(floor(world));
+      ivec2 m = ivec2(uMap) - 1;
+      if (t.x < 0 || t.y < 0 || t.x > m.x || t.y > m.y) { frag = vec4(uBg, 1.0); return; }
+      uint o = texelFetch(uOwner, t, 0).r;
+      if (o == 0u) { frag = vec4(texelFetch(uLand, t, 0).r == 1u ? uNeutral : uWater, 1.0); return; }
+      uint n = texelFetch(uOwner, clamp(t + ivec2(0, -1), ivec2(0), m), 0).r;
+      uint s = texelFetch(uOwner, clamp(t + ivec2(0, 1), ivec2(0), m), 0).r;
+      uint w = texelFetch(uOwner, clamp(t + ivec2(-1, 0), ivec2(0), m), 0).r;
+      uint e = texelFetch(uOwner, clamp(t + ivec2(1, 0), ivec2(0), m), 0).r;
+      bool edge = n != o || s != o || w != o || e != o;
+      frag = texelFetch(uPalette, ivec2(int(o), edge ? 1 : 0), 0);
+      if (uFx == 1) {
+        float age = mod(uTickF - float(texelFetch(uCaptured, t, 0).r), 65536.0);
+        if (age < uFxTicks) frag.rgb = mix(frag.rgb, uFlash, 1.0 - age / uFxTicks);
+      }
+    }`;
+  const compile = (type, src) => {
+    const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  const tex = (unit, internal, format, type, w, h, data) => {
+    const t = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, data);
+    return t;
+  };
+  const ownerTex = tex(0, gl.R16UI, gl.RED_INTEGER, gl.UNSIGNED_SHORT, W, H, owner);
+  tex(1, gl.R8UI, gl.RED_INTEGER, gl.UNSIGNED_BYTE, W, H, land);
+  const pal = new Uint8Array(1024 * 2 * 4);
+  for (let p = 0; p < 1024; p++) {
+    pal.set([...fillRGB[p], 255], p * 4);
+    pal.set([...borderRGB[p], 255], (1024 + p) * 4);
+  }
+  tex(2, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, 1024, 2, pal);
+  const capTex = tex(3, gl.R16UI, gl.RED_INTEGER, gl.UNSIGNED_SHORT, W, H, capturedAt);
+  const u = name => gl.getUniformLocation(prog, name);
+  gl.uniform1i(u('uOwner'), 0); gl.uniform1i(u('uLand'), 1); gl.uniform1i(u('uPalette'), 2);
+  gl.uniform1i(u('uCaptured'), 3);
+  gl.uniform1i(u('uFx'), CFG.fx ? 1 : 0); gl.uniform1f(u('uFxTicks'), FX_TICKS);
+  gl.uniform3f(u('uFlash'), ...FLASH.map(v => v / 255));
+  const uTickF = u('uTickF');
+  gl.uniform2f(u('uMap'), W, H);
+  gl.uniform3f(u('uWater'), ...WATER.map(v => v / 255));
+  gl.uniform3f(u('uNeutral'), ...NEUTRAL.map(v => v / 255));
+  gl.uniform3f(u('uBg'), ...BG.map(v => v / 255));
+  const uView = u('uView'), uCam = u('uCam'), uZoom = u('uZoom');
+  return {
+    canvas,
+    applyTick() {
+      if (dirtyMax < 0) return;
+      // Upload only the band of rows that changed (here: usually most of the map).
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ownerTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, dirtyMin, W, dirtyMax - dirtyMin + 1,
+        gl.RED_INTEGER, gl.UNSIGNED_SHORT, owner.subarray(dirtyMin * W, (dirtyMax + 1) * W));
+      if (CFG.fx) {
+        // One extra upload per tick; the shader animates every frame for free.
+        gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, capTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, dirtyMin, W, dirtyMax - dirtyMin + 1,
+          gl.RED_INTEGER, gl.UNSIGNED_SHORT, capturedAt.subarray(dirtyMin * W, (dirtyMax + 1) * W));
+      }
+    },
+    draw(now) {
+      const [vw, vh] = sizeCanvas(canvas);
+      const cam = camera(now, vw, vh);
+      gl.uniform1f(uTickF, (tickFraction(now) % 65536));
+      gl.viewport(0, 0, vw, vh);
+      gl.uniform2f(uView, vw, vh); gl.uniform2f(uCam, cam.x, cam.y); gl.uniform1f(uZoom, cam.zoom);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    },
+  };
+}
+
+// ---------- Harness ----------
+const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(s.length * p))] || 0; };
+const avg = arr => arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
+
+function runMode(name, factory) {
+  return new Promise(resolve => {
+    document.getElementById('c2d').style.display = name.startsWith('Canvas') ? 'block' : 'none';
+    document.getElementById('cgl').style.display = name.startsWith('WebGL') ? 'block' : 'none';
+    let r;
+    const i0 = performance.now();
+    try { r = factory(); } catch (e) { resolve({ name, error: String(e) }); return; }
+    const initMs = performance.now() - i0;
+    const frames = [], frameCpu = [], tickCpu = [];
+    let start = null, lastTick = 0, lastFrame = 0;
+    const step = now => {
+      if (start === null) { start = lastTick = lastFrame = now; }
+      while (now - lastTick >= CFG.tickMs) {
+        lastTick += CFG.tickMs;
+        simulateTick(); // world change itself is not counted: identical for both modes
+        lastTickAt = now;
+        const t0 = performance.now(); r.applyTick(); tickCpu.push(performance.now() - t0);
+      }
+      const f0 = performance.now(); r.draw(now); frameCpu.push(performance.now() - f0);
+      if (now !== lastFrame) frames.push(now - lastFrame);
+      lastFrame = now;
+      if (now - start < CFG.runMs) { requestAnimationFrame(step); return; }
+      resolve({
+        name, initMs: +initMs.toFixed(1),
+        fps: +(frames.length / ((now - start) / 1000)).toFixed(1),
+        p95FrameMs: +pct(frames, 0.95).toFixed(1),
+        tickAvgMs: +avg(tickCpu).toFixed(2), tickP95Ms: +pct(tickCpu, 0.95).toFixed(2),
+        frameCpuAvgMs: +avg(frameCpu).toFixed(2), ticks: tickCpu.length,
+      });
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+async function runAll() {
+  const tbody = document.querySelector('#results tbody');
+  tbody.innerHTML = '';
+  const results = [];
+  for (const [name, f] of [['Canvas2D', createCanvas2D], ['WebGL2', createWebGL2]]) {
+    statusEl.textContent = `Running ${name} for ${CFG.runMs / 1000}s…`;
+    const res = await runMode(name, f);
+    results.push(res);
+    const tr = document.createElement('tr');
+    tr.innerHTML = res.error
+      ? `<td>${name}</td><td colspan="5">${res.error}</td>`
+      : `<td>${name}</td><td>${res.fps}</td><td>${res.p95FrameMs} ms</td><td>${res.tickAvgMs} ms</td><td>${res.tickP95Ms} ms</td><td>${res.frameCpuAvgMs} ms</td>`;
+    tbody.appendChild(tr);
+  }
+  const c = document.getElementById('cgl');
+  window.__bench = {
+    config: CFG, viewport: [c.clientWidth, c.clientHeight], dpr: window.devicePixelRatio,
+    userAgent: navigator.userAgent, results, done: true,
+  };
+  statusEl.textContent = `${W}×${H} map (${(N / 1e6).toFixed(1)}M tiles), ${CFG.players} players, ` +
+    `${CFG.changes} changes/tick @ 10 ticks/s, fx ${CFG.fx ? 'on' : 'off'}, ` +
+    `viewport ${c.clientWidth}×${c.clientHeight} @${window.devicePixelRatio}x`;
+}
+
+setTimeout(() => {
+  const g0 = performance.now();
+  generateWorld();
+  statusEl.textContent = `World generated in ${(performance.now() - g0).toFixed(0)} ms`;
+  runAll();
+}, 50);
+document.getElementById('rerun').onclick = () => location.reload();
+</script>
+</body>
+</html>

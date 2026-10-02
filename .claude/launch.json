@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "render-benchmark",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["spikes/render-benchmark/serve.mjs"],
+      "port": 5179
+    }
+  ]
+}
