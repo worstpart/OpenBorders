@@ -16,6 +16,8 @@
 | Tests | 266 passing, type check clean, Prettier clean |
 | Regression | `--no-buildings` games identical to 2.4 |
 
+**GitHub (user, 2026-10-02):** the repo is pushed to `origin` = https://github.com/worstpart/OpenBorders.git (branch `main`, tag `phase-1`). **After every handoff, commit it, push to `origin` and confirm the push to the user** (that local `main` equals `origin/main`).
+
 ## 2. The building plan (agreed with the user on 2026-10-02)
 
 The user asked for an OpenFront-style building system with **7 buildings × 3 levels**:
