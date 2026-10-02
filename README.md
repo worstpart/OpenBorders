@@ -11,7 +11,8 @@ presentation. Not affiliated with OpenFront.
 
 ## Status
 
-**Phase 0 — Research: complete, awaiting review.** No game code yet by design.
+**Phase 0 — Research: complete.** Next: Phase 1 (playable prototype). See the
+latest handoff in `docs/handoffs/`.
 
 | Document | What's in it |
 |---|---|
@@ -20,10 +21,11 @@ presentation. Not affiliated with OpenFront.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tech stack and why, rendering benchmark, simulation, multiplayer plan, structure, testing |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, Phase 1 milestones, feature matrix, risk register |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log (accepted and proposed) |
+| [docs/handoffs/](docs/handoffs/) | One handoff per phase — **a new session starts by reading the latest one** |
 
 ## Requirements (from Phase 1)
 
-- **Node.js 24 LTS** (the current machine has Node 16, which is too old — see D-013)
+- **Node.js 24 LTS** (installed: 24.19.0 with npm 11.17.0 — see D-013)
 - A browser with WebGL2 (all current desktop browsers)
 
 ## Rendering benchmark (Phase 0 spike)

@@ -5,7 +5,7 @@
 
 | Phase | Goal | Status |
 |---|---|---|
-| **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ (awaiting your review) |
+| **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ⬜ |
 | **2 — Gameplay depth** | Economy, buildings, naval transport, diplomacy, better AI, more maps | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
@@ -23,7 +23,10 @@
 - [x] Game design draft (`GAME_DESIGN.md`)
 - [x] Architecture proposal (`ARCHITECTURE.md`), decision log (`DECISIONS.md`)
 - [x] Feature matrix and risk register (below)
-- [ ] **Your review + decisions** (licensing path, Node upgrade, name, open questions)
+- [x] **Review + decisions** (2026-10-01): independent build, Node 24 installed, directed
+      attacks + encirclement, generated map. Still open: final name (D-014), multiplayer
+      model (D-006, needed by Phase 3)
+- [x] Handoff written: [`docs/handoffs/PHASE_0_HANDOFF.md`](handoffs/PHASE_0_HANDOFF.md)
 
 ---
 

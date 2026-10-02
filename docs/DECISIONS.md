@@ -6,7 +6,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 
 | ID | Decision | Status |
 |---|---|---|
-| D-001 | Independent implementation inspired by OpenFront (no code/asset reuse) | **Proposed** |
+| D-001 | Independent implementation inspired by OpenFront (no code/asset reuse) | **Accepted** 2026-10-01 |
 | D-002 | TypeScript for simulation, client and server | Accepted |
 | D-003 | Custom WebGL2 renderer for the map | Accepted |
 | D-004 | Deterministic, fixed-tick (10 Hz) simulation | Accepted |
@@ -14,16 +14,17 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-006 | Multiplayer model: hybrid authoritative lockstep | **Proposed** (needed by Phase 3) |
 | D-007 | Svelte 5 + plain CSS design tokens for UI | Accepted |
 | D-008 | Vite + Vitest; single package with enforced folder boundaries | Accepted |
-| D-009 | Procedurally generated map for Phase 1 | **Proposed** |
-| D-010 | Directed attacks and encirclement in Phase 1 | **Proposed** |
+| D-009 | Procedurally generated map for Phase 1 | **Accepted** 2026-10-01 |
+| D-010 | Directed attacks and encirclement in Phase 1 | **Accepted** 2026-10-01 |
 | D-011 | Show real troop numbers; troops in the field count toward the cap | Accepted |
 | D-012 | AI uses the same commands and gets no resource bonuses | Accepted |
-| D-013 | Require Node 24 LTS for development | **Proposed** (needs your action) |
+| D-013 | Require Node 24 LTS for development | **Accepted** 2026-10-01 (installed 24.19.0) |
+| D-015 | A handoff document after every phase; each phase starts in a fresh chat | **Accepted** 2026-10-01 |
 | D-014 | Working title "Borderline" as a placeholder | **Proposed** |
 
 ---
 
-## D-001 — Independent implementation (licensing Option A) · Proposed
+## D-001 — Independent implementation (licensing Option A) · Accepted 2026-10-01
 
 **Context.** OpenFront's code is AGPL-3.0 with extra attribution terms; its open assets
 are CC BY-SA 4.0; its logo, font, music and sounds are all-rights-reserved. Forking
@@ -121,7 +122,7 @@ instead of a multi-package workspace. Can split later if needed.
 
 ---
 
-## D-009 — Procedural map for Phase 1 · Proposed
+## D-009 — Procedural map for Phase 1 · Accepted 2026-10-01
 
 A seeded fictional continent: no licensing work, size/shape tunable for fun, identical
 on every machine from the seed. Real-world maps come later via our own pipeline from
@@ -129,7 +130,7 @@ public-domain data (or OpenFront's CC BY-SA maps with attribution, if we choose)
 
 ---
 
-## D-010 — Directed attacks + encirclement in Phase 1 · Proposed
+## D-010 — Directed attacks + encirclement in Phase 1 · Accepted 2026-10-01
 
 Directed attacks (priority biased toward the click point) answer OpenFront's
 longest-standing request and make *position* matter; encirclement makes border geometry
@@ -153,15 +154,27 @@ multipliers at any difficulty. Difficulty comes from reaction time and decision 
 
 ---
 
-## D-013 — Node 24 LTS required · Proposed (needs your action)
+## D-013 — Node 24 LTS required · Accepted 2026-10-01
 
-The machine has Node 16.13.0 (end-of-life since 2023). Current Vite, Vitest and Svelte
-need Node 20+. Options: install Node 24 LTS from nodejs.org, run
-`winget install OpenJS.NodeJS.LTS`, or use a version manager (nvm-windows / fnm) if
-other projects still need Node 16.
+The machine had Node 16.13.0 (end-of-life since 2023); current Vite, Vitest and Svelte
+need Node 20+. Installed **Node 24.19.0** via `winget install OpenJS.NodeJS.LTS`
+(replacing Node 16). An old global npm 8.1.4 in `%APPDATA%\npm` shadowed the bundled
+npm, so it was upgraded to **npm 11.17.0** (the version bundled with Node 24).
 
 ---
 
 ## D-014 — Working title · Proposed
 
 "Borderline" as a codename until you choose a name. Must not resemble "OpenFront".
+
+---
+
+## D-015 — Phase handoffs and fresh chats · Accepted 2026-10-01
+
+**Context.** Long sessions fill the AI's context window; quality drops as it fills.
+
+**Decision.** At the end of every phase (and whenever a session gets long), write
+`docs/handoffs/PHASE_N_HANDOFF.md` with everything the next session needs — state,
+decisions, environment, gotchas, exact next steps — commit it, and continue in a new
+chat that starts by reading that handoff. The docs, not chat history, are the source
+of truth.

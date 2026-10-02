@@ -397,8 +397,8 @@ than ~60% of games, and players attack every 10–30 s rather than waiting.
 | # | Question | Default if not decided |
 |---|---|---|
 | Q1 | Final name of the game | Keep codename *Borderline* until later |
-| Q2 | First map: procedural fictional continent or a real-world region? | Procedural (no licensing work) |
-| Q3 | Include directed attacks in Phase 1? | Yes, tunable (`FOCUS_WEIGHT`) |
-| Q4 | Include encirclement in Phase 1? | Yes (core to positional play) |
+| Q2 | First map: procedural fictional continent or a real-world region? | **Decided:** procedural (D-009) |
+| Q3 | Include directed attacks in Phase 1? | **Decided:** yes, tunable `FOCUS_WEIGHT` (D-010) |
+| Q4 | Include encirclement in Phase 1? | **Decided:** yes (D-010) |
 | Q5 | Win threshold | 70% of land or last standing |
 | Q6 | Economy model for Phase 2 | E2 + Mobilize prototype |
