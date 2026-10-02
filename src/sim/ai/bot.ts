@@ -25,6 +25,9 @@
  *
  * Alliances (GAME_DESIGN.md §3.14): tribes accept every request and renewal and go after
  * traitors; nations answer, ask, renew and betray by threat, strength and shared enemies.
+ *
+ * Teams (GAME_DESIGN.md §3.15): nations never target or ask a teammate, and prefer enemies
+ * who attack a teammate or whom a teammate already attacks, so a team focuses its fire.
  */
 import {
   attackLossFactor,
@@ -50,6 +53,7 @@ import {
   NEUTRAL,
   nextScratchStamp,
   requestKey,
+  sameTeam,
   type Alliance,
   type Attack,
   type Player,
@@ -365,9 +369,11 @@ function chooseTarget(
   const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
   let best: { target: Player; focus: number; share: number; betray: boolean } | null = null;
   let bestScore = 0;
+  const team = teamWars(world, bot);
   for (const [id, frontTile] of around.neighborFront) {
     const target = getPlayer(world, id)!;
     if (!target.alive || wars.some((a) => a.target === id)) continue;
+    if (sameTeam(world, bot.id, id)) continue;
     // Allies are off limits — unless this nation is the kind to betray them (below).
     const alliance = getAlliance(world, bot.id, id);
     if (alliance && !willBetray(bot, alliance, id, style, skill)) continue;
@@ -395,7 +401,9 @@ function chooseTarget(
       (2 - Math.min(1, targetFill)) * // depleted players are vulnerable
       (gain >= 0.99 ? 2 : 1) * // finishing a player off shrinks the field
       (isTribe(target) ? ai.tribePreference : 1) * // eat the tribes first
-      (isTraitor(world, target) ? ai.traitorPreference : 1); // punish betrayal
+      (isTraitor(world, target) ? ai.traitorPreference : 1) * // punish betrayal
+      (team?.attackingUs.has(id) ? ai.teamAssistPreference : 1) * // help teammates
+      (team?.ourTargets.has(id) ? ai.teamFocusPreference : 1); // gang up
     if (score > bestScore) {
       bestScore = score;
       // Aim at the heart of their land (their start) if they still hold it: it splits
@@ -410,6 +418,25 @@ function chooseTarget(
     }
   }
   return best;
+}
+
+/**
+ * Team games: enemies attacking one of the bot's teammates, and players its teammates are
+ * attacking (GAME_DESIGN.md §3.15). Null outside team games.
+ */
+function teamWars(
+  world: World,
+  bot: Player,
+): { attackingUs: Set<PlayerId>; ourTargets: Set<PlayerId> } | null {
+  if (bot.team === 0) return null;
+  const attackingUs = new Set<PlayerId>();
+  const ourTargets = new Set<PlayerId>();
+  for (const a of world.attacks) {
+    if (a.retreatTick >= 0 || a.target === NEUTRAL) continue;
+    if (a.attacker !== bot.id && sameTeam(world, bot.id, a.attacker)) ourTargets.add(a.target);
+    if (a.target !== bot.id && sameTeam(world, bot.id, a.target)) attackingUs.add(a.attacker);
+  }
+  return { attackingUs, ourTargets };
 }
 
 /**
@@ -514,7 +541,7 @@ function nationDiplomacy(
   let ask: Player | null = null;
   for (const id of around.neighborFront.keys()) {
     const other = getPlayer(world, id)!;
-    if (isTribe(other) || isAllied(world, bot.id, id)) continue;
+    if (isTribe(other) || isAllied(world, bot.id, id) || sameTeam(world, bot.id, id)) continue;
     if (findRequest(world, bot.id, id) || findRequest(world, id, bot.id)) continue;
     const last = world.lastRequestTick.get(requestKey(bot.id, id));
     if (last !== undefined && world.tick - last < every) continue;
@@ -545,6 +572,7 @@ function welcomes(
 ): boolean {
   const ai = world.rules.ai;
   if (!other.alive || isTribe(other) || isTraitor(world, other)) return false;
+  if (sameTeam(world, bot.id, other.id)) return false;
   if ((bot.brain?.grudges.get(other.id) ?? -1) > world.tick) return false;
   if (!renewing && count >= ai.maxAlliances) return false;
   if (other.tiles >= ai.allyLeaderShare * world.map.landTiles) return false;
@@ -596,11 +624,16 @@ function willBetray(
   return roll / 0x1_0000_0000 < chance;
 }
 
-/** Nations and humans still in the game. */
+/** Sides still in the game: nations and humans, a whole team counting as one (§3.15). */
 function contenders(world: World): number {
-  let count = 0;
-  for (const p of world.players) if (p.alive && !isTribe(p)) count++;
-  return count;
+  if (world.teamCount === 0) {
+    let count = 0;
+    for (const p of world.players) if (p.alive && !isTribe(p)) count++;
+    return count;
+  }
+  const sides = new Set<number>();
+  for (const p of world.players) if (p.alive && !isTribe(p)) sides.add(p.team > 0 ? p.team : -p.id);
+  return sides.size;
 }
 
 /** Non-tribe players this player is fighting (attacking or attacked by). */

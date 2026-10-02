@@ -14,8 +14,8 @@
  *    play-test).
  *  - With several enclosers, the one attacking this player with the biggest army takes
  *    it; otherwise the one sharing the longest border with the piece.
- *  - Allies never take each other's land (GAME_DESIGN.md §3.14): a piece enclosed only by
- *    allies is safe, and with mixed enclosers only the non-allies count.
+ *  - Allies and teammates never take each other's land (GAME_DESIGN.md §3.14, §3.15): a
+ *    piece enclosed only by them is safe, and with mixed enclosers only the others count.
  *
  * Each player is checked every `intervalTicks` (staggered by id), and only if ownership
  * changed next to their land since the last check.
@@ -30,7 +30,7 @@ import {
   type World,
 } from "../world.ts";
 import { primaryAttacker, strongestAttack } from "./attacks.ts";
-import { isAllied } from "./diplomacy.ts";
+import { areFriendly } from "./diplomacy.ts";
 
 interface Piece {
   /** Any tile of the piece (to flood it again when annexing). */
@@ -67,9 +67,9 @@ function annexEnclosedPieces(world: World, player: Player): void {
 
   for (const piece of pieces) {
     if (piece.safe) continue;
-    if (world.alliances.size > 0) {
+    if (world.alliances.size > 0 || world.teamCount > 0) {
       for (const id of [...piece.neighbors.keys()]) {
-        if (isAllied(world, player.id, id)) piece.neighbors.delete(id);
+        if (areFriendly(world, player.id, id)) piece.neighbors.delete(id);
       }
     }
     if (piece.neighbors.size === 0) continue;

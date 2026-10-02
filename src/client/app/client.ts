@@ -19,7 +19,7 @@ import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { allianceStatus, diplomacyCards } from "./diplomacy.ts";
 import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
-import { pickBotNames, pickNationNames, playerColors } from "./players.ts";
+import { pickBotNames, pickNationNames, playerColors, teamPlayerColors } from "./players.ts";
 import { protectionSecondsLeft } from "./preview.ts";
 import { MAP_SIZES, type MapSize } from "./setup.ts";
 import {
@@ -29,6 +29,7 @@ import {
   toastsForEvents,
   type ToastInput,
 } from "./toasts.ts";
+import { dealTeam, teamName, teamsKnockedOut, type GameMode } from "./teams.ts";
 import { ui } from "./uiState.svelte.ts";
 
 /** One fixed procedural continent, in two sizes (setup.ts). */
@@ -102,24 +103,31 @@ export class GameClient {
     ui.screen = "start";
   }
 
-  /** Starts a single-player game against nations and tribes (GAME_DESIGN.md §3.13). */
+  /**
+   * Starts a single-player game against nations and tribes (GAME_DESIGN.md §3.13), free
+   * for all or in teams (§3.15: you and the nations dealt round-robin; tribes teamless).
+   */
   async startGame(lobby: {
     nations: number;
     tribes: number;
     difficulty: Difficulty;
+    mode: GameMode;
+    teams: number;
   }): Promise<void> {
     const map = this.map;
     if (!map) throw new Error("startGame() before loadMap()");
     this.host?.dispose();
 
     const random = () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
+    const teams = lobby.mode === "teams" ? lobby.teams : 0;
     const players: PlayerSetup[] = [
-      { name: "You", kind: "human" },
-      ...pickNationNames(lobby.nations, random).map((name) => ({
+      { name: "You", kind: "human", team: teams > 0 ? dealTeam(0, teams) : 0 },
+      ...pickNationNames(lobby.nations, random).map((name, k) => ({
         name,
         kind: "bot" as const,
         tier: "nation" as const,
         difficulty: lobby.difficulty,
+        team: teams > 0 ? dealTeam(k + 1, teams) : 0,
       })),
       ...pickBotNames(lobby.tribes, random).map((name) => ({
         name,
@@ -127,9 +135,11 @@ export class GameClient {
         tier: "tribe" as const,
       })),
     ];
-    const colors = playerColors(
-      players.map((p) => (p.kind === "human" ? "human" : (p.tier ?? "nation"))),
-    );
+    const tiers = players.map((p) => (p.kind === "human" ? "human" : (p.tier ?? "nation")));
+    const colors =
+      teams > 0
+        ? teamPlayerColors(players.map((p, k) => ({ tier: tiers[k]!, team: p.team ?? 0 })))
+        : playerColors(tiers);
     const host = new LocalHost({ localPlayerId: LOCAL_PLAYER_ID });
     this.host = host;
     host.onFrame((frame, timing) => this.onFrame(frame, timing));
@@ -323,6 +333,7 @@ export class GameClient {
         ui.eliminatedBy = event.by;
       } else if (event.type === "gameOver") {
         ui.winner = event.winner;
+        ui.winningTeam = event.team;
         ui.gameOverReason = event.reason;
       }
     }
@@ -334,7 +345,16 @@ export class GameClient {
       me,
       (id) => ui.playerName(id),
       (id) => !bigLobby || bordered.includes(id),
+      (id) => frame.players[id - 1]?.team ?? 0,
     );
+    // Team games: a team whose last member just went out (ui.players is still last tick's).
+    for (const team of teamsKnockedOut(ui.players, frame.players)) {
+      const mine = team === frame.players[me - 1]?.team;
+      toasts.push({
+        text: mine ? "Your team has been knocked out" : `${teamName(team)} is out`,
+        tone: mine ? "danger" : "success",
+      });
+    }
     const protectionEnd = frame.playStartTick + DEFAULT_RULES.spawn.protectionTicks;
     if (frame.phase === "playing" && frame.tick === protectionEnd) {
       toasts.push({
@@ -382,10 +402,17 @@ export class GameClient {
     this.renderer.setPlayerFlags(this.playerFlags(frame));
   }
 
-  /** Per player id: 1 = the local player's ally, 2 = traitor (map markers, §3.14). */
+  /**
+   * Per player id: 1 = friendly to the local player (an ally or a teammate), 2 = traitor
+   * (map markers, §3.14–3.15).
+   */
   private playerFlags(frame: TickFrame): Uint8Array {
     const flags = new Uint8Array(frame.players.length + 1);
     const me = ui.localPlayerId;
+    const myTeam = frame.players[me - 1]?.team ?? 0;
+    if (myTeam !== 0) {
+      for (const p of frame.players) if (p.id !== me && p.team === myTeam) flags[p.id]! |= 1;
+    }
     for (const a of frame.alliances) {
       if (a.a === me) flags[a.b]! |= 1;
       else if (a.b === me) flags[a.a]! |= 1;
@@ -501,7 +528,7 @@ export class GameClient {
     this.renderer.render(view, this.currentTick(), time / 1000);
     const frame = this.latestFrame;
     const players = frame?.players ?? [];
-    const allies = ui.allies;
+    const friends = ui.friends;
     this.labels.draw(
       view,
       this.placements,
@@ -512,7 +539,7 @@ export class GameClient {
         alive: p.alive,
         tribe: p.tier === "tribe",
         relation:
-          frame && p.traitorUntilTick > frame.tick ? "traitor" : allies.has(p.id) ? "ally" : null,
+          frame && p.traitorUntilTick > frame.tick ? "traitor" : friends.has(p.id) ? "ally" : null,
       })),
     );
 

@@ -260,6 +260,18 @@ Whether a nation betrays a given ally is decided once per alliance from a hash o
 `allianceRequests`; the HUD logic is in `client/app/diplomacy.ts`, and the map shows
 allies/traitors through flag bits in the palette texture's alpha channel.
 
+**Teams (milestone 2.3, GAME_DESIGN §3.15).** `Player.team` (0 = none) is fixed at setup
+(`PlayerSetup.team`); `world.teamCount` is the highest team (0 = free-for-all).
+`sameTeam` (world.ts) and `areFriendly` (= same team or allied, diplomacy.ts) replace the
+plain alliance checks in attack validation and encirclement; alliance requests to a
+teammate are rejected. `checkVictory` sums each team's land and ends the game when a
+team reaches the goal or is the last side with a nation/human left (tribes don't count);
+`world.winner` stays a player (the team's biggest member) and `world.winningTeam` names
+the team (also on the `gameOver` event and the frame). Bots skip teammates and weigh
+enemies of their teammates (`ai.teamAssistPreference`, `ai.teamFocusPreference`); with no
+teams every factor is 1, so free-for-all games are unchanged. Client: `client/app/teams.ts`
+(lobby split, standings), `teamPlayerColors` (players.ts), teammates share the ally flag bit.
+
 **Timing probe (milestone 2.0).** `runTick(world, turn, probe?)` calls `probe(step)` after
 each step (`TICK_STEPS`: commands, diplomacy, collisions, attacks, encircle, eliminate, troops, bots,
 victory, frame). The simulation still never reads a clock; the headless runner times the

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatClock, formatPercent } from "../../format.ts";
+  import { teamName } from "../../app/teams.ts";
 
   interface Props {
     onPlayAgain: () => void;
@@ -11,7 +12,11 @@
   const me = $derived(ui.me);
   const over = $derived(ui.phase === "ended");
   const eliminated = $derived(!!me?.spawned && !me.alive);
-  const won = $derived(over && ui.winner === ui.localPlayerId);
+  /** Team games: the winning team (GAME_DESIGN.md §3.15) — you win with it, even if out. */
+  const teamWin = $derived(over && ui.winningTeam > 0);
+  const won = $derived(
+    over && (teamWin ? me?.team === ui.winningTeam : ui.winner === ui.localPlayerId),
+  );
   const visible = $derived(over || (eliminated && !ui.spectating));
 
   const endTick = $derived(me && me.eliminatedTick >= 0 ? me.eliminatedTick : ui.tick);
@@ -19,6 +24,13 @@
 
   const title = $derived(won ? "Victory" : eliminated ? "Defeated" : "Game over");
   const line = $derived.by(() => {
+    if (won && teamWin) {
+      const how =
+        ui.gameOverReason === "landShare"
+          ? "Your team controls the land it needed to win."
+          : "Your team is the last one standing.";
+      return eliminated ? `${how} You were knocked out, but your team carried on.` : how;
+    }
     if (won) {
       return ui.gameOverReason === "landShare"
         ? "You control 70% of the land."
@@ -26,9 +38,11 @@
     }
     const result = !over
       ? ""
-      : ui.winner !== null
-        ? `${ui.playerName(ui.winner)} won the match.`
-        : "Nobody is left standing.";
+      : teamWin
+        ? `${teamName(ui.winningTeam)} won the match.`
+        : ui.winner !== null
+          ? `${ui.playerName(ui.winner)} won the match.`
+          : "Nobody is left standing.";
     const fate = !eliminated
       ? ""
       : ui.eliminatedBy !== null

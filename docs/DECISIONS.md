@@ -24,6 +24,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-016 | Phase 2 order: big lobbies → Tribes & Nations → alliances → teams | **Accepted** 2026-10-02 |
 | D-017 | Tribes are weaker by stats; Nations stay fair | **Accepted** 2026-10-02 |
 | D-018 | Alliances: timed and renewable, no shared victory, betrayal costly | **Accepted** 2026-10-02 |
+| D-019 | Teams: fixed sides that win on combined land; alliances unchanged across teams; tribes teamless | **Accepted** 2026-10-02 (user) |
 
 ---
 
@@ -264,3 +265,32 @@ alliance (difficulty × personality), so betrayals stay occasional.
 **Alternatives.** Permanent alliances until broken (rejected: blocs would freeze the map);
 allies' land counted together (rejected: that is teams mode, 2.3); a per-think random
 betrayal chance (rejected: over a 5-minute alliance nearly every one ended in betrayal).
+
+---
+
+## D-019 — Teams: fixed sides, combined land, alliances unchanged · Accepted 2026-10-02
+
+**Context.** Milestone 2.3 (D-016) adds a Teams mode. Asked at the start of the milestone:
+whether alliances still exist in team games, where tribes fit, and whether teammates
+start together. The user's answers: alliances work **the same as in free-for-all** and
+must always be requested; **allied teams can't combine to win**; tribes belong to no team
+(ally them early for safe land, they get eaten eventually); **nations spawn at random**
+and humans pick their own spot; teams are how friends will queue together later.
+
+**Decision** (GAME_DESIGN §3.15). 2–8 teams; you and the nations are dealt round-robin,
+tribes have no team. Teammates are permanently friendly (no attacks, no encirclement —
+the alliance checks become `areFriendly` = same team or allied) and win together when
+their combined land reaches the goal (70% with the usual anti-stall decline), or when no
+other team has a player left (tribes can't win and don't block it). Alliances across
+teams follow §3.14 unchanged; nations count teams as the "contenders" for their
+"never ally when only two are left" rule. Team-aware nations prefer enemies attacking a
+teammate and enemies a teammate already attacks. Spawning is unchanged.
+
+**Consequences.** Free-for-all games are unchanged (a world with no teams plays exactly
+as in 2.2 — the regression check). `World.winner` stays a player (the winning team's
+biggest member) and `World.winningTeam` names the team, so FFA code paths don't change.
+
+**Alternatives.** No alliances in team games (my first recommendation — rejected by the
+user: politics between teams stay); tribes split among the teams (rejected: less food,
+and tribes are filler); teams spawning in their own regions (rejected by the user: nations
+spawn at random, humans choose).

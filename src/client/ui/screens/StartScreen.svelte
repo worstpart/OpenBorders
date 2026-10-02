@@ -8,8 +8,9 @@
     TRIBE_PRESETS,
     type MapSize,
   } from "../../app/setup.ts";
+  import { clampTeams, describeSplit, maxTeams, type GameMode } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
-  import { DIFFICULTIES, type Difficulty } from "../../../sim/rules.ts";
+  import { DEFAULT_RULES, DIFFICULTIES, type Difficulty } from "../../../sim/rules.ts";
 
   interface Props {
     onPlay: () => void;
@@ -22,11 +23,22 @@
   const perPlayer = $derived(landPerPlayer(ui.landTiles, opponents));
   const crowded = $derived(ui.mapSize === "normal" && opponents >= 50);
 
+  const teamGame = $derived(ui.mode === "teams");
+
   function setLobby(nations: number, tribes: number): void {
-    const lobby = clampLobby(nations, tribes);
+    // A team game needs at least one nation (someone to play against).
+    const lobby = clampLobby(teamGame ? Math.max(1, nations) : nations, tribes);
     ui.nations = lobby.nations;
     ui.tribes = lobby.tribes;
+    ui.teams = clampTeams(ui.teams, lobby.nations);
   }
+
+  function setMode(mode: GameMode): void {
+    ui.mode = mode;
+    setLobby(ui.nations, ui.tribes);
+  }
+
+  const MODE_LABEL: Record<GameMode, string> = { ffa: "Free-for-all", teams: "Teams" };
 
   const DIFFICULTY_LABEL: Record<Difficulty, string> = {
     easy: "Easy",
@@ -64,11 +76,33 @@
   <p class="tagline">Start small. Expand. Outlast everyone.</p>
 
   <div class="row">
+    <span id="mode-label">Mode</span>
+    <div class="segmented" role="group" aria-labelledby="mode-label">
+      {#each ["ffa", "teams"] as const as mode (mode)}
+        <button type="button" aria-pressed={ui.mode === mode} onclick={() => setMode(mode)}
+          >{MODE_LABEL[mode]}</button
+        >
+      {/each}
+    </div>
+  </div>
+  {#if teamGame}
+    <div class="row">
+      <span title="You and the nations are dealt into teams; tribes belong to no team">Teams</span>
+      {@render stepper("Teams", ui.teams, 2, maxTeams(ui.nations), (v) => (ui.teams = v))}
+    </div>
+    <p class="info split">
+      {describeSplit(ui.nations, ui.teams)}. A team wins with {Math.round(
+        DEFAULT_RULES.victory.landShare * 100,
+      )}% of the land together.
+    </p>
+  {/if}
+
+  <div class="row">
     <span title="Smart opponents — the real rivals">Nations</span>
     {@render stepper(
       "Nations",
       ui.nations,
-      ui.tribes > 0 ? 0 : 1,
+      ui.tribes > 0 && !teamGame ? 0 : 1,
       Math.min(MAX_NATIONS, MAX_OPPONENTS - ui.tribes),
       (v) => setLobby(v, ui.tribes),
     )}
@@ -170,6 +204,8 @@
     flex: 1;
     min-width: 56px;
     height: 28px;
+    padding: 0 var(--space-2);
+    white-space: nowrap;
     border: none;
     border-radius: calc(var(--radius-control) - 2px);
     background: transparent;
@@ -200,6 +236,12 @@
     font-size: var(--text-sm);
     color: var(--text-muted);
     text-align: left;
+  }
+
+  .info.split {
+    min-height: 0;
+    margin-top: calc(-1 * var(--space-1));
+    margin-bottom: var(--space-3);
   }
 
   .info.warn {

@@ -54,6 +54,7 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
     eliminatedTick: -1,
     traitorUntilTick: -1,
     betrayals: 0,
+    team: 0,
     neighbors: null,
     ...overrides,
   };

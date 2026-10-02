@@ -41,15 +41,18 @@ export function addToast(list: readonly Toast[], toast: Toast, max = MAX_TOASTS)
 /**
  * The toasts a tick's events produce for the local player. `isNews` decides whether
  * another player's elimination (not by us), or a betrayal between others, is worth a toast.
- * Alliance requests to us become diplomacy cards, not toasts.
+ * Alliance requests to us become diplomacy cards, not toasts. `teamOf` gives a player's
+ * team in team games (GAME_DESIGN.md §3.15): a teammate's elimination is always news.
  */
 export function toastsForEvents(
   events: readonly SimEvent[],
   me: PlayerId,
   nameOf: (id: PlayerId) => string,
   isNews: (eliminated: PlayerId) => boolean = () => true,
+  teamOf: (id: PlayerId) => number = () => 0,
 ): ToastInput[] {
   const toasts: ToastInput[] = [];
+  const myTeam = teamOf(me);
   for (const event of events) {
     switch (event.type) {
       case "attackStarted":
@@ -96,6 +99,17 @@ export function toastsForEvents(
         break;
       case "eliminated":
         if (event.playerId === me) break; // the defeat card says it
+        if (myTeam !== 0 && teamOf(event.playerId) === myTeam) {
+          toasts.push({
+            text:
+              event.by !== null
+                ? `${nameOf(event.by)} eliminated your teammate ${nameOf(event.playerId)}`
+                : `Your teammate ${nameOf(event.playerId)} was eliminated`,
+            tone: "danger",
+            player: event.playerId,
+          });
+          break;
+        }
         if (event.by !== me && !isNews(event.playerId)) break;
         toasts.push(
           event.by === me

@@ -11,11 +11,15 @@
  *  - Breaking one marks the breaker a traitor for `traitorTicks`: attacks on them cost
  *    less and move faster (attacks.ts), tribes go after them, and the betrayed nation
  *    holds a grudge.
+ *
+ * In team games (GAME_DESIGN.md §3.15) teammates are permanently friendly; alliances with
+ * players outside the team work exactly as above.
  */
 import {
   getPlayer,
   pairKey,
   requestKey,
+  sameTeam,
   type Alliance,
   type Player,
   type PlayerId,
@@ -25,6 +29,11 @@ import { retreatAttack } from "./attacks.ts";
 
 export function isAllied(world: World, a: PlayerId, b: PlayerId): boolean {
   return a !== b && world.alliances.has(pairKey(a, b));
+}
+
+/** Can't attack or encircle each other: teammates, or allies (GAME_DESIGN.md §3.15). */
+export function areFriendly(world: World, a: PlayerId, b: PlayerId): boolean {
+  return sameTeam(world, a, b) || isAllied(world, a, b);
 }
 
 export function getAlliance(world: World, a: PlayerId, b: PlayerId): Alliance | undefined {
@@ -67,6 +76,7 @@ export function applyAllianceRequest(
   if (!Number.isInteger(target) || target === player.id) return "invalid player";
   const other = getPlayer(world, target);
   if (!other?.alive) return "that player is gone";
+  if (sameTeam(world, player.id, target)) return "you're on the same team";
   if (isAllied(world, player.id, target)) return "already allied";
   // They asked us first: asking back accepts.
   if (findRequest(world, target, player.id)) {

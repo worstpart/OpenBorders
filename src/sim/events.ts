@@ -51,6 +51,8 @@ export type SimEvent =
   | {
       readonly type: "gameOver";
       readonly winner: PlayerId | null;
+      /** Team games: the winning team (0 = none / free-for-all). */
+      readonly team: number;
       readonly reason: "landShare" | "lastStanding" | "noneLeft";
     }
   | { readonly type: "allianceRequested"; readonly from: PlayerId; readonly to: PlayerId }

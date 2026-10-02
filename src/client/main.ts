@@ -37,7 +37,13 @@ mount(App, {
     actions: {
       play: () =>
         client
-          ?.startGame({ nations: ui.nations, tribes: ui.tribes, difficulty: ui.difficulty })
+          ?.startGame({
+            nations: ui.nations,
+            tribes: ui.tribes,
+            difficulty: ui.difficulty,
+            mode: ui.mode,
+            teams: ui.teams,
+          })
           .catch(reportFatal),
       selectMap: (size) => {
         if (size === ui.mapSize) return;

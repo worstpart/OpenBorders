@@ -31,6 +31,7 @@ export function hashWorld(world: World): number {
     .addString(world.phase)
     .addInt(world.playStartTick)
     .addInt(world.winner ?? 0)
+    .addInt(world.winningTeam)
     .addInt(world.ownerHash);
   for (const p of world.players) {
     h.addInt(p.id)
@@ -45,7 +46,8 @@ export function hashWorld(world: World): number {
       .addInt(p.eliminatedTick)
       .addInt(p.lastLostTo)
       .addInt(p.traitorUntilTick)
-      .addInt(p.betrayals);
+      .addInt(p.betrayals)
+      .addInt(p.team);
   }
   for (const p of world.players) {
     if (p.brain) {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatPercent } from "../../format.ts";
+  import { teamName } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
 
   const me = $derived(ui.me);
@@ -13,6 +14,7 @@
   <div class="chip" style:--player-color={color}>
     <span class="dot" aria-hidden="true"></span>
     <span class="name">{me.name}</span>
+    {#if me.team !== 0}<span class="stat team">{teamName(me.team)}</span>{/if}
     <span class="stat" title="Share of all land">
       {formatPercent(me.tiles / ui.landTiles)} land
     </span>
@@ -56,6 +58,11 @@
 
   .stat {
     color: var(--text-secondary);
+  }
+
+  .team {
+    color: var(--color-ally);
+    font-weight: 600;
   }
 
   .out {

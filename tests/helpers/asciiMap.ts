@@ -83,6 +83,8 @@ export interface AsciiWorldOptions {
   personality?: Personality;
   /** Difficulty for every nation (default: hard). */
   difficulty?: Difficulty;
+  /** Team per player (index 0 = player 1); default: no teams (free-for-all). */
+  teams?: number[];
   /** Home troops per player (index 0 = player 1); defaults to each player's starting troops. */
   homeTroops?: number[];
   rules?: GameRules;
@@ -110,6 +112,7 @@ export function worldFromAscii(ascii: string, options: AsciiWorldOptions = {}): 
       tier: kind === "tribe" ? ("tribe" as const) : undefined,
       personality: options.personality,
       difficulty: options.difficulty,
+      team: options.teams?.[k],
     })),
     rules: options.rules,
   });

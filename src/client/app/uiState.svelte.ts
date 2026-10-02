@@ -17,6 +17,7 @@ import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
 import type { Difficulty } from "../../sim/rules.ts";
 import { DEFAULT_DIFFICULTY, DEFAULT_NATIONS, DEFAULT_TRIBES, type MapSize } from "./setup.ts";
+import { DEFAULT_TEAMS, type GameMode } from "./teams.ts";
 import type { Toast } from "./toasts.ts";
 
 export type Screen = "loading" | "start" | "game";
@@ -54,6 +55,9 @@ class UiState {
   tribes = $state(DEFAULT_TRIBES);
   difficulty = $state<Difficulty>(DEFAULT_DIFFICULTY);
   mapSize = $state<MapSize>("normal");
+  /** Free-for-all or teams, and how many teams (GAME_DESIGN.md §3.15). */
+  mode = $state<GameMode>("ffa");
+  teams = $state(DEFAULT_TEAMS);
   phase = $state<Phase>("spawn");
   tick = $state(0);
   playStartTick = $state(-1);
@@ -73,6 +77,8 @@ class UiState {
   /** Share of home troops a click sends (client-side choice; sent with each command). */
   attackPercent = $state(DEFAULT_ATTACK_PERCENT);
   winner = $state<PlayerId | null>(null);
+  /** Team games: the team that won (0 = none). */
+  winningTeam = $state(0);
   gameOverReason = $state<"landShare" | "lastStanding" | "noneLeft" | null>(null);
   /** Who eliminated the local player (null: nobody / not eliminated). */
   eliminatedBy = $state<PlayerId | null>(null);
@@ -100,6 +106,7 @@ class UiState {
     this.myRequests = new Map();
     this.dismissedRenewals = new Set();
     this.winner = null;
+    this.winningTeam = 0;
     this.gameOverReason = null;
     this.eliminatedBy = null;
     this.spectating = false;
@@ -126,6 +133,7 @@ class UiState {
       me: this.me,
       players: this.players,
       allies: this.allies,
+      teammates: this.teammates,
     };
   }
 
@@ -146,6 +154,28 @@ class UiState {
   /** The local player's allies. */
   get allies(): Set<PlayerId> {
     return alliesOf(this.alliances, this.localPlayerId);
+  }
+
+  /** The local player's teammates (empty in free-for-all games). */
+  get teammates(): Set<PlayerId> {
+    const team = this.me?.team ?? 0;
+    const mates = new Set<PlayerId>();
+    if (team === 0) return mates;
+    for (const p of this.players)
+      if (p.team === team && p.id !== this.localPlayerId) mates.add(p.id);
+    return mates;
+  }
+
+  /** Allies and teammates: friendly players (mint names and borders). */
+  get friends(): Set<PlayerId> {
+    const friends = this.teammates;
+    for (const id of this.allies) friends.add(id);
+    return friends;
+  }
+
+  /** A team game is running (GAME_DESIGN.md §3.15). */
+  get teamGame(): boolean {
+    return this.players.some((p) => p.team !== 0);
   }
 
   isTraitor(id: PlayerId): boolean {

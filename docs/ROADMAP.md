@@ -155,7 +155,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.0 ✅ | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
 | 2.1 ✅ | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
 | 2.2 ✅ | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
-| 2.3 | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
+| 2.3 ✅ | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | |
 | 2.5 | **Buildings** — City, Fort, Port (+ Market if the economy needs it) | |
 | 2.6 | **Naval transport** — boats from any coast, routes, beachheads, recall | |
@@ -253,6 +253,33 @@ declined: nations mostly ask stronger neighbours, who rarely need them. **Watch:
 left for the playtest. Browser: every flow checked (request, accept with Y, decline, renew
 with the card, let it end, expiry, break → traitor stripes/tags/toasts, alliance ends when
 an ally is eliminated), clean console.
+
+**Milestone 2.3 result (2026-10-02)** — teams; design note GAME_DESIGN §3.15, decision
+**D-019** (the user's answers: alliances unchanged and always requested, across teams too;
+allied teams never win together; tribes teamless; nations spawn at random, humans pick).
+Start screen *Mode* Free-for-all · Teams with 2–8 teams (you and the nations dealt
+round-robin); team colours (shades of a team hue); leaderboard *Teams* block and *team*
+tags; teammate hover card/menu; teammate-eliminated and team-out toasts; team end card.
+Headless `--teams N`.
+
+| Headless games | Winner | Median (longest) | Leader at min 3 wins | Teammate attacks | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 8 nations, 2 teams (100) | team 1: 42 · team 2: 58 | **4.7 min** (11.7) | 74% | 0 | 0.66 / 5.4 ms |
+| 10 nations + 100 tribes, 2 teams, Medium (50) | 25 · 25 | 7.3 min (14.9) | 76% | 0 | 0.87 / 5.3 ms |
+| 12 nations + 100 tribes, 4 teams, Medium (50) | 11 / 17 / 10 / 12 | 11.2 min (24.5) | 38% | 0 | 0.82 / 6.0 ms |
+| 8 nations, free-for-all (100, regression) | — | 7.6 min (14) | 30% | — | 0.68 / 7.1 ms |
+
+No errors; every game has a winning team; teammates never attacked each other. The
+free-for-all run is identical to 2.2 (same median, same wins by personality). In 2-team
+games nations never ally across teams (only two sides are left, the §3.14 rule counted by
+team); with 4 teams they formed ~11 alliances a game. **Watch:** 2-team games are short and
+the team ahead at minute 3 usually wins — each team starts near 50% of the land, so a
+20-point swing wins. Tried: no "gang up" weights (4.7 min, no change) and an 80% team goal
+(5.8 min) — neither fixes it, so the goal stays 70% like free-for-all; left for the
+playtest. Browser: Teams start screen, team colours, mint teammate names/borders, Teams
+block, teammate hover card and right-click menu (fixed: a teammate you didn't border showed
+"Request alliance"), teammate-eliminated toast, "Team Red won the match" end card,
+free-for-all unchanged; clean console.
 
 ## Phase 3 — Multiplayer
 

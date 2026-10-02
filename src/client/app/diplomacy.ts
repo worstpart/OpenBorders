@@ -36,6 +36,8 @@ export type AllianceStatus =
   | { readonly kind: "sent"; readonly secondsLeft: number }
   | { readonly kind: "cooldown"; readonly secondsLeft: number }
   | { readonly kind: "canAsk" }
+  /** On the local player's team: always friendly, no alliance needed (§3.15). */
+  | { readonly kind: "teammate" }
   /** No alliance possible: alliances off, not playing, ourselves, neutral, or gone. */
   | { readonly kind: "none" };
 
@@ -56,6 +58,7 @@ export function allianceStatus(ctx: DiplomacyContext, target: PlayerId): Allianc
   if (!rules.diplomacy.enabled || ctx.phase !== "playing" || !me?.alive) return { kind: "none" };
   const other = ctx.players[target - 1];
   if (target === 0 || target === me.id || !other?.alive) return { kind: "none" };
+  if (me.team !== 0 && other.team === me.team) return { kind: "teammate" };
   const alliance = allianceWith(ctx.alliances, me.id, target);
   if (alliance) {
     const meIsA = alliance.a === me.id;

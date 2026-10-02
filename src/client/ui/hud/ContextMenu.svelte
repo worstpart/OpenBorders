@@ -3,6 +3,7 @@
   import { allianceStatus, formatCountdown } from "../../app/diplomacy.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, previewClick } from "../../app/preview.ts";
+  import { teamName } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
 
@@ -141,7 +142,10 @@
       {/each}
     {:else if blocked && !isMe}
       <div class="info">
-        {#if blocked.kind === "allied"}
+        {#if blocked.kind === "teammate"}
+          Your teammate{#if owner?.team}&nbsp;· {teamName(owner.team)}{/if}. Teammates can't attack
+          each other.
+        {:else if blocked.kind === "allied"}
           Allies can't attack each other.
         {:else if blocked.kind === "notReachable"}
           You don't border {menu.owner === 0 ? "this land" : "them"} yet.
@@ -160,7 +164,7 @@
       </div>
     {/if}
 
-    {#if alliance && alliance.kind !== "none"}
+    {#if alliance && alliance.kind !== "none" && alliance.kind !== "teammate"}
       <div class="divider"></div>
       {#if alliance.kind === "ally"}
         <div class="info ally">

@@ -3,6 +3,8 @@
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { winLandShare } from "../../../sim/systems/victory.ts";
   import { formatClock, formatPercent, formatTroops } from "../../format.ts";
+  import { TEAM_COLORS } from "../../app/players.ts";
+  import { teamName, teamStandings } from "../../app/teams.ts";
 
   interface Props {
     onMenu: () => void;
@@ -28,6 +30,10 @@
     return top;
   });
   const allies = $derived(ui.allies);
+  const teammates = $derived(ui.teammates);
+  /** Team games (GAME_DESIGN.md §3.15): each team's combined land, above the players. */
+  const teams = $derived(ui.teamGame ? teamStandings(ui.players) : []);
+  const myTeam = $derived(ui.me?.team ?? 0);
   const alive = $derived(ui.players.filter((p) => p.alive).length);
   const clock = $derived(
     ui.phase === "spawn" ? "Spawn" : formatClock((ui.tick - ui.playStartTick) / 10),
@@ -75,6 +81,26 @@
           <path d="M4 6l4 4 4-4" />
         </svg>
       </button>
+      {#if !collapsed && teams.length > 0}
+        <ol class="teams" aria-label="Teams">
+          {#each teams as team (team.team)}
+            <li
+              class:me={team.team === myTeam}
+              class:out={team.alive === 0}
+              style:--player-color={TEAM_COLORS[team.team - 1] ?? "#888"}
+              title="{teamName(team.team)}: combined land · members still in"
+            >
+              <span class="rank"></span>
+              <span class="dot square" aria-hidden="true"></span>
+              <span class="who">
+                <span class="name">{teamName(team.team)}</span>
+              </span>
+              <span class="land">{formatPercent(team.tiles / ui.landTiles)}</span>
+              <span class="troops">{team.alive}/{team.members}</span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
       {#if !collapsed}
         <ol>
           {#each rows as { player, rank } (player.id)}
@@ -88,7 +114,9 @@
               <span class="dot" aria-hidden="true"></span>
               <span class="who">
                 <span class="name">{player.name}</span>
-                {#if allies.has(player.id)}
+                {#if teammates.has(player.id)}
+                  <span class="tag ally" title="On your team">team</span>
+                {:else if allies.has(player.id)}
                   <span class="tag ally" title="Your ally">ally</span>
                 {/if}
                 {#if player.alive && player.traitorUntilTick > ui.tick}
@@ -251,6 +279,16 @@
 
   li.out {
     opacity: 0.5;
+  }
+
+  .teams {
+    margin-bottom: var(--space-1);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--surface-hairline);
+  }
+
+  .dot.square {
+    border-radius: 3px;
   }
 
   .rank {

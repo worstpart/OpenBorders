@@ -34,6 +34,8 @@ export interface PlayerSnapshot {
   readonly traitorUntilTick: number;
   /** Alliances this player has broken. */
   readonly betrayals: number;
+  /** Team number, or 0 = no team (GAME_DESIGN.md §3.15). */
+  readonly team: number;
   /**
    * Whose land touches this player's (0 = neutral), ascending — what a click can reach.
    * Humans only (the HUD needs it); null for bots, to save the work every tick.
@@ -81,6 +83,8 @@ export interface TickFrame {
   readonly allianceRequests: readonly AllianceRequestSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
+  /** Team games: the team that won (0 = none). */
+  readonly winningTeam: number;
   /** Hash of the full game state after this tick. */
   readonly hash: number;
 }
@@ -105,6 +109,7 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     eliminatedTick: p.eliminatedTick,
     traitorUntilTick: p.traitorUntilTick,
     betrayals: p.betrayals,
+    team: p.team,
     neighbors: p.kind === "human" && p.alive ? landNeighbors(world, p) : null,
   }));
 }
@@ -139,6 +144,7 @@ export function buildFrame(world: World): TickFrame {
     allianceRequests: world.allianceRequests.map((r) => ({ ...r })),
     events: world.events.slice(),
     winner: world.winner,
+    winningTeam: world.winningTeam,
     hash: hashWorld(world),
   };
 }

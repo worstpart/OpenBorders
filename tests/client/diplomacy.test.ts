@@ -32,6 +32,7 @@ function player(id: number): PlayerSnapshot {
     eliminatedTick: -1,
     traitorUntilTick: -1,
     betrayals: 0,
+    team: 0,
     neighbors: [2, 3],
   };
 }

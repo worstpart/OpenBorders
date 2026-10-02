@@ -47,7 +47,12 @@ describe("victory", () => {
     const last = frames.at(-1)!;
     expect(last.phase).toBe("ended");
     expect(last.winner).toBe(1);
-    expect(last.events).toContainEqual({ type: "gameOver", winner: 1, reason: "landShare" });
+    expect(last.events).toContainEqual({
+      type: "gameOver",
+      winner: 1,
+      team: 0,
+      reason: "landShare",
+    });
     expect(world.players[0]!.tiles).toBe(14);
     // Armies stop and come home when the match ends.
     expect(last.attacks).toEqual([]);
@@ -79,7 +84,12 @@ describe("victory", () => {
     });
     const last = runUntilOver(world).at(-1)!;
     expect(last.winner).toBe(1);
-    expect(last.events).toContainEqual({ type: "gameOver", winner: 1, reason: "lastStanding" });
+    expect(last.events).toContainEqual({
+      type: "gameOver",
+      winner: 1,
+      team: 0,
+      reason: "lastStanding",
+    });
   });
 
   it("anti-stall: the land needed to win drops after 15 minutes, down to 50%", () => {
@@ -117,6 +127,7 @@ describe("victory", () => {
     expect(frames.at(-1)!.events).toContainEqual({
       type: "gameOver",
       winner: 1,
+      team: 0,
       reason: "landShare",
     });
   });

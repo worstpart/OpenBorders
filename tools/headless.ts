@@ -6,7 +6,7 @@
  *                          [--width 1100 --height 700] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
- *                          [--no-alliances]
+ *                          [--no-alliances] [--teams N]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -19,6 +19,8 @@
  * --personality gives every nation the same personality. --bots is the number of nations
  * (the smart bots of GAME_DESIGN §3.11/§3.13); --tribes adds that many weak filler bots.
  * --no-alliances turns diplomacy off (GAME_DESIGN §3.14): games then play as before 2.2.
+ * --teams N deals the nations round-robin into N teams (GAME_DESIGN §3.15; tribes have no
+ * team); the report then counts wins by team and checks that teammates never fight.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -52,6 +54,8 @@ interface Options {
   maxTicks: number;
   rules: GameRules;
   personality: Personality | undefined;
+  /** 0 = free-for-all. */
+  teams: number;
 }
 
 export interface GameReport {
@@ -60,6 +64,10 @@ export interface GameReport {
   winnerPersonality: string | null;
   /** "nation" or "tribe". */
   winnerTier: string | null;
+  /** Team games: the winning team (0 = none / free-for-all). */
+  winningTeam: number;
+  /** Attacks launched between teammates (must stay 0). */
+  teammateAttacks: number;
   reason: string;
   minutes: number;
   /** When all land was owned… */
@@ -67,7 +75,10 @@ export interface GameReport {
   /** …and when 90% of it was (the last stray corners can take a while). */
   land90Minutes: number | null;
   leadChanges: number;
-  /** Whether the leader at minute 3 went on to win (null if the game ended sooner). */
+  /**
+   * Whether the leader at minute 3 went on to win (null if the game ended sooner). In team
+   * games the leader is the team with the most land.
+   */
   leaderAt3Won: boolean | null;
   eliminations: number;
   attacks: number;
@@ -114,6 +125,7 @@ async function main(): Promise<void> {
       rules: { type: "string" },
       personality: { type: "string" },
       "no-alliances": { type: "boolean", default: false },
+      teams: { type: "string", default: "0" },
     },
   });
   const rules = loadRules(args.rules);
@@ -131,7 +143,11 @@ async function main(): Promise<void> {
       ? { ...rules, diplomacy: { ...rules.diplomacy, enabled: false } }
       : rules,
     personality: parsePersonality(args.personality),
+    teams: Number(args.teams),
   };
+  if (!Number.isInteger(options.teams) || options.teams < 0 || options.teams === 1) {
+    throw new Error("--teams must be 0 (free-for-all) or at least 2");
+  }
   const workerCount = Math.max(
     1,
     Math.min(options.games, Number(args.workers ?? availableParallelism() / 2 - 1)),
@@ -181,6 +197,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         kind: "bot" as const,
         personality: options.personality,
         difficulty: options.difficulty,
+        team: options.teams > 0 ? (k % options.teams) + 1 : 0,
       })),
       ...Array.from({ length: options.tribes }, (_, k) => ({
         name: `Tribe ${k + 1}`,
@@ -211,6 +228,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   let eliminations = 0;
   let attacks = 0;
   let rejected = 0;
+  let teammateAttacks = 0;
   const diplomacy = {
     requests: 0,
     declined: 0,
@@ -235,8 +253,11 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
       if (ms > worstTick.ms) worstTick = { tick: world.tick, ms, steps: tickSteps };
       for (const event of frame.events) {
         if (event.type === "eliminated") eliminations++;
-        else if (event.type === "attackStarted") attacks++;
-        else if (event.type === "commandRejected") rejected++;
+        else if (event.type === "attackStarted") {
+          attacks++;
+          const team = world.players[event.attacker - 1]!.team;
+          if (team > 0 && world.players[event.target - 1]?.team === team) teammateAttacks++;
+        } else if (event.type === "commandRejected") rejected++;
         else if (event.type === "gameOver") reason = event.reason;
         else if (event.type === "allianceRequested") diplomacy.requests++;
         else if (event.type === "allianceRequestEnded" && event.reason === "declined") {
@@ -249,9 +270,9 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         else if (event.type === "allianceBroken") diplomacy.betrayals++;
       }
       if (world.tick % LEADER_SAMPLE_TICKS === 0) {
-        const top = world.players.reduce((a, b) => (b.tiles > a.tiles ? b : a));
-        if (top.id !== leader) {
-          leader = top.id;
+        const top = leadingSide(world);
+        if (top !== leader) {
+          leader = top;
           leadChanges++;
         }
         if (leaderAt3 === 0 && world.tick - world.playStartTick >= 3 * 60 * TICKS_PER_SECOND) {
@@ -277,13 +298,16 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     winnerPersonality:
       winner?.brain?.tier === "tribe" ? null : (winner?.brain?.personality ?? null),
     winnerTier: winner?.brain?.tier ?? null,
+    winningTeam: world.winningTeam,
+    teammateAttacks,
     reason: error ? "error" : reason,
     minutes: round(playTicks / TICKS_PER_SECOND / 60),
     landRaceMinutes:
       landRaceTick === null ? null : round((landRaceTick - world.playStartTick) / 600),
     land90Minutes: land90Tick === null ? null : round((land90Tick - world.playStartTick) / 600, 2),
     leadChanges: Math.max(0, leadChanges),
-    leaderAt3Won: leaderAt3 === 0 ? null : leaderAt3 === world.winner,
+    leaderAt3Won:
+      leaderAt3 === 0 ? null : leaderAt3 === (options.teams > 0 ? world.winningTeam : world.winner),
     eliminations,
     attacks,
     rejected,
@@ -313,9 +337,21 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   };
 }
 
+/** The player (free-for-all) or team (team games) holding the most land. */
+function leadingSide(world: World): number {
+  if (world.teamCount === 0) return world.players.reduce((a, b) => (b.tiles > a.tiles ? b : a)).id;
+  const land = new Array<number>(world.teamCount + 1).fill(0);
+  for (const p of world.players) land[p.team]! += p.tiles;
+  let best = 1;
+  for (let team = 2; team <= world.teamCount; team++) if (land[team]! > land[best]!) best = team;
+  return best;
+}
+
 function describe(report: GameReport, done: number, total: number): string {
   return (
-    `game ${done}/${total} seed ${report.seed}: ${report.winner ?? "no winner"} ` +
+    `game ${done}/${total} seed ${report.seed}: ` +
+    (report.winningTeam > 0 ? `team ${report.winningTeam} (top: ` : "") +
+    `${report.winner ?? "no winner"}${report.winningTeam > 0 ? ")" : ""} ` +
     `(${report.winnerPersonality ?? "-"}) by ${report.reason} after ${report.minutes} min, ` +
     `land 90% ${report.land90Minutes ?? "-"} / all ${report.landRaceMinutes ?? "-"} min, ` +
     `${report.leadChanges} lead changes, ` +
@@ -342,11 +378,16 @@ function summarize(
     if (r.winnerTier === "tribe") continue;
     wins.set(r.winnerPersonality ?? "?", (wins.get(r.winnerPersonality ?? "?") ?? 0) + 1);
   }
+  const teamWins = new Map<number, number>();
+  for (const r of finished) {
+    if (r.winningTeam > 0) teamWins.set(r.winningTeam, (teamWins.get(r.winningTeam) ?? 0) + 1);
+  }
   const leaderKnown = reports.filter((r) => r.leaderAt3Won !== null);
   const summary = {
     games: options.games,
     nations: options.bots,
     tribes: options.tribes,
+    teams: options.teams,
     difficulty: options.difficulty,
     map: `${options.width}x${options.height} seed ${options.mapSeed}`,
     finishedWithWinner: finished.length,
@@ -367,6 +408,13 @@ function summarize(
       : null,
     winsByTier: Object.fromEntries(tierWins),
     winsByPersonality: Object.fromEntries(wins),
+    ...(options.teams > 0
+      ? {
+          winsByTeam: Object.fromEntries([...teamWins].sort((a, b) => a[0] - b[0])),
+          wonByLastTeamStanding: finished.filter((r) => r.reason === "lastStanding").length,
+          teammateAttacks: reports.reduce((s, r) => s + r.teammateAttacks, 0),
+        }
+      : {}),
     rejectedCommands: reports.reduce((s, r) => s + r.rejected, 0),
     diplomacyPerGame: Object.fromEntries(
       (Object.keys(reports[0]?.diplomacy ?? {}) as (keyof GameReport["diplomacy"])[]).map((key) => [

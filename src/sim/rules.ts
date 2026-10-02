@@ -293,6 +293,13 @@ export interface AiRules {
    * a target, on top of the traitor discount (GAME_DESIGN.md §3.14).
    */
   readonly traitorPreference: number;
+  /**
+   * Team games (GAME_DESIGN.md §3.15): nations weigh an enemy attacking one of their
+   * teammates this many times higher ("help teammates")…
+   */
+  readonly teamAssistPreference: number;
+  /** …and an enemy a teammate is already attacking this many times higher ("gang up"). */
+  readonly teamFocusPreference: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -503,6 +510,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     tribePreference: 3,
     // User request (2.2): breaking an alliance should make you a target for nations too.
     traitorPreference: 2,
+    // Teams (2.3): a team focuses its fire — defend teammates first, then pile on.
+    teamAssistPreference: 2,
+    teamFocusPreference: 1.5,
     maxTribeWars: 3,
     counterAbove: 1.1,
     counterSize: 1.3,

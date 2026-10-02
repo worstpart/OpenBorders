@@ -12,6 +12,9 @@
  * Tribes (milestone 2.1) get dull browns and tans instead — earthy, low-saturation colors
  * that read as "filler" at a glance, so the bright nations stand out (as in OpenFront).
  * Nation colors are kept away from those browns.
+ *
+ * Team games (milestone 2.3) color by team instead: each team has a hue and its members get
+ * distinct shades of it — the local player keeps the familiar blue of team 1.
  */
 
 export const LOCAL_PLAYER_COLOR = "#3f8cff";
@@ -151,6 +154,93 @@ export function generateTribeColors(count: number): string[] {
   }
   // More tribes than candidates: reuse the palette (borders still separate them).
   for (let k = 0; colors.length < count; k++) colors.push(colors[k]!);
+  return colors;
+}
+
+/** Each team's base color (team 1 = the local player's blue); names in teams.ts. */
+export const TEAM_COLORS = [
+  LOCAL_PLAYER_COLOR,
+  "#e0453a", // red
+  "#f2c032", // gold
+  "#8d5ce6", // violet
+  "#1fb5a5", // teal
+  "#f08a24", // orange
+  "#e04ea0", // pink
+  "#7d8597", // slate
+];
+
+/**
+ * Colors indexed by player id for a team game (index 0 = neutral; player 1 is local).
+ * Each team's first member gets the team's base color, the others shades of it; tribes
+ * (team 0) get the tribe browns.
+ */
+export function teamPlayerColors(
+  players: readonly { readonly tier: "human" | "nation" | "tribe"; readonly team: number }[],
+): string[] {
+  const tribes = players.filter((p) => p.tier === "tribe").length;
+  if (tribes > tribeColors.length) tribeColors = generateTribeColors(Math.max(tribes, 64));
+  const members = new Map<number, number>();
+  for (const p of players) if (p.team > 0) members.set(p.team, (members.get(p.team) ?? 0) + 1);
+  const shades = new Map<number, string[]>();
+  for (const [team, count] of members) {
+    const base = TEAM_COLORS[(team - 1) % TEAM_COLORS.length]!;
+    shades.set(team, generateTeamShades(base, count));
+  }
+  const next = new Map<number, number>();
+  let nextTribe = 0;
+  return [
+    "#000000",
+    ...players.map((p) => {
+      if (p.team === 0) return p.tier === "tribe" ? tribeColors[nextTribe++]! : "#888888";
+      const k = next.get(p.team) ?? 0;
+      next.set(p.team, k + 1);
+      return shades.get(p.team)![k]!;
+    }),
+  ];
+}
+
+/**
+ * `count` colors of one team: the base color, then shades of it (lighter, darker, a
+ * little warmer or cooler), each the candidate farthest from those already picked and
+ * from the terrain and tribe colors. Deterministic.
+ */
+export function generateTeamShades(base: string, count: number): string[] {
+  const colors = [base];
+  const [L, A, B] = hexToLab(base);
+  const chroma = Math.hypot(A, B);
+  const hue = Math.atan2(B, A);
+  const candidates: { hex: string; lab: Lab; nearest: number }[] = [];
+  for (let lightness = 0.42; lightness <= 0.86; lightness += 0.04) {
+    for (const hueShift of [-14, -7, 0, 7, 14]) {
+      for (const chromaShare of [1, 0.7]) {
+        const angle = hue + (hueShift * Math.PI) / 180;
+        // Shrink the chroma until the color fits on screen (very light or dark blues don't).
+        for (let c = chroma * chromaShare; c > 0.02; c *= 0.9) {
+          const lab: Lab = [lightness, c * Math.cos(angle), c * Math.sin(angle)];
+          const rgb = labToRgb(lab);
+          if (rgb) {
+            candidates.push({ hex: rgbToHex(rgb), lab, nearest: Infinity });
+            break;
+          }
+        }
+      }
+    }
+  }
+  const avoid = [base, ...RESERVED_COLORS, ...TRIBE_REGION].map(hexToLab);
+  for (const c of candidates)
+    for (const a of avoid) c.nearest = Math.min(c.nearest, labDistance(c.lab, a));
+  // Favour shades near the base's lightness a little, so a team still reads as one color.
+  const score = (c: { lab: Lab; nearest: number }) => c.nearest - 0.15 * Math.abs(c.lab[0] - L);
+  while (colors.length < count && candidates.length > 0) {
+    let best = 0;
+    for (let k = 1; k < candidates.length; k++) {
+      if (score(candidates[k]!) > score(candidates[best]!)) best = k;
+    }
+    const [pick] = candidates.splice(best, 1);
+    colors.push(pick!.hex);
+    for (const c of candidates) c.nearest = Math.min(c.nearest, labDistance(c.lab, pick!.lab));
+  }
+  for (let k = 1; colors.length < count; k++) colors.push(colors[k]!);
   return colors;
 }
 

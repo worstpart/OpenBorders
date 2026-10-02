@@ -3,6 +3,7 @@
   import { describeBot } from "../../app/players.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, outcomeText, previewClick } from "../../app/preview.ts";
+  import { teamName } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
 
@@ -79,6 +80,11 @@
         <span>{formatPercent(owner.tiles / ui.landTiles)} land</span>
         {#if owner.tier}<span class="muted personality">{describeBot(owner)}</span>{/if}
       </div>
+      {#if owner.team !== 0 && owner.team === ui.me?.team}
+        <div class="badge ally">Teammate · {teamName(owner.team)}</div>
+      {:else if owner.team !== 0}
+        <div class="badge">{teamName(owner.team)}</div>
+      {/if}
       {#if alliance?.kind === "ally"}
         <div class="badge ally">Ally · {formatCountdown(alliance.secondsLeft)} left</div>
       {:else if alliance?.kind === "theyAsked"}
@@ -110,7 +116,9 @@
       {#if (preview.kind === "expand" || preview.kind === "attack") && terrain?.note}
         <div class="muted">{terrain.name}: {terrain.note}</div>
       {/if}
-      {#if preview.kind === "allied"}
+      {#if preview.kind === "teammate"}
+        <span class="muted">Your teammate — teammates can't attack each other</span>
+      {:else if preview.kind === "allied"}
         <span class="muted">Allied — break the alliance first (right-click)</span>
       {:else if preview.kind === "notReachable"}
         <span class="muted">

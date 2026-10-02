@@ -21,6 +21,7 @@ import {
   isTribe,
   NEUTRAL,
   nextScratchStamp,
+  sameTeam,
   setOwner,
   touchesOwner,
   type Attack,
@@ -56,6 +57,7 @@ export function applyAttackCommand(
   if (target !== NEUTRAL) {
     if (!getPlayer(world, target)!.alive) return "that player is gone";
     if (isSpawnProtected(world)) return "spawn protection is still on";
+    if (sameTeam(world, player.id, target)) return "they're your teammate";
     if (isAllied(world, player.id, target)) return "you're allied with them";
   }
   const troops = Math.floor((player.homeTroops * percentBp) / 10_000);

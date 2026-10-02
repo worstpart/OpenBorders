@@ -62,6 +62,8 @@ export interface Player {
   traitorUntilTick: number;
   /** Alliances this player has broken. */
   betrayals: number;
+  /** Team number (1..), or 0 = no team (free-for-all, and tribes in team games; §3.15). */
+  readonly team: number;
   /** Bots only. */
   readonly brain: BotBrain | null;
   /**
@@ -80,6 +82,8 @@ export interface PlayerSetup {
   readonly personality?: Personality;
   /** Nations only; "hard" (Phase 1's bots) when left out. */
   readonly difficulty?: Difficulty;
+  /** Team games (GAME_DESIGN.md §3.15): 1..teams; 0 or left out = no team. */
+  readonly team?: number;
 }
 
 /** A bot's own state (GAME_DESIGN.md §3.11). */
@@ -118,6 +122,10 @@ export interface World {
   readonly players: Player[];
   readonly rng: Rng;
   winner: PlayerId | null;
+  /** Team games: the team that won (0 = none, or a free-for-all game). */
+  winningTeam: number;
+  /** Highest team number in the game; 0 = free-for-all (GAME_DESIGN.md §3.15). */
+  readonly teamCount: number;
   /** XOR of ownerTileHash over all tiles, maintained incrementally by setOwner. */
   ownerHash: number;
   /** Active attacks, in launch order (the order they are processed in). */
@@ -203,6 +211,11 @@ export function createWorld(setup: GameSetup): World {
   if (setup.players.length < 1 || setup.players.length > MAX_PLAYERS) {
     throw new RangeError(`A game needs 1..${MAX_PLAYERS} players, got ${setup.players.length}`);
   }
+  for (const p of setup.players) {
+    if (p.team !== undefined && !(Number.isInteger(p.team) && p.team >= 0)) {
+      throw new RangeError(`Invalid team ${p.team} for ${p.name}`);
+    }
+  }
   const rng = new Rng(setup.seed);
   const players = setup.players.map((p, index): Player => ({
     id: index + 1,
@@ -222,6 +235,7 @@ export function createWorld(setup: GameSetup): World {
     lastLostTo: 0,
     traitorUntilTick: -1,
     betrayals: 0,
+    team: p.team ?? 0,
     encircleDirty: true,
     brain: p.kind === "bot" ? createBrain(p, rng) : null,
   }));
@@ -235,6 +249,8 @@ export function createWorld(setup: GameSetup): World {
     players,
     rng,
     winner: null,
+    winningTeam: 0,
+    teamCount: Math.max(0, ...setup.players.map((p) => p.team ?? 0)),
     ownerHash: 0,
     attacks: [],
     alliances: new Map(),
@@ -269,6 +285,13 @@ function createBrain(setup: PlayerSetup, rng: Rng): BotBrain {
 /** Tribes are the weak filler bots (D-017). */
 export function isTribe(player: Player | undefined): boolean {
   return player?.brain?.tier === "tribe";
+}
+
+/** Two different players on the same team (GAME_DESIGN.md §3.15). */
+export function sameTeam(world: World, a: PlayerId, b: PlayerId): boolean {
+  if (a === b || world.teamCount === 0) return false;
+  const team = world.players[a - 1]?.team ?? 0;
+  return team !== 0 && world.players[b - 1]?.team === team;
 }
 
 /** The player with this id, or undefined for neutral/unknown ids. */

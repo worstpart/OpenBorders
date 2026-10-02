@@ -22,6 +22,8 @@ export type ClickPreview =
   | { readonly kind: "notReachable" }
   /** Allies can't attack each other (GAME_DESIGN.md §3.14). */
   | { readonly kind: "allied" }
+  /** Nor can teammates (§3.15). */
+  | { readonly kind: "teammate" }
   | { readonly kind: "protected"; readonly seconds: number }
   | { readonly kind: "noTroops" }
   | { readonly kind: "inactive" };
@@ -35,6 +37,8 @@ export interface PreviewContext {
   readonly players: readonly PlayerSnapshot[];
   /** The local player's allies (empty when left out). */
   readonly allies?: ReadonlySet<PlayerId>;
+  /** The local player's teammates (empty when left out). */
+  readonly teammates?: ReadonlySet<PlayerId>;
 }
 
 /** Seconds of spawn protection left (0 once attacks on players are allowed). */
@@ -49,6 +53,7 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
   const me = ctx.me;
   if (ctx.phase !== "playing" || !me?.alive) return { kind: "inactive" };
   if (target === me.id) return { kind: "own" };
+  if (ctx.teammates?.has(target)) return { kind: "teammate" };
   if (!me.neighbors?.includes(target)) return { kind: "notReachable" };
   const defender = target === 0 ? null : ctx.players[target - 1];
   if (target !== 0 && !defender?.alive) return { kind: "notReachable" };

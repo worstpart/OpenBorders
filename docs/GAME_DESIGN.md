@@ -493,6 +493,60 @@ below. All numbers live in `rules.diplomacy`; `enabled: false` turns the whole s
   preview says "Allied — break the alliance first (right-click)". The odds include the
   traitor discount (`battle.ts`), like the tribe discount.
 
+### 3.15 Teams (milestone 2.3)
+
+A second game mode next to free-for-all: players and nations split into 2–8 fixed teams
+that win together (D-016, D-019; idea from OpenFront's team games, research §3.12 and
+§3.27 — our own rules and code). Teams are how friends will queue together once
+multiplayer exists (Phase 3); in solo games your teammates are nations. Design note
+written before building, with the user's answers of 2026-10-02; results below.
+
+**The rules**
+
+| Rule | Value | Why |
+|---|---|---|
+| Mode | **Free-for-all** (default) or **Teams**, with **2–8 teams** (at most one team per nation + you) | Two to four teams is the common case; 8 keeps team colours distinct |
+| Who is on a team | You and the nations, dealt round-robin (you first: team 1, nation 1 → team 2, …), so team sizes differ by at most one. The start screen shows the split ("4 v 4", "you + 2 nations") | Fair by construction; no hidden rules |
+| Tribes | **No team** — weak filler that every team eats, as in free-for-all (user) | Tribes are food; you may ally one early to grow safely next to it |
+| Teammates | permanently friendly: **can't attack each other**, never encircle each other's land (a piece enclosed only by teammates and allies is safe), can't be broken up | A team is a fixed side; same checks as an alliance (`areFriendly` = same team or allied) |
+| Alliances | **Exactly as in free-for-all** (§3.14), with anyone outside your team, tribes included — always requested, timed, renewable, betrayal makes a traitor. Asking a teammate is pointless and rejected (user) | Politics between teams stay possible; teams don't replace diplomacy |
+| Victory | a team wins when its members' **combined land** reaches the goal (70%, with the same anti-stall decline to 50%), or when **no other team has a player left** (leftover tribes don't block it — they can't win) | Shared victory is what teams are for. **Allied teams never win together**: alliances don't add land (user) |
+| Last two sides allied | they must let the alliance run out — or break it and be a traitor; if they keep renewing, the game goes on (user). Nations count *sides* (teams) when deciding "only two contenders left", so they won't ally or renew then | Unchanged from §3.14, counted by team |
+| Eliminated but your team wins | you still win ("Victory — your team…") and can keep watching | Team play: your part counted |
+| Spawns | **unchanged**: nations are spread evenly at random, tribes scattered, you pick your own spot (your teammates' colours are visible while you choose) (user) | No team regions; the spawn phase stays the same in both modes |
+
+**AI (team-aware nations).** Nations never target a teammate (and never ask one for an
+alliance). Among their usual targets they prefer an enemy who is **attacking a teammate**
+(×2, "help teammates") and an enemy a teammate is **already attacking** (×1.5, "gang
+up"), so a team tends to focus fire. Everything else (tribes first, traitors 2×,
+difficulty, personalities, alliances with players of other teams) is unchanged. Tribes
+play as before; a tribe has no team.
+
+**HUD**
+
+- **Start screen:** *Mode* Free-for-all · Teams; in Teams a *Teams* stepper (2–8) and the
+  split ("Your team: you + 3 nations · 4 v 4").
+- **Colours:** each team has a hue (team 1 is your blue, then red, saffron, violet, teal,
+  orange, pink, slate); members get distinct shades of it — you keep the familiar bright
+  blue. Tribes stay brown.
+- **Leaderboard:** a *Teams* block on top — each team's combined land and members left,
+  your team highlighted — above the usual player list; a *team* tag on your teammates.
+- **Hover card / right-click menu:** "Teammate · Team Blue" (no attack options, no
+  alliance options); other players show their team name.
+- **Map:** teammates' names in mint and their borders marked like an ally's (friendly at a
+  glance).
+- **Toasts:** a teammate eliminated; a team knocked out.
+- **End card:** "Victory — your team controls 70% of the land" / "Team Red won the match."
+- **Headless:** `--teams N` (nations dealt round-robin), team wins, and a check that
+  teammates never fight.
+
+**As built (results, ROADMAP 2.3).** Every team game ends with a winning team and no
+teammate ever attacks another. 4 v 4 nations without tribes take a median 4.7 min (with
+100 tribes 7.3; 4 teams of 3 with 100 tribes 11.2) and the team ahead at minute 3 usually
+wins — each team starts with about half the land. Neither dropping the "gang up" weights
+nor an 80% team goal changed that much, so the goal stays 70%; the playtest decides. With
+two teams, nations don't ally across teams (two sides left).
+
 ---
 
 ## 4. Interaction model
