@@ -228,8 +228,12 @@ the one with the longest shared border, or the one actively attacking). Coasts a
 - A cut-off **pocket** (any piece except the player's largest) falls when enclosed, by
   one player or several. With several enclosers, the one attacking this player with the
   biggest army takes it, otherwise the one with the longest shared border.
-- The player's **main territory** only falls when a *single* player surrounds it.
-  Otherwise every inland player bordered by two neighbours would be wiped out at once.
+- The player's **main territory** only falls when a *single* player surrounds it **and
+  attacks them with an army at least as big as their home troops** (a real assault they
+  would lose anyway). Otherwise every inland player bordered by two neighbours would be
+  wiped out at once — and, as the milestone 1.5 play-test showed, a neighbour could
+  swallow a whole player (troops and all) just by expanding around them, or with a token
+  attack.
 - Checks run every 2 s per player (staggered by id) and are skipped when nothing changed
   next to the player's land since the last check.
 
@@ -264,6 +268,48 @@ the one with the longest shared border, or the one actively attacking). Coasts a
 - **Personalities** (different thresholds and target preferences): *Expander*,
   *Aggressor*, *Turtle*, *Opportunist*.
 - Difficulty (later) = reaction time + decision quality, not stats.
+
+**As built (milestone 1.5)** — `src/sim/ai/bot.ts`. Bots run inside the deterministic
+simulation; their commands are queued and applied (and validated) at the start of the
+next tick, exactly like a person's. On each think, in order:
+
+1. **Counter** the biggest incoming army they can match (home ≥ 1.1× it), sending 1.3× its
+   size: opposing armies cancel out, so this is cheap defence.
+2. **Reinforce or retreat** an attack whose army fell below 30% of the defender's home
+   troops (it would take only ~3% more of their land): top it up if the bot can afford
+   to, otherwise retreat (saves 80% of what's left).
+3. **Wait** until troops regrow to the personality's trigger share of capacity — growth is
+   fastest at 50%, and a bot that keeps sending most of its pool barely grows.
+4. **Expand** toward the nearest open land just beyond its territory (sampled; mountains
+   and highlands avoided), topping up an expansion that runs low.
+5. **Attack** the neighbour where it expects to gain the most land. Using the Lanchester
+   law (§3.6) a bot estimates how much of a target's land an army takes before it stalls:
+   `share = 1 − √(1 − A²/(k·D²))`. It attacks when that share beats its personality's
+   minimum — accepting smaller gains while its troops sit at the cap (wasted growth).
+   Army size: enough to take *everything* if affordable — the bigger of a clear troop
+   edge and the fixed per-tile cost of all the target's land (big, thinly held empires
+   are cheap per tile but have many tiles). Target score = expected land gained ×
+   (busy elsewhere) × (attacking us) × (depleted: low troops vs capacity) × 2 if it would
+   finish them off. One war at a time, **reinforced** while it can still finish the job;
+   aimed at the target's original start tile (it splits them and cuts off pockets).
+
+| Personality | Expand at | Sends | Attack at | Min. land gain | Notes |
+|---|---|---|---|---|---|
+| Expander | 35% | 45% | 65% | 30% | Attacks only once no neutral land is left |
+| Aggressor | 45% | 35% | 50% | 15% | Attacks even while expanding; likes busy targets |
+| Turtle | 50% | 30% | 75% | 40% | Cautious, big edges only |
+| Opportunist | 40% | 40% | 55% | 25% | Strongly prefers targets busy fighting someone else |
+
+How we got here (headless runs on the reference map, 8 bots):
+- *Attack only with a clear edge* → every bot sat at full capacity and nobody ever moved
+  (a defender fights with its whole home pool, an attacker with part of its own).
+- *Attack for expected land gain* → constant fighting but endless churn: 27 of 100 games
+  had no winner after 60 min, median 27 min. Armies were sized without the per-tile cost,
+  ran out halfway through big territories, and were never reinforced, so nobody was ever
+  finished off.
+- *Size armies to finish targets, prefer depleted ones, reinforce* → games end on their
+  own: 10/10 in 10–18 min (median 13) in the first check; see ROADMAP for the 100-game
+  result.
 
 ---
 

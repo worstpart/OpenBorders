@@ -80,6 +80,8 @@ export function applyAttackCommand(
     world.attacks.push(attack);
     world.events.push({ type: "attackStarted", attackId: attack.id, attacker: player.id, target });
   }
+  // A (bigger) attack can make an enclosed player's main territory fall (encirclement).
+  if (target !== NEUTRAL) getPlayer(world, target)!.encircleDirty = true;
   seedFront(world, attack);
   updateFieldTroops(world);
   return null;
@@ -382,20 +384,28 @@ export function primaryAttacker(
   victim: PlayerId,
   candidates?: ReadonlyMap<PlayerId, number>,
 ): PlayerId | null {
-  let best: PlayerId | null = null;
-  let bestTroops = 0;
+  return strongestAttack(world, victim, candidates)?.attacker ?? null;
+}
+
+/** The biggest advancing army against `victim` (optionally only from `candidates`). */
+export function strongestAttack(
+  world: World,
+  victim: PlayerId,
+  candidates?: ReadonlyMap<PlayerId, number>,
+): Attack | null {
+  let best: Attack | null = null;
   for (const attack of world.attacks) {
     if (attack.ended || attack.retreatTick >= 0 || attack.target !== victim) continue;
     if (candidates && !candidates.has(attack.attacker)) continue;
     if (
-      attack.troops > bestTroops ||
-      (attack.troops === bestTroops && best !== null && attack.attacker < best)
+      !best ||
+      attack.troops > best.troops ||
+      (attack.troops === best.troops && attack.attacker < best.attacker)
     ) {
-      best = attack.attacker;
-      bestTroops = attack.troops;
+      best = attack;
     }
   }
-  return best;
+  return best && best.troops > 0 ? best : null;
 }
 
 function removeEnded(world: World): void {

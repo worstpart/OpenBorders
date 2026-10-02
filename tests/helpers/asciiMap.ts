@@ -13,7 +13,7 @@
  *   `);
  */
 import { createMap, Terrain } from "../../src/sim/map/gameMap.ts";
-import type { GameRules } from "../../src/sim/rules.ts";
+import type { GameRules, Personality } from "../../src/sim/rules.ts";
 import { startingTroops, troopCapacity } from "../../src/sim/systems/troops.ts";
 import {
   createWorld,
@@ -73,8 +73,13 @@ export function parseAscii(ascii: string): ParsedAscii {
 }
 
 export interface AsciiWorldOptions {
-  /** Player kinds; defaults to bots, as many as the highest digit on the map. */
+  /**
+   * Player kinds; defaults to "human" (passive: they only do what the test commands),
+   * as many as the highest digit on the map. Bots think and act on their own.
+   */
   players?: PlayerKind[];
+  /** Personality for every bot (default: chosen from the seed). */
+  personality?: Personality;
   /** Home troops per player (index 0 = player 1); defaults to each player's starting troops. */
   homeTroops?: number[];
   rules?: GameRules;
@@ -90,13 +95,17 @@ export function worldFromAscii(ascii: string, options: AsciiWorldOptions = {}): 
   const parsed = parseAscii(ascii);
   const highestOwner = parsed.owners.reduce((max, owner) => Math.max(max, owner), 0);
   const kinds =
-    options.players ?? Array.from({ length: Math.max(1, highestOwner) }, () => "bot" as const);
+    options.players ?? Array.from({ length: Math.max(1, highestOwner) }, () => "human" as const);
   if (kinds.length < highestOwner) throw new Error("ASCII map uses more players than were given");
 
   const world = createWorld({
     seed: options.seed ?? 1,
     map: createMap(parsed.width, parsed.height, parsed.terrain),
-    players: kinds.map((kind, k) => ({ name: `P${k + 1}`, kind })),
+    players: kinds.map((kind, k) => ({
+      name: `P${k + 1}`,
+      kind,
+      personality: options.personality,
+    })),
     rules: options.rules,
   });
   const phase = options.phase ?? "playing";

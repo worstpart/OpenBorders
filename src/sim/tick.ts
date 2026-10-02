@@ -2,6 +2,7 @@
  * One simulation tick: the systems in their fixed, documented order (ARCHITECTURE.md §5.3).
  * Later milestones slot their systems into the marked places.
  */
+import { thinkBots } from "./ai/bot.ts";
 import type { Command, StampedCommand, Turn } from "./commands.ts";
 import { buildFrame, type TickFrame } from "./frame.ts";
 import {
@@ -25,7 +26,10 @@ export function runTick(world: World, turn: Turn): TickFrame {
   world.changes.clear();
   world.events.length = 0;
 
-  // 1. Commands (from humans now; bots' commands will be queued here too, see step 7).
+  // 1. Commands: the bots' decisions from last tick, then this turn's (human) commands.
+  const botCommands = world.pendingCommands;
+  world.pendingCommands = [];
+  applyCommands(world, botCommands);
   applyCommands(world, turn.commands);
 
   if (world.phase === "spawn") updateSpawnPhase(world);
@@ -41,7 +45,8 @@ export function runTick(world: World, turn: Turn): TickFrame {
     eliminate(world);
     // 6. Troops regrow.
     growTroops(world);
-    // 7. AI thinking                — milestone 1.5
+    // 7. Bots decide; their commands apply next tick through step 1.
+    thinkBots(world);
     // 8. 70% of the land, or last one standing, wins.
     checkVictory(world);
   }

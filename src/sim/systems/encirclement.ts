@@ -6,8 +6,12 @@
  *
  *  - A cut-off pocket (any piece but the player's largest) falls when enclosed, by one
  *    player or several.
- *  - The player's main territory only falls when a single player surrounds it: otherwise
- *    every inland player bordered by two neighbours would be wiped out at once.
+ *  - The player's main territory only falls when a single player surrounds it AND is
+ *    attacking them with an army at least as big as their home troops (a real assault
+ *    they'd lose anyway). Otherwise every inland player bordered by two neighbours would
+ *    be wiped out at once, and a neighbour could swallow a whole player — troops and all —
+ *    by expanding around them, or with a token attack (both found in the milestone 1.5
+ *    play-test).
  *  - With several enclosers, the one attacking this player with the biggest army takes
  *    it; otherwise the one sharing the longest border with the piece.
  *
@@ -23,7 +27,7 @@ import {
   type PlayerId,
   type World,
 } from "../world.ts";
-import { primaryAttacker } from "./attacks.ts";
+import { primaryAttacker, strongestAttack } from "./attacks.ts";
 
 interface Piece {
   /** Any tile of the piece (to flood it again when annexing). */
@@ -60,7 +64,12 @@ function annexEnclosedPieces(world: World, player: Player): void {
 
   for (const piece of pieces) {
     if (piece.safe || piece.neighbors.size === 0) continue;
-    if (piece === main && piece.neighbors.size !== 1) continue;
+    if (piece === main) {
+      if (piece.neighbors.size !== 1) continue;
+      const assault = strongestAttack(world, player.id, piece.neighbors);
+      const needed = world.rules.encirclement.mainTerritoryArmyShare * player.homeTroops;
+      if (!assault || assault.troops < needed) continue;
+    }
     const capturer = chooseCapturer(world, player.id, piece);
     const tiles = transferPiece(world, player.id, piece.start, capturer);
     world.events.push({ type: "encircled", playerId: player.id, by: capturer, tiles });

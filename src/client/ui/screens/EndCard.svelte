@@ -24,12 +24,17 @@
         ? "You control 70% of the land."
         : "You are the last one standing.";
     }
-    if (eliminated && ui.eliminatedBy !== null) {
-      return `${ui.playerName(ui.eliminatedBy)} took your last land.`;
-    }
-    if (eliminated) return "Your territory is gone.";
-    if (ui.winner !== null) return `${ui.playerName(ui.winner)} won the match.`;
-    return "Nobody is left standing.";
+    const result = !over
+      ? ""
+      : ui.winner !== null
+        ? `${ui.playerName(ui.winner)} won the match.`
+        : "Nobody is left standing.";
+    const fate = !eliminated
+      ? ""
+      : ui.eliminatedBy !== null
+        ? `${ui.playerName(ui.eliminatedBy)} took your last land.`
+        : "Your territory is gone.";
+    return [result, fate].filter(Boolean).join(" ");
   });
 </script>
 

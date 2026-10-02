@@ -111,6 +111,12 @@ export interface AttackRules {
 export interface EncirclementRules {
   /** Each player is checked this often (staggered by player id). */
   readonly intervalTicks: number;
+  /**
+   * A player's main territory falls to a single encloser only while that encloser attacks
+   * them with an army of at least this many times their home troops — a real assault
+   * they'd lose anyway, not a token attack.
+   */
+  readonly mainTerritoryArmyShare: number;
 }
 
 /** Elimination (GAME_DESIGN.md §3.9). */
@@ -127,6 +133,62 @@ export interface VictoryRules {
   readonly landShare: number;
 }
 
+export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
+export type Personality = (typeof PERSONALITIES)[number];
+
+/** How one kind of bot plays (GAME_DESIGN.md §3.11). Shares are of capacity or home troops. */
+export interface PersonalityRules {
+  /** Expand into neutral land once home troops reach this share of capacity. */
+  readonly expandAt: number;
+  /** Share of home troops sent per expansion. */
+  readonly expandShare: number;
+  /** Consider attacking players once home troops reach this share of capacity. */
+  readonly attackAt: number;
+  /** Aim to send this many times the defender's home troops (enough to take everything). */
+  readonly attackEdge: number;
+  /**
+   * Without that edge, still attack if the army is expected to take at least this share
+   * of the target's land before it runs out (Lanchester estimate, GAME_DESIGN.md §3.6).
+   */
+  readonly minLandGain: number;
+  /** Most of its home troops it commits to one attack. */
+  readonly attackMaxShare: number;
+  /** Attacks players even while neutral land is still within reach. */
+  readonly attacksWhileExpanding: boolean;
+  /** Extra preference for targets busy fighting someone else (their home pool is low). */
+  readonly preferBusyTargets: number;
+}
+
+export interface AiRules {
+  /** Bots think every thinkMinTicks..thinkMaxTicks ticks (2–5 s), randomly staggered. */
+  readonly thinkMinTicks: number;
+  readonly thinkMaxTicks: number;
+  /** Counter an incoming army when home troops are at least this many times its size... */
+  readonly counterAbove: number;
+  /** ...sending this many times its size (the armies cancel; the rest pushes on). */
+  readonly counterSize: number;
+  /**
+   * Retreat an attack whose army fell below this share of the defender's home troops:
+   * it would take only ~3% more of their land, and retreating saves 80% of it.
+   */
+  readonly retreatBelow: number;
+  /** At or above this share of capacity troops stop growing: a waste. */
+  readonly wastingAt: number;
+  /** While wasting growth, bots accept attacks that gain this much less land. */
+  readonly wastingGainFactor: number;
+  /**
+   * Boredom: each think spent at the cap without acting lowers the land gain a bot
+   * demands, reaching zero after this many thinks — so bots never sit at full capacity
+   * forever (two big, cautious bots used to stare at each other until the time limit).
+   */
+  readonly boredomThinks: number;
+  /** An expansion with fewer troops than this gets topped up. */
+  readonly expansionTopUpBelow: number;
+  /** Distance (tiles) beyond the bot's own radius where it looks for open land to aim at. */
+  readonly expansionLookAhead: number;
+  readonly personalities: Readonly<Record<Personality, PersonalityRules>>;
+}
+
 export interface GameRules {
   /** Simulation tick length. 10 ticks per second (D-004). */
   readonly tickMs: number;
@@ -138,6 +200,7 @@ export interface GameRules {
   readonly encirclement: EncirclementRules;
   readonly elimination: EliminationRules;
   readonly victory: VictoryRules;
+  readonly ai: AiRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -206,6 +269,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // Every 2 s: frequent enough to feel instant, cheap because it's staggered and
     // skipped for players whose surroundings didn't change.
     intervalTicks: 20,
+    mainTerritoryArmyShare: 1,
   },
   elimination: {
     // Small remnants are absorbed to avoid tedious mop-up — but only once a player has
@@ -215,6 +279,62 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   },
   victory: {
     landShare: 0.7,
+  },
+  ai: {
+    thinkMinTicks: 20,
+    thinkMaxTicks: 50,
+    counterAbove: 1.1,
+    counterSize: 1.3,
+    retreatBelow: 0.3,
+    wastingAt: 0.95,
+    wastingGainFactor: 0.6,
+    boredomThinks: 10,
+    expansionTopUpBelow: 300,
+    expansionLookAhead: 40,
+    // Every bot waits for its troops to regrow toward the 50% sweet spot before acting:
+    // a player who keeps sending most of their pool barely grows.
+    personalities: {
+      expander: {
+        expandAt: 0.35,
+        expandShare: 0.45,
+        attackAt: 0.65,
+        attackEdge: 1.5,
+        minLandGain: 0.3,
+        attackMaxShare: 0.7,
+        attacksWhileExpanding: false,
+        preferBusyTargets: 0,
+      },
+      aggressor: {
+        expandAt: 0.45,
+        expandShare: 0.35,
+        attackAt: 0.5,
+        attackEdge: 1.2,
+        minLandGain: 0.15,
+        attackMaxShare: 0.85,
+        attacksWhileExpanding: true,
+        preferBusyTargets: 0.3,
+      },
+      turtle: {
+        expandAt: 0.5,
+        expandShare: 0.3,
+        attackAt: 0.75,
+        attackEdge: 1.7,
+        minLandGain: 0.4,
+        attackMaxShare: 0.6,
+        attacksWhileExpanding: false,
+        preferBusyTargets: 0,
+      },
+      opportunist: {
+        expandAt: 0.4,
+        expandShare: 0.4,
+        attackAt: 0.55,
+        attackEdge: 1.3,
+        minLandGain: 0.25,
+        attackMaxShare: 0.75,
+        attacksWhileExpanding: false,
+        preferBusyTargets: 1,
+      },
+    },
   },
 });
 
@@ -228,6 +348,7 @@ export function makeRules(overrides: {
   encirclement?: Partial<EncirclementRules>;
   elimination?: Partial<EliminationRules>;
   victory?: Partial<VictoryRules>;
+  ai?: Partial<AiRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -239,6 +360,7 @@ export function makeRules(overrides: {
     encirclement: { ...DEFAULT_RULES.encirclement, ...overrides.encirclement },
     elimination: { ...DEFAULT_RULES.elimination, ...overrides.elimination },
     victory: { ...DEFAULT_RULES.victory, ...overrides.victory },
+    ai: { ...DEFAULT_RULES.ai, ...overrides.ai },
   });
 }
 

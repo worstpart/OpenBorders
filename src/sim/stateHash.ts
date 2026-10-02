@@ -45,6 +45,13 @@ export function hashWorld(world: World): number {
       .addInt(p.eliminatedTick)
       .addInt(p.lastLostTo);
   }
+  for (const p of world.players) {
+    if (p.brain) {
+      h.addString(p.brain.personality).addInt(p.brain.nextThinkTick).addInt(p.brain.idleThinks);
+    }
+  }
+  h.addInt(world.pendingCommands.length);
+  for (const c of world.pendingCommands) h.addInt(c.playerId).addString(JSON.stringify(c.command));
   h.addInt(world.nextAttackId).addInt(world.attacks.length);
   for (const a of world.attacks) {
     h.addInt(a.id)

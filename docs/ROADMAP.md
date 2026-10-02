@@ -69,9 +69,15 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 | 1.2 ✅ | **Rendering & camera** — terrain, territory, borders, labels, camera, `LocalHost`, session wiring | Map renders at 60 fps in the browser, spawning visible, console clean |
 | 1.3 ✅ | **Expansion & combat** — attack/retreat commands, directed priority, budgets & losses, merge/cancel, capture flash, fronts | Scenario tests on tiny maps pass; playable expansion & attacks in the browser |
 | 1.4 ✅ | **Encirclement, elimination, victory** | Tests for each rule; full solo game reachable end-to-end |
-| 1.5 | **AI opponents** — personalities, staggered thinking; headless runner | 100 bots-only games finish with a winner, no exceptions, within tick budget |
+| 1.5 ✅ | **AI opponents** — personalities, staggered thinking; headless runner | 100 bots-only games finish with a winner, no exceptions, within tick budget |
 | 1.6 | **HUD & interaction** — command bar, attack % control, chips, leaderboard, toasts, hover card, context menu, start/pause/end screens, hints | Every control verified in the browser; keyboard paths work |
 | 1.7 | **Playtest & tune** — balance via headless metrics + play sessions, performance pass | Matches ≈ 8–12 min, budgets met, stable commit tagged *phase-1* |
+
+**Milestone 1.5 result** (`npm run headless -- --games 100`, reference map, 8 bots, 86 s on
+7 worker threads): **100/100 games finished with a winner**, 0 errors, 0 timeouts. Length
+median 12.7 min (under 8: 1 · 8–12: 33 · 12–16: 51 · 16–20: 13 · 20–30: 1 · 50: 1). Leader at
+minute 3 won 32%. Wins by personality: opportunist 32, expander 29, turtle 24, aggressor 15.
+Tick 0.71 ms avg, worst p99 8.7 ms, worst single tick 30 ms.
 
 **Notes collected for 1.7 (tuning):**
 - Troop management dominates: a scripted player that only attacks at ≥ 50% of capacity
@@ -82,6 +88,10 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 - Land-race speed: confirm with 8 competing bots that the land race lasts ~60–90 s.
 - Encirclement p99 tick spikes (3.4 ms) come from flooding huge territories; fine for
   now, revisit with many large players or move the sim to a worker.
+- Occasional single ticks of 15–30 ms in headless runs (with 7 games in parallel; possibly
+  GC) — profile them.
+- Aggressors win least (15%) — they deplete themselves; consider tuning their thresholds.
+- One game in 100 ran 50 min — look at what kept it going.
 
 ---
 

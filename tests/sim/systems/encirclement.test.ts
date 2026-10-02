@@ -30,18 +30,51 @@ function runInterval(
 }
 
 describe("encirclement", () => {
-  it("land enclosed by a single player falls to them", () => {
-    const world = worldFromAscii(
-      `
-      ~~~~~~~
-      ~11111~
-      ~12211~
-      ~11111~
-      ~~~~~~~
-      `,
-      { rules: RULES },
-    );
-    const events = runInterval(world);
+  const SURROUNDED = `
+    ~~~~~~~
+    ~11111~
+    ~12211~
+    ~11111~
+    ~~~~~~~
+  `;
+
+  it("a player's whole territory doesn't fall just because a neighbour expanded around it", () => {
+    const world = worldFromAscii(SURROUNDED, { rules: RULES });
+    runInterval(world);
+    runInterval(world);
+    expect(world.players[1]!.tiles).toBe(2);
+  });
+
+  it("a token attack isn't enough to swallow an enclosed player", () => {
+    const world = worldFromAscii(SURROUNDED, { rules: RULES, homeTroops: [1_000, 1_000_000] });
+    runInterval(world, [
+      {
+        player: 1,
+        command: { type: "attack", target: 2, focusTile: tileAt(world.map, 2, 2), percentBp: 100 },
+      },
+    ]);
+    expect(world.players[1]!.tiles).toBeGreaterThan(0);
+    expect(world.players[1]!.alive).toBe(true);
+  });
+
+  it("an enclosed territory falls to an encloser attacking with a real army", () => {
+    // Player 2's single front tile is protected by a slow, outnumbered attack… until the
+    // encirclement check: player 1's army (5,000) outnumbers player 2's home (2,000).
+    const world = worldFromAscii(SURROUNDED, {
+      rules: makeRules({ ...RULES, combat: { layerDelayTicks: 1_000 } }),
+      homeTroops: [10_000, 2_000],
+    });
+    const events = runInterval(world, [
+      {
+        player: 1,
+        command: {
+          type: "attack",
+          target: 2,
+          focusTile: tileAt(world.map, 2, 2),
+          percentBp: 5_000,
+        },
+      },
+    ]);
     expect(ownersToAscii(world)).toBe(
       ascii(`
         ~~~~~~~

@@ -225,7 +225,8 @@ interface World {
 5. eliminate         players below the threshold are absorbed; 0 tiles → dead
                      (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
-7. thinkAI           bots emit commands for the NEXT tick (same validation path)
+7. thinkAI           bots emit commands for the NEXT tick (world.pendingCommands,
+                     applied first in step 1 — same validation path as people)
 8. checkVictory
 9. emitFrame         tile changes, player stats, attack states, events, state hash
 ```

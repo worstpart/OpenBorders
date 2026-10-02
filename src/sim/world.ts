@@ -5,7 +5,8 @@
 import type { SimEvent } from "./events.ts";
 import type { GameMap } from "./map/gameMap.ts";
 import { Rng } from "./math/rng.ts";
-import { DEFAULT_RULES, type GameRules } from "./rules.ts";
+import type { StampedCommand } from "./commands.ts";
+import { DEFAULT_RULES, PERSONALITIES, type GameRules, type Personality } from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
 import type { TileQueue } from "./systems/tileQueue.ts";
 
@@ -49,6 +50,8 @@ export interface Player {
   eliminatedTick: number;
   /** The last player who took land from this one (0 = nobody yet). */
   lastLostTo: PlayerId;
+  /** Bots only. */
+  readonly brain: BotBrain | null;
   /**
    * Ownership changed next to this player's land since the last encirclement check.
    * Only skips work that would find nothing new, so it's not part of the game state.
@@ -59,6 +62,17 @@ export interface Player {
 export interface PlayerSetup {
   readonly name: string;
   readonly kind: PlayerKind;
+  /** Bots only; chosen at random (from the game seed) when left out. */
+  readonly personality?: Personality;
+}
+
+/** A bot's own state (GAME_DESIGN.md §3.11). */
+export interface BotBrain {
+  readonly personality: Personality;
+  /** Next tick the bot thinks, or -1 until the match starts. */
+  nextThinkTick: number;
+  /** Consecutive thinks spent at the troop cap without acting (see AiRules.boredomThinks). */
+  idleThinks: number;
 }
 
 export interface GameSetup {
@@ -86,6 +100,8 @@ export interface World {
   ownerHash: number;
   /** Active attacks, in launch order (the order they are processed in). */
   attacks: Attack[];
+  /** Commands bots decided on this tick; applied first thing next tick, like any command. */
+  pendingCommands: StampedCommand[];
   nextAttackId: number;
   /** Scratch marks for de-duplicating tiles inside one operation (not game state). */
   readonly scratchMarks: Int32Array;
@@ -125,6 +141,7 @@ export function createWorld(setup: GameSetup): World {
   if (setup.players.length < 1 || setup.players.length > MAX_PLAYERS) {
     throw new RangeError(`A game needs 1..${MAX_PLAYERS} players, got ${setup.players.length}`);
   }
+  const rng = new Rng(setup.seed);
   const players = setup.players.map((p, index): Player => ({
     id: index + 1,
     name: p.name,
@@ -142,6 +159,14 @@ export function createWorld(setup: GameSetup): World {
     eliminatedTick: -1,
     lastLostTo: 0,
     encircleDirty: true,
+    brain:
+      p.kind === "bot"
+        ? {
+            personality: p.personality ?? PERSONALITIES[rng.nextInt(PERSONALITIES.length)]!,
+            nextThinkTick: -1,
+            idleThinks: 0,
+          }
+        : null,
   }));
   return {
     tick: 0,
@@ -151,10 +176,11 @@ export function createWorld(setup: GameSetup): World {
     map: setup.map,
     owner: new Uint16Array(setup.map.width * setup.map.height),
     players,
-    rng: new Rng(setup.seed),
+    rng,
     winner: null,
     ownerHash: 0,
     attacks: [],
+    pendingCommands: [],
     nextAttackId: 1,
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),
     scratchStamp: 0,

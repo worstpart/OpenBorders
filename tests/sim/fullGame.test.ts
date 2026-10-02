@@ -1,7 +1,7 @@
 /**
  * Milestone 1.4 "done when": a full solo game is reachable end-to-end — spawn, expand,
- * fight, win — through the same commands the browser sends. The bots don't act yet
- * (milestone 1.5), so a simple scripted player plays the human.
+ * fight, end — through the same commands the browser sends. A simple scripted player
+ * plays the human against real bots, so either side may win; the game must finish.
  */
 import { describe, expect, it } from "vitest";
 import type { StampedCommand } from "../../src/sim/commands.ts";
@@ -60,7 +60,7 @@ function scriptedHuman(world: World): StampedCommand[] {
 }
 
 describe("a full solo game", () => {
-  it("goes from spawn to victory through commands alone", () => {
+  it("goes from spawn to a finished game through commands alone", () => {
     const world = createWorld({
       seed: 11,
       map: generateContinent({ seed: 4, width: 160, height: 100 }),
@@ -72,18 +72,17 @@ describe("a full solo game", () => {
       ],
     });
     const events: SimEvent[] = [];
-    while (world.phase !== "ended" && world.tick < 6_000) {
+    while (world.phase !== "ended" && world.tick < 30_000) {
       const frame = runTick(world, { tick: world.tick + 1, commands: scriptedHuman(world) });
       events.push(...frame.events);
     }
 
     expect(world.phase).toBe("ended");
-    expect(world.winner).toBe(1);
-    const over = events.find((e) => e.type === "gameOver");
-    expect(over).toMatchObject({ winner: 1, reason: "landShare" });
-    expect(world.players[0]!.tiles).toBeGreaterThanOrEqual(0.7 * world.map.landTiles);
-    // Along the way the bots' starts were surrounded and annexed.
-    expect(events.some((e) => e.type === "encircled")).toBe(true);
-    expect(events.filter((e) => e.type === "commandRejected")).toEqual([]);
+    expect(world.winner).not.toBeNull();
+    const winner = world.players[world.winner! - 1]!;
+    expect(winner.alive).toBe(true);
+    expect(events.find((e) => e.type === "gameOver")).toMatchObject({ winner: winner.id });
+    // The scripted human's commands are always valid when they're sent.
+    expect(events.filter((e) => e.type === "commandRejected" && e.playerId === 1)).toEqual([]);
   });
 });

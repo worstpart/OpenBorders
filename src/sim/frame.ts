@@ -20,6 +20,8 @@ export interface PlayerSnapshot {
   readonly capacity: number;
   readonly growthPerTick: number;
   readonly peakTiles: number;
+  /** Bots only. */
+  readonly personality: string | null;
   /** Tick the player was eliminated, or -1. */
   readonly eliminatedTick: number;
 }
@@ -64,6 +66,7 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     capacity: p.capacity,
     growthPerTick: p.lastGrowth,
     peakTiles: p.peakTiles,
+    personality: p.brain?.personality ?? null,
     eliminatedTick: p.eliminatedTick,
   }));
 }

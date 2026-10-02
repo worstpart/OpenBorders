@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "headless": "node tools/headless.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
