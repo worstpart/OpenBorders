@@ -27,7 +27,9 @@ export type KeyAction =
   | "diplomacyYes"
   | "diplomacyNo"
   /** Turn gold into troops (GAME_DESIGN.md §3.16). */
-  | "mobilize";
+  | "mobilize"
+  /** Open the build menu at the cursor (GAME_DESIGN.md §3.17). */
+  | "build";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -69,6 +71,7 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   KeyY: "diplomacyYes",
   KeyN: "diplomacyNo",
   KeyM: "mobilize",
+  KeyB: "build",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {

@@ -378,10 +378,25 @@ touch them.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *PLANNED (proposed 2026-10-02, not built)*
+### 5.7 Buildings, ranges and flights — *2.5 built; the rest PLANNED*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
+
+**As built in 2.5.** `rules.buildings` (types, levels, escalation, spacing; `enabled`),
+`sim/geometry.ts` (the range module), `systems/buildings.ts` (`build` / `upgrade` /
+`cancelBuild`, tick step 5b `updateBuildings`: captures, completions, bonuses),
+`world.buildings` (ascending ids, found by binary search) + `world.buildingAt`; `setOwner`
+only records tiles with a building in `world.buildingTileChanges`, which step 5b settles
+once the fighting is over (a tile taken and retaken in one tick changes nothing). Each
+player's `bonus` (capacity, growth, income, Mobilize discount) is summed every tick from
+the buildings — derived, not hashed — and read by `troops.ts` / `economy.ts`. Nations
+decide in `ai/build.ts`. Frames carry **every building every tick** (a few hundred small
+objects at most — simpler than deltas; revisit if lobbies ever hold thousands). Placement
+spacing is a linear scan over the buildings for now (fine at today's counts); the spatial
+grid below comes with the first radius-heavy system (2.6 / 2B). Icons are drawn in
+Canvas2D on the label overlay (`render/buildings.ts`); the HUD logic is
+`client/app/buildings.ts` (build options, building card, click hit test).
 
 **Definitions in one place.** `rules.buildings[type]` holds, per type: placement
 (`land` / `coast` / `plains`), what happens on capture (`downgrade` / `destroy`), price

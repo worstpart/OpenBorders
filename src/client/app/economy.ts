@@ -5,7 +5,12 @@
  */
 import type { PlayerSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
-import { donationAmount, mobilizeTroops, troopRoom } from "../../sim/systems/economy.ts";
+import {
+  donationAmount,
+  mobilizeCost,
+  mobilizeTroops,
+  troopRoom,
+} from "../../sim/systems/economy.ts";
 import type { DonationResource, PlayerId } from "../../sim/world.ts";
 
 /** One Mobilize click (or M) buys this share (%) of the capacity. */
@@ -21,9 +26,10 @@ export interface MobilizePreview {
 
 export function mobilizePreview(rules: GameRules, me: PlayerSnapshot): MobilizePreview {
   if (troopRoom(me) < 1) return { troops: 0, gold: 0, blocked: "full" };
-  const troops = mobilizeTroops(rules, me, MOBILIZE_PERCENT * 100);
+  const troops = mobilizeTroops(rules, me, MOBILIZE_PERCENT * 100, me.mobilizeDiscount);
   if (troops < 1) return { troops: 0, gold: 0, blocked: "noGold" };
-  return { troops, gold: troops * rules.economy.goldPerTroop, blocked: null };
+  const gold = Math.min(me.gold, mobilizeCost(rules, troops, me.mobilizeDiscount));
+  return { troops, gold, blocked: null };
 }
 
 /** Key of the local player's last donation of a resource to a friend (see ui.myDonations). */
@@ -37,7 +43,7 @@ export interface DonationOption {
   readonly amount: number;
   /** Seconds left on the cooldown (0 = ready). */
   readonly secondsLeft: number;
-  readonly blocked: "cooldown" | "theyAreFull" | "nothing" | null;
+  readonly blocked: "cooldown" | "theyAreFull" | "notBordering" | "nothing" | null;
 }
 
 export interface DonationContext {
@@ -62,6 +68,10 @@ export function donationOptions(
     const ticksLeft = last === undefined ? 0 : Math.max(0, last + cooldown - ctx.tick);
     const secondsLeft = (ticksLeft * ctx.rules.tickMs) / 1000;
     if (ticksLeft > 0) return { resource, amount: 0, secondsLeft, blocked: "cooldown" };
+    // D-023: troops only reach a friend over a shared border (airlifts come later, 2B.1).
+    if (resource === "troops" && !(me.neighbors ?? []).includes(friend.id)) {
+      return { resource, amount: 0, secondsLeft: 0, blocked: "notBordering" };
+    }
     if (resource === "troops" && troopRoom(friend) < 1) {
       return { resource, amount: 0, secondsLeft: 0, blocked: "theyAreFull" };
     }

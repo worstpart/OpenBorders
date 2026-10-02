@@ -9,6 +9,10 @@ import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
+import type { BuildingType } from "../../sim/rules.ts";
+import { placementProblem } from "../../sim/systems/buildings.ts";
+import { BuildingLayer } from "../render/buildings.ts";
+import { buildingAtPoint } from "./buildings.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
 import {
@@ -45,6 +49,10 @@ const LOCAL_PLAYER_ID = 1;
 const LABEL_REFRESH_MS = 250;
 /** The gold capture effect (GAME_DESIGN.md §3.16) lasts this long, in real time. */
 const LOOT_FX_MS = 2_400;
+/** Building icons (render/buildings.ts): CSS px per pixel-per-tile of zoom, and bounds. */
+const ICON_PX_PER_ZOOM = 7;
+const ICON_MIN_PX = 13;
+const ICON_MAX_PX = 30;
 
 /** A capture whose gold is pouring into the capturer (border shimmer + floating number). */
 interface LootEffect {
@@ -65,6 +73,7 @@ export interface ClientElements {
 export class GameClient {
   private readonly renderer: MapRenderer;
   private readonly labels: LabelLayer;
+  private readonly buildingLayer: BuildingLayer;
   private readonly camera = new Camera();
   private readonly perf: PerfOverlay;
   private readonly controls: Controls;
@@ -90,6 +99,7 @@ export class GameClient {
     this.mapCanvas = elements.mapCanvas;
     this.renderer = new MapRenderer(elements.mapCanvas);
     this.labels = new LabelLayer(elements.labelCanvas, elements.fontFamily);
+    this.buildingLayer = new BuildingLayer(elements.labelCanvas);
     this.perf = new PerfOverlay(elements.overlayParent);
     this.controls = new Controls(elements.mapCanvas, {
       primaryClick: (at) => this.primaryClick(at),
@@ -115,6 +125,8 @@ export class GameClient {
         : generateContinent({ seed: MAP_SEED, width, height });
     this.map = map;
     this.owner = new Uint16Array(map.width * map.height);
+    ui.map = map;
+    ui.owner = this.owner;
     this.renderer.setMap(map, this.owner);
     this.renderer.setPlayerColors(["#000000"]);
     this.camera.setMap(map.width, map.height);
@@ -166,6 +178,8 @@ export class GameClient {
     const initial = await host.start({ seed: Math.floor(random() * 2 ** 32), map, players });
 
     this.owner = initial.owner.slice();
+    ui.map = initial.map;
+    ui.owner = this.owner;
     this.renderer.setMap(initial.map, this.owner);
     this.renderer.setPlayerColors(colors);
     this.renderer.setLocalOwner(initial.localPlayerId);
@@ -230,6 +244,19 @@ export class GameClient {
   /** Gives a friend `percent`% of our home troops or gold. */
   donate(to: number, resource: DonationResource, percent: number): void {
     this.host?.send({ type: "donate", to, resource, percentBp: Math.round(percent * 100) });
+  }
+
+  /** Builds a level-I building of this type on one of our tiles (GAME_DESIGN.md §3.17). */
+  build(type: BuildingType, tile: number): void {
+    this.host?.send({ type: "build", buildingType: type, tile });
+  }
+
+  upgrade(buildingId: number): void {
+    this.host?.send({ type: "upgrade", buildingId });
+  }
+
+  cancelBuild(buildingId: number): void {
+    this.host?.send({ type: "cancelBuild", buildingId });
   }
 
   retreat(attackId: number): void {
@@ -312,6 +339,7 @@ export class GameClient {
     this.latestFrame = null;
     if (this.map) {
       this.owner = new Uint16Array(this.map.width * this.map.height);
+      ui.owner = this.owner;
       this.renderer.setMap(this.map, this.owner);
     }
     this.renderer.setAttacks([], 0);
@@ -368,6 +396,8 @@ export class GameClient {
         ui.myDonations = sent;
       } else if (event.type === "mobilized" && event.playerId === me) {
         this.hints.complete("gold");
+      } else if (event.type === "buildingStarted" && event.playerId === me) {
+        this.hints.complete("build");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
       }
@@ -445,6 +475,12 @@ export class GameClient {
     ui.attacks = frame.attacks;
     ui.alliances = frame.alliances;
     ui.allianceRequests = frame.allianceRequests;
+    ui.buildings = frame.buildings;
+    // A building card whose building is gone closes.
+    const menu = ui.menu;
+    if (menu?.kind === "building" && !frame.buildings.some((b) => b.id === menu.id)) {
+      ui.menu = null;
+    }
     const peaks = new Map<number, number>();
     for (const attack of frame.attacks) {
       peaks.set(attack.id, Math.max(attack.troops, ui.attackPeak.get(attack.id) ?? 0));
@@ -531,6 +567,12 @@ export class GameClient {
       this.host.send({ type: "spawn", tile: index });
       return;
     }
+    // A click on a building icon opens its card instead of attacking (GAME_DESIGN.md §3.17).
+    const hit = this.buildingUnder(at);
+    if (hit !== null) {
+      ui.menu = { kind: "building", x: at.x, y: at.y, id: hit };
+      return;
+    }
     this.attackTile(index, ui.attackPercent);
   }
 
@@ -543,6 +585,34 @@ export class GameClient {
     if (!isLand(map, index)) return;
     ui.menu = { kind: "context", x: at.x, y: at.y, tile: index, owner: this.owner[index]! };
     this.hints.complete("menus");
+  }
+
+  /** The building whose icon is under this screen point (as drawn now), or null. */
+  private buildingUnder(at: ScreenPoint): number | null {
+    const map = this.map;
+    if (!map) return null;
+    const zoom = this.camera.zoom;
+    const natural = zoom * ICON_PX_PER_ZOOM;
+    const size = Math.min(ICON_MAX_PX, Math.max(ICON_MIN_PX, natural));
+    const point = this.camera.screenToWorld(at);
+    const visible =
+      natural >= ICON_MIN_PX
+        ? ui.buildings
+        : ui.buildings.filter((b) => b.owner === ui.localPlayerId || b.level >= 3);
+    const hit = buildingAtPoint(visible, map.width, point.x, point.y, (size * 0.6) / zoom);
+    return hit?.id ?? null;
+  }
+
+  /** B: the build options for our land under the cursor (the right-click menu). */
+  private openBuildMenu(): void {
+    const map = this.map;
+    const point = this.hoverPoint;
+    if (!map || !point || ui.screen !== "game" || ui.phase !== "playing" || ui.menu) return;
+    const tile = this.camera.tileAt(point);
+    if (!tile) return;
+    const index = tileAt(map, tile.x, tile.y);
+    if (this.owner[index] !== ui.localPlayerId) return;
+    ui.menu = { kind: "context", x: point.x, y: point.y, tile: index, owner: ui.localPlayerId };
   }
 
   private key(action: KeyAction): void {
@@ -581,6 +651,9 @@ export class GameClient {
       case "mobilize":
         this.mobilize();
         break;
+      case "build":
+        this.openBuildMenu();
+        break;
       case "diplomacyYes":
       case "diplomacyNo":
         if (ui.screen === "game") this.answerTopCard(action === "diplomacyYes");
@@ -611,10 +684,23 @@ export class GameClient {
     this.updateHint();
     this.refreshLabels(startedAt);
     this.renderer.setPlayerFlags(this.animatedFlags(startedAt));
-    this.renderer.render(view, this.currentTick(), time / 1000);
+    const tick = this.currentTick();
+    this.renderer.render(view, tick, time / 1000);
     const frame = this.latestFrame;
     const players = frame?.players ?? [];
     const friends = ui.friends;
+    this.labels.clear();
+    if (this.map && ui.screen === "game") {
+      this.buildingLayer.draw(view, {
+        buildings: ui.buildings,
+        width: this.map.width,
+        tick,
+        localPlayerId: ui.localPlayerId,
+        colorOf: (id) => ui.colorOf(id),
+        selectedId: ui.menu?.kind === "building" ? ui.menu.id : null,
+        ghost: this.buildGhost(),
+      });
+    }
     this.labels.draw(
       view,
       this.placements,
@@ -633,6 +719,23 @@ export class GameClient {
 
     this.perf.recordFrame(performance.now() - startedAt, this.renderer.lastUploadMs);
     requestAnimationFrame((next) => this.animationFrame(next));
+  }
+
+  /** While the right-click menu is open on our land: where a building would go. */
+  private buildGhost(): { tile: number; ok: boolean; radius: number } | null {
+    const menu = ui.menu;
+    const map = this.map;
+    if (menu?.kind !== "context" || menu.owner !== ui.localPlayerId || !map) return null;
+    if (!DEFAULT_RULES.buildings.enabled || !DEFAULT_RULES.economy.enabled) return null;
+    const problem = placementProblem(
+      DEFAULT_RULES,
+      map,
+      this.owner,
+      ui.buildings,
+      ui.localPlayerId,
+      menu.tile,
+    );
+    return { tile: menu.tile, ok: problem === null, radius: DEFAULT_RULES.buildings.minSpacing };
   }
 
   /** The current tick plus how far we are toward the next one (for smooth animations). */
@@ -676,8 +779,13 @@ export class GameClient {
       protectionSecondsLeft(ui.previewContext) === 0 &&
       !!me?.neighbors?.some((id) => id !== 0);
     const canMobilize = playing && !!me && mobilizePreview(DEFAULT_RULES, me).blocked === null;
+    const canBuild =
+      playing &&
+      !!me &&
+      DEFAULT_RULES.buildings.enabled &&
+      me.gold >= DEFAULT_RULES.buildings.types.housing.levels[0].cost;
     const hint = this.hints.update(
-      { playing, canAttackPlayer, canMobilize },
+      { playing, canAttackPlayer, canMobilize, canBuild },
       performance.now() / 1000,
     );
     if (hint !== ui.hint) ui.hint = hint;

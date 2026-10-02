@@ -2,6 +2,7 @@
   /** What the UI may ask the game to do (it never changes game state itself). */
   import type { HintId } from "../app/hints.ts";
   import type { MapSize } from "../app/setup.ts";
+  import type { BuildingType } from "../../sim/rules.ts";
 
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
@@ -25,6 +26,10 @@
     /** Gold (GAME_DESIGN.md §3.16): buy troops; give a friend troops or gold. */
     mobilize: () => void;
     donate: (to: number, resource: "troops" | "gold", percent: number) => void;
+    /** Buildings (GAME_DESIGN.md §3.17). */
+    build: (type: BuildingType, tile: number) => void;
+    upgrade: (buildingId: number) => void;
+    cancelBuild: (buildingId: number) => void;
     pause: () => void;
     closeMenu: () => void;
     setSpeed: (multiplier: number) => void;
@@ -39,6 +44,7 @@
   import CommandBar from "./hud/CommandBar.svelte";
   import DiplomacyCards from "./hud/DiplomacyCards.svelte";
   import ContextMenu from "./hud/ContextMenu.svelte";
+  import BuildingCard from "./hud/BuildingCard.svelte";
   import HintCard from "./hud/HintCard.svelte";
   import HoverCard from "./hud/HoverCard.svelte";
   import Leaderboard from "./hud/Leaderboard.svelte";
@@ -92,6 +98,12 @@
     onRenewAlliance={actions.renewAlliance}
     onBreakAlliance={actions.breakAlliance}
     onDonate={actions.donate}
+    onBuild={actions.build}
+    onClose={actions.closeMenu}
+  />
+  <BuildingCard
+    onUpgrade={actions.upgrade}
+    onCancel={actions.cancelBuild}
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />

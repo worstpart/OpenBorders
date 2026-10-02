@@ -210,6 +210,12 @@ export class LabelLayer {
     }
   }
 
+  /** Clears the overlay; call once per animation frame before anything draws on it. */
+  clear(): void {
+    this.context.setTransform(1, 0, 0, 1, 0, 0);
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
   draw(
     view: MapView,
     placements: ReadonlyMap<number, LabelPlacement>,
@@ -217,8 +223,6 @@ export class LabelLayer {
   ): void {
     const ctx = this.context;
     const ratio = window.devicePixelRatio || 1;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

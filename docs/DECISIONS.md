@@ -27,7 +27,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-019 | Teams: fixed sides that win on combined land; alliances unchanged across teams; tribes teamless | **Accepted** 2026-10-02 (user) |
 | D-020 | Economy: land-linked gold, Mobilize, gifts (troops too), full loot | **Accepted** 2026-10-02 |
 | D-021 | Building system: 7 buildings × 3 named levels incl. SAM, Silo, Airport; air phase (2B) before multiplayer, bots first | **Accepted** 2026-10-02 (user's answers) |
-| D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Proposed** 2026-10-02 |
+| D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Accepted** 2026-10-02 (user: "go") |
 | D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts only over a shared border or by airlift | **Accepted** 2026-10-02 (user) |
 
 ---
@@ -356,7 +356,7 @@ multiplayer's risks would be found earlier; the user preferred the full solo gam
 
 ---
 
-## D-022 — Border Defense as fortification zones drawn on the border · Proposed 2026-10-02
+## D-022 — Border Defense as fortification zones drawn on the border · Accepted 2026-10-02
 
 **Context.** The user wants defense to fortify *borders* visibly instead of being a dot
 inside the territory, and asked how it should behave when borders move, territory changes

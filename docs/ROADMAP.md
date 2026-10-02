@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), Border Defense, naval, more maps | 🟡 2.0–2.4 ✅ · next 2.5 |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), Border Defense, naval, more maps | 🟡 2.0–2.5 ✅ · next 2.6 |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -158,7 +158,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.2 ✅ | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 ✅ | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 ✅ | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | Gold earned, mobilized, given and looted in the browser; games no longer than before |
-| 2.5 | **Building framework + Housing & Factory (levels I–III)** *(PLANNED)* — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
+| 2.5 ✅ | **Building framework + Housing & Factory (levels I–III)** — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
 | 2.6 | **Border Defense I–III** *(PLANNED)* — fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
 | 2.7 | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 | **More maps** *(was 2.7)* — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps; `WorkerHost`; re-check building spacing and range values on bigger maps | |
@@ -313,6 +313,26 @@ teammates and human allies (two allied nations propping each other up stalled wa
 11.6–12.1 min. Browser: gold row, Mobilize (button and M, capped at the cap), *Send gold* /
 *Send troops* to a teammate with cooldowns, toasts, full loot of a tribe with the gold
 border and "+1.4K" on the map; clean console.
+
+**Milestone 2.5 result (2026-10-02)** — building framework, Housing and Factory with levels
+I–III (GAME_DESIGN §3.17, "As built"); troop gifts only over a shared border (D-023).
+Headless `--no-buildings` and per-game building stats.
+
+| Headless games | Median (longest) | 2.4 | First L1 / L2 / L3 finished (games with an L3) | Builds / upgrades / captured per game | Wins | Tick avg / worst p99 |
+|---|---|---|---|---|---|---|
+| 8 nations, `--no-buildings` (100) | 7.1 min (14.5) — identical to 2.4 | 7.1 | — | — | turtle 34 · opp 25 · exp 21 · agg 20 (= 2.4) | 0.73 / 6.7 ms |
+| 8 nations (100) | **7.5 min** (25) | 7.1 | 1:12 / 2:24 / 5:52 (69) | 15.3 / 15.5 / 5.8 | turtle 39 · opp 23 · agg 21 · exp 17 | 0.74 / 7.5 ms |
+| 10 nations + 100 tribes, Medium (50) | **13.3 min** (19.5) | 11.8 | 1:16 / 2:56 / 5:13 (50) | 28.8 / 30.3 / 12.9 | turtle 19 · exp 16 · opp 13 · agg 2 | 0.91 / 6.9 ms |
+
+No errors; every game has a winner; the buildings step costs ~0.01 ms per tick. Leader at
+minute 3 wins 33% (8 nations) and 20% (tribe lobbies). Buildings lengthen games a little —
+accepted by the user (longer games are fine). Turtles win 19 of 50 tribe lobbies (2.4: 24).
+**Watch:** aggressors win only 2 of 50 tribe lobbies — they save least and fight most.
+Browser: build menu (right-click own land / B) with prices and the spacing ring, a
+construction with its progress ring, the "Housing ready" toast and +30K capacity, the
+building card with the upgrade preview — clean console. The card's *Upgrade* and *Cancel*
+buttons were exercised by tests but not yet clicked in the browser (the user was using the
+pane): first thing to check in the 2.5 playtest.
 
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 

@@ -803,12 +803,12 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 
 | Building | Lvl | Build / upgrade cost (total) | Time | Benefit | New ability | Range | Capacity | Cooldown | Countered by | Looks like |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Housing | I | 40k (40k) | 5 s | +30k troop capacity | — | — | — | — | capture (−1 lvl), strike, missile | 3 small roofs, 1 pip |
-| Housing | II Developed Housing | +100k (140k) | 10 s | +80k capacity | +5% troop growth (all Housing together max +20%) | — | — | — | same | town block with a square, 2 pips |
-| Housing | III Metropolis | +250k (390k) | 20 s | +180k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | skyline with a tower, soft night glow, 3 pips |
-| Factory | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | shed + chimney |
-| Factory | II Industrial Complex | +150k (210k) | 10 s | +80 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | two halls, smoke puffs |
-| Factory | III Mega Industrial Complex | +350k (560k) | 20 s | +160 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B) | 60 | — | — | same — a prime target | large plant, 3 chimneys |
+| Housing ✅ | I | 40k (40k) | 5 s | +30k troop capacity | — | — | — | — | capture (−1 lvl), strike, missile | one house, 1 pip |
+| Housing ✅ | II Developed Housing | +90k (130k) | 10 s | +90k capacity | +5% troop growth (all buildings together max +20%) | — | — | — | same | two houses, 2 pips |
+| Housing ✅ | III Metropolis | +220k (350k) | 20 s | +250k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | a tower between houses, 3 pips |
+| Factory ✅ | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | hall + one chimney |
+| Factory ✅ | II Industrial Complex | +120k (180k) | 10 s | +90 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | hall + two chimneys |
+| Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B — not built yet) | 60 | — | — | same — a prime target | hall + three chimneys |
 | Port | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
 | Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (Border Defense II zone along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
@@ -830,6 +830,23 @@ detail and **1–3 level pips** under it; the tier reads without clicking. Const
 the icon fills in from the bottom with a thin progress ring; upgrade: a brief scaffold
 outline, then a soft pulse as the new icon and (if any) the larger range ring appear.
 Icons fade out when zoomed far out, except your own and level-III buildings.
+
+**As built in milestone 2.5 (Housing, Factory — rows marked ✅).** The first measurement
+showed nations never upgrading: level I gave the most per gold. Re-priced so every level
+step returns about as much per gold as the one below (Housing step II +60k capacity for
+90k, step III +160k for 220k; Factory each step pays back in ~3.5 min), plus its new
+ability. Other details decided while building: buildings are placed from the right-click
+menu (or **B**) at the clicked tile, with a dashed ring showing the 8-tile spacing (green /
+red) instead of a ghost that follows the mouse; a building captured by a **tribe** is
+destroyed (tribes never keep buildings, like OpenFront's); the growth cap (+20%) counts all
+buildings; troop gifts need a shared border (D-023). **Nation AI:** a nation weighs every
+option — a new Housing or Factory (one building per 4,000 tiles) and the next level of each
+building — by value per gold (capacity 1 per troop, growth bonus over 1 min of peak growth,
+gold over 2.5 min of income, Mobilize discount over the gold it earns in that time), aims
+at the best one it can afford within 2 min of income, keeps part of that price out of its
+war chest while saving (turtles 100%, expanders 80%, opportunists 60%, aggressors 40%),
+and builds once it can pay — in peacetime, one construction at a time, deep inside its
+land. Results: ROADMAP milestone 2.5.
 
 #### 3.17.11 Counters at a glance
 

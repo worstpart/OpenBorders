@@ -6,7 +6,9 @@
 import type { SimEvent } from "../../sim/events.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
 import type { PlayerId } from "../../sim/world.ts";
+import { levelRules } from "../../sim/systems/buildings.ts";
 import { formatTroops } from "../format.ts";
+import { effectLines } from "./buildings.ts";
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -214,6 +216,53 @@ export function toastsForEvents(
         }
         break;
       }
+      case "buildingCompleted":
+        if (event.playerId === me) {
+          const effects = effectLines(DEFAULT_RULES, event.buildingType, event.level);
+          toasts.push({
+            text:
+              `${levelRules(DEFAULT_RULES, event.buildingType, event.level).name} ready` +
+              (effects.length > 0 ? ` — ${effects.join(", ")}` : ""),
+            tone: "success",
+          });
+        }
+        break;
+      case "buildingCaptured": {
+        const name = levelRules(DEFAULT_RULES, event.buildingType, event.level).name;
+        if (event.from === me) {
+          toasts.push({
+            text: `${nameOf(event.to)} captured your building — it's now their ${name}`,
+            tone: "danger",
+            player: event.to,
+          });
+        } else if (event.to === me) {
+          toasts.push({
+            text: `You captured ${nameOf(event.from)}'s building: ${name}`,
+            tone: "success",
+            player: event.from,
+          });
+        }
+        break;
+      }
+      case "buildingDestroyed":
+        if (event.reason !== "captured") break;
+        if (event.playerId === me) {
+          toasts.push({
+            text:
+              event.by !== null
+                ? `${nameOf(event.by)} destroyed your ${levelRules(DEFAULT_RULES, event.buildingType, 1).name}`
+                : `Your ${levelRules(DEFAULT_RULES, event.buildingType, 1).name} was destroyed`,
+            tone: "danger",
+            player: event.by ?? undefined,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `You destroyed ${nameOf(event.playerId)}'s ${levelRules(DEFAULT_RULES, event.buildingType, 1).name}`,
+            tone: "success",
+            player: event.playerId,
+          });
+        }
+        break;
       case "phaseChanged":
         if (event.phase === "playing") {
           toasts.push({ text: "The match has started — expand!", tone: "info" });

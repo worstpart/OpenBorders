@@ -42,6 +42,14 @@ function player(id: number, overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
 }
 
 describe("Mobilize button", () => {
+  it("counts a Factory's discount", () => {
+    expect(mobilizePreview(DEFAULT_RULES, player(1, { mobilizeDiscount: 0.2 }))).toEqual({
+      troops: 10_000,
+      gold: 8_000,
+      blocked: null,
+    });
+  });
+
   it("buys 10% of the capacity for as much gold", () => {
     expect(mobilizePreview(DEFAULT_RULES, player(1))).toEqual({
       troops: 10_000,
@@ -62,7 +70,7 @@ describe("donation options", () => {
   const ctx = (overrides: Partial<DonationContext> = {}): DonationContext => ({
     rules: DEFAULT_RULES,
     tick: 1_000,
-    me: player(1),
+    me: player(1, { neighbors: [0, 2] }),
     myDonations: new Map(),
     ...overrides,
   });
@@ -76,7 +84,7 @@ describe("donation options", () => {
   it("show the cooldown, a full friend, and nothing to send", () => {
     const recent = new Map([[donationKeyOf(2, "gold"), 960]]);
     const [troops, gold] = donationOptions(
-      ctx({ myDonations: recent, me: player(1, { homeTroops: 0 }) }),
+      ctx({ myDonations: recent, me: player(1, { homeTroops: 0, neighbors: [2] }) }),
       player(2),
       25,
     );
@@ -84,6 +92,16 @@ describe("donation options", () => {
     expect(gold).toMatchObject({ blocked: "cooldown", secondsLeft: 6 });
     const [toFull] = donationOptions(ctx(), player(2, { homeTroops: 100_000 }), 25);
     expect(toFull!.blocked).toBe("theyAreFull");
+  });
+
+  it("send troops only to a friend we border; gold anywhere (D-023)", () => {
+    const [troops, gold] = donationOptions(
+      ctx({ me: player(1, { neighbors: [0, 3] }) }),
+      player(2),
+      25,
+    );
+    expect(troops!.blocked).toBe("notBordering");
+    expect(gold!.blocked).toBeNull();
   });
 
   it("send only the troops that fit under the friend's cap", () => {

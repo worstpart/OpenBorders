@@ -7,8 +7,11 @@ import type {
   AllianceRequestSnapshot,
   AllianceSnapshot,
   AttackSnapshot,
+  BuildingSnapshot,
   PlayerSnapshot,
 } from "../../sim/frame.ts";
+import type { GameMap } from "../../sim/map/gameMap.ts";
+import type { BuildContext } from "./buildings.ts";
 import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
 import type { DonationContext } from "./economy.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
@@ -36,6 +39,13 @@ export type Menu =
       readonly y: number;
       readonly tile: number;
       readonly owner: PlayerId;
+    }
+  | {
+      /** A building's card (GAME_DESIGN.md §3.17): opened by clicking its icon. */
+      readonly kind: "building";
+      readonly x: number;
+      readonly y: number;
+      readonly id: number;
     };
 
 /** The land tile under the mouse (null: none, or the card is hidden). */
@@ -71,6 +81,13 @@ class UiState {
   attacks = $state.raw<readonly AttackSnapshot[]>([]);
   alliances = $state.raw<readonly AllianceSnapshot[]>([]);
   allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
+  buildings = $state.raw<readonly BuildingSnapshot[]>([]);
+  /**
+   * The map and the client's copy of tile ownership (not reactive: the HUD reads them when
+   * something reactive — the tick, the menu — changes).
+   */
+  map: GameMap | null = null;
+  owner: Uint16Array = new Uint16Array(0);
   /** Tick of the local player's last alliance request to each player (for the cooldown). */
   myRequests = $state.raw<ReadonlyMap<PlayerId, number>>(new Map());
   /** Tick of the local player's last donation to each friend, by donationKeyOf(to, resource). */
@@ -106,6 +123,7 @@ class UiState {
     this.attacks = [];
     this.alliances = [];
     this.allianceRequests = [];
+    this.buildings = [];
     this.myRequests = new Map();
     this.myDonations = new Map();
     this.dismissedRenewals = new Set();
@@ -158,6 +176,19 @@ class UiState {
   /** What the donation options need (GAME_DESIGN.md §3.16). */
   get donationContext(): DonationContext {
     return { rules: DEFAULT_RULES, tick: this.tick, me: this.me, myDonations: this.myDonations };
+  }
+
+  /** What the build menu and building cards need (GAME_DESIGN.md §3.17). */
+  get buildContext(): BuildContext {
+    return {
+      rules: DEFAULT_RULES,
+      map: this.map,
+      owner: this.owner,
+      buildings: this.buildings,
+      me: this.me,
+      tick: this.tick,
+      playing: this.phase === "playing",
+    };
   }
 
   /** The local player's allies. */

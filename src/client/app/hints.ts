@@ -4,7 +4,7 @@
  * that only explain). Finished hints are remembered across games in this browser.
  */
 
-export type HintId = "expand" | "sweetSpot" | "attack" | "menus" | "ally" | "gold";
+export type HintId = "expand" | "sweetSpot" | "attack" | "menus" | "ally" | "gold" | "build";
 
 export const HINT_TEXT: Record<HintId, string> = {
   expand: "Click neutral land next to your territory to expand into it.",
@@ -14,6 +14,8 @@ export const HINT_TEXT: Record<HintId, string> = {
     "You border another player. Hover their land to see your odds, then click it to attack. Bigger armies win cheaper and faster.",
   menus: "Right-click land for more options. Esc pauses the game.",
   gold: "Your land earns gold. Mobilize (M) turns it into troops at once — best right after an attack, to get back to the sweet spot.",
+  build:
+    "You can afford a building: right-click your land (or press B) to build Housing (more troops) or a Factory (more gold). Click a building to upgrade it.",
   ally: "Alliances: right-click a player (or press K over their land) to propose one. Allies can't attack each other; breaking an alliance makes you a traitor for 30 s.",
 };
 
@@ -27,6 +29,8 @@ export interface HintContext {
   readonly canAttackPlayer: boolean;
   /** The local player could mobilize right now (has gold and room under the cap). */
   readonly canMobilize?: boolean;
+  /** The local player has the gold for their cheapest building (GAME_DESIGN.md §3.17). */
+  readonly canBuild?: boolean;
 }
 
 export interface HintStore {
@@ -72,6 +76,7 @@ export class HintTracker {
     if (!this.done.has("sweetSpot")) return "sweetSpot";
     if (!this.done.has("menus")) return "menus";
     if (ctx.canMobilize && !this.done.has("gold")) return "gold";
+    if (ctx.canBuild && !this.done.has("build")) return "build";
     if (ctx.canAttackPlayer && !this.done.has("ally")) return "ally";
     return null;
   }
