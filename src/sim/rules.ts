@@ -107,6 +107,26 @@ export interface AttackRules {
   readonly retreatPenalty: number;
 }
 
+/** Encirclement (GAME_DESIGN.md §3.8): fully enclosed land falls to the encloser. */
+export interface EncirclementRules {
+  /** Each player is checked this often (staggered by player id). */
+  readonly intervalTicks: number;
+}
+
+/** Elimination (GAME_DESIGN.md §3.9). */
+export interface EliminationRules {
+  /** A player under attack below this many tiles is absorbed by the attacker... */
+  readonly absorbBelowTiles: number;
+  /** ...if they also hold at most this share of their peak territory (no spawn rushes). */
+  readonly absorbBelowPeakShare: number;
+}
+
+/** Victory (GAME_DESIGN.md §3.10). */
+export interface VictoryRules {
+  /** Share of all land that wins the game outright. */
+  readonly landShare: number;
+}
+
 export interface GameRules {
   /** Simulation tick length. 10 ticks per second (D-004). */
   readonly tickMs: number;
@@ -115,6 +135,9 @@ export interface GameRules {
   readonly expansion: ExpansionRules;
   readonly combat: CombatRules;
   readonly attack: AttackRules;
+  readonly encirclement: EncirclementRules;
+  readonly elimination: EliminationRules;
+  readonly victory: VictoryRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -179,6 +202,20 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     retreatTicks: 20,
     retreatPenalty: 0.2,
   },
+  encirclement: {
+    // Every 2 s: frequent enough to feel instant, cheap because it's staggered and
+    // skipped for players whose surroundings didn't change.
+    intervalTicks: 20,
+  },
+  elimination: {
+    // Small remnants are absorbed to avoid tedious mop-up — but only once a player has
+    // lost most of what they held: a fresh 49-tile start that loses 10 tiles keeps going.
+    absorbBelowTiles: 40,
+    absorbBelowPeakShare: 0.25,
+  },
+  victory: {
+    landShare: 0.7,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -188,6 +225,9 @@ export function makeRules(overrides: {
   expansion?: Partial<ExpansionRules>;
   combat?: Partial<CombatRules>;
   attack?: Partial<AttackRules>;
+  encirclement?: Partial<EncirclementRules>;
+  elimination?: Partial<EliminationRules>;
+  victory?: Partial<VictoryRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -196,6 +236,9 @@ export function makeRules(overrides: {
     expansion: { ...DEFAULT_RULES.expansion, ...overrides.expansion },
     combat: { ...DEFAULT_RULES.combat, ...overrides.combat },
     attack: { ...DEFAULT_RULES.attack, ...overrides.attack },
+    encirclement: { ...DEFAULT_RULES.encirclement, ...overrides.encirclement },
+    elimination: { ...DEFAULT_RULES.elimination, ...overrides.elimination },
+    victory: { ...DEFAULT_RULES.victory, ...overrides.victory },
   });
 }
 

@@ -9,6 +9,12 @@ export function formatTroops(value: number): string {
   return `${trim((value / 1_000_000).toFixed(2))}M`;
 }
 
+/** 247 seconds → "4:07". */
+export function formatClock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
 /** 0.1834 → "18.3%". */
 export function formatPercent(share: number): string {
   return `${(share * 100).toFixed(1)}%`;

@@ -7,10 +7,14 @@ import { runTick } from "../../../src/sim/tick.ts";
 import type { PlayerId, World } from "../../../src/sim/world.ts";
 import { ascii, ownersToAscii, worldFromAscii } from "../../helpers/asciiMap.ts";
 
-/** No randomness and no troop growth, so scenarios have exact, readable numbers. */
+/**
+ * No randomness and no troop growth, so scenarios have exact, readable numbers; no victory,
+ * so tiny maps don't end the game the moment someone holds 70% of them.
+ */
 const EXACT = makeRules({
   attack: { noiseTicks: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
+  victory: { landShare: 2 },
 });
 
 function tick(world: World, commands: { player: PlayerId; command: Command }[] = []): TickFrame {
@@ -131,6 +135,7 @@ describe("expanding into neutral land", () => {
         rules: makeRules({
           attack: { noiseTicks: 0, focusPull: 0 },
           troops: { growthFloor: 0, growthScale: 0 },
+          victory: { landShare: 2 },
         }),
         homeTroops: [troops],
       });

@@ -10,8 +10,11 @@ import {
   applyRetreatCommand,
   resolveCollisions,
 } from "./systems/attacks.ts";
+import { eliminate } from "./systems/elimination.ts";
+import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
 import { growTroops } from "./systems/troops.ts";
+import { checkVictory } from "./systems/victory.ts";
 import { getPlayer, type Player, type World } from "./world.ts";
 
 export function runTick(world: World, turn: Turn): TickFrame {
@@ -32,12 +35,15 @@ export function runTick(world: World, turn: Turn): TickFrame {
     resolveCollisions(world);
     // 3. Fronts advance; retreating armies come home.
     advanceAttacks(world);
-    // 4. eliminate                  — milestone 1.4
-    // 5. encircle                   — milestone 1.4
-    // 6. troops
+    // 4. Fully enclosed land falls to the encloser (staggered checks).
+    encircle(world);
+    // 5. Players with no land (or a collapsed remnant under attack) are out.
+    eliminate(world);
+    // 6. Troops regrow.
     growTroops(world);
     // 7. AI thinking                — milestone 1.5
-    // 8. victory check              — milestone 1.4
+    // 8. 70% of the land, or last one standing, wins.
+    checkVictory(world);
   }
 
   // 9. Report.

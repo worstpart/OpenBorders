@@ -40,6 +40,7 @@ npm install
 | 1 2 3 4 5 | Send 10 / 25 / 50 / 75 / 100% of your home troops per click |
 | Q / E, Shift + wheel | Send 5% less / more |
 | × on an attack chip | Retreat (troops return after 2 s, −20% against players) |
+| Play again (end card) | Back to the start screen for a new game |
 | Drag (any button) | Pan |
 | Mouse wheel | Zoom toward the cursor |
 | W A S D / arrows | Pan |

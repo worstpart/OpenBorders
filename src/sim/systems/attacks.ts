@@ -325,12 +325,15 @@ function isTargetLand(world: World, tile: number, target: PlayerId): boolean {
   return world.owner[tile] === target && isLand(world.map, tile);
 }
 
-type EndReason = "spent" | "complete" | "retreated" | "cancelled";
+type EndReason = "spent" | "complete" | "retreated" | "cancelled" | "eliminated";
 
-/** Ends an attack; survivors go home (minus the retreat penalty when retreating from a player). */
+/**
+ * Ends an attack; survivors go home (minus the retreat penalty when retreating from a
+ * player). An eliminated attacker's army is simply lost.
+ */
 function endAttack(world: World, attack: Attack, reason: EndReason): void {
   const attacker = getPlayer(world, attack.attacker)!;
-  let survivors = Math.max(0, attack.troops);
+  let survivors = reason === "eliminated" ? 0 : Math.max(0, attack.troops);
   if (reason === "retreated" && attack.target !== NEUTRAL) {
     survivors *= 1 - world.rules.attack.retreatPenalty;
   }
@@ -347,6 +350,52 @@ function endAttack(world: World, attack: Attack, reason: EndReason): void {
     reason,
     survivors,
   });
+}
+
+/**
+ * A player is out of the game: their own armies are lost, and armies attacking them come
+ * home (nothing is left to take).
+ */
+export function endAttacksInvolving(world: World, playerId: PlayerId): void {
+  for (const attack of world.attacks) {
+    if (attack.ended) continue;
+    if (attack.attacker === playerId) endAttack(world, attack, "eliminated");
+    else if (attack.target === playerId) endAttack(world, attack, "complete");
+  }
+  removeEnded(world);
+  updateFieldTroops(world);
+}
+
+/** The match is over: every army stops and its survivors go home. */
+export function endAllAttacks(world: World): void {
+  for (const attack of world.attacks) if (!attack.ended) endAttack(world, attack, "complete");
+  removeEnded(world);
+  updateFieldTroops(world);
+}
+
+/**
+ * The player with the biggest advancing army against `victim`, optionally only among
+ * `candidates`; null if nobody is attacking them. Ties go to the lower player id.
+ */
+export function primaryAttacker(
+  world: World,
+  victim: PlayerId,
+  candidates?: ReadonlyMap<PlayerId, number>,
+): PlayerId | null {
+  let best: PlayerId | null = null;
+  let bestTroops = 0;
+  for (const attack of world.attacks) {
+    if (attack.ended || attack.retreatTick >= 0 || attack.target !== victim) continue;
+    if (candidates && !candidates.has(attack.attacker)) continue;
+    if (
+      attack.troops > bestTroops ||
+      (attack.troops === bestTroops && best !== null && attack.attacker < best)
+    ) {
+      best = attack.attacker;
+      bestTroops = attack.troops;
+    }
+  }
+  return best;
 }
 
 function removeEnded(world: World): void {

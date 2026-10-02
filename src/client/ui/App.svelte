@@ -4,6 +4,7 @@
     play: (opponents: number) => void;
     confirmSpawn: () => void;
     retreat: (attackId: number) => void;
+    playAgain: () => void;
   }
 </script>
 
@@ -12,6 +13,7 @@
   import AttackChips from "./hud/AttackChips.svelte";
   import SpawnPrompt from "./hud/SpawnPrompt.svelte";
   import YouChip from "./hud/YouChip.svelte";
+  import EndCard from "./screens/EndCard.svelte";
   import StartScreen from "./screens/StartScreen.svelte";
 
   interface Props {
@@ -40,6 +42,7 @@
   <YouChip />
   <SpawnPrompt onConfirm={actions.confirmSpawn} />
   <AttackChips onRetreat={actions.retreat} />
+  <EndCard onPlayAgain={actions.playAgain} />
 {/if}
 
 <style>

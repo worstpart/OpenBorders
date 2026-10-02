@@ -19,6 +19,9 @@ export interface PlayerSnapshot {
   readonly fieldTroops: number;
   readonly capacity: number;
   readonly growthPerTick: number;
+  readonly peakTiles: number;
+  /** Tick the player was eliminated, or -1. */
+  readonly eliminatedTick: number;
 }
 
 export interface AttackSnapshot {
@@ -60,6 +63,8 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     fieldTroops: p.fieldTroops,
     capacity: p.capacity,
     growthPerTick: p.lastGrowth,
+    peakTiles: p.peakTiles,
+    eliminatedTick: p.eliminatedTick,
   }));
 }
 

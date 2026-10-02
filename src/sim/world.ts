@@ -43,6 +43,17 @@ export interface Player {
   capacity: number;
   /** Troops gained in the last tick (shown on the HUD). */
   lastGrowth: number;
+  /** Most tiles ever held (elimination rule, end-of-game stats). */
+  peakTiles: number;
+  /** Tick the player was eliminated, or -1. */
+  eliminatedTick: number;
+  /** The last player who took land from this one (0 = nobody yet). */
+  lastLostTo: PlayerId;
+  /**
+   * Ownership changed next to this player's land since the last encirclement check.
+   * Only skips work that would find nothing new, so it's not part of the game state.
+   */
+  encircleDirty: boolean;
 }
 
 export interface PlayerSetup {
@@ -79,6 +90,8 @@ export interface World {
   /** Scratch marks for de-duplicating tiles inside one operation (not game state). */
   readonly scratchMarks: Int32Array;
   scratchStamp: number;
+  /** Scratch queue for flood fills (not game state). */
+  readonly scratchQueue: Int32Array;
 
   // Per-tick output, cleared at the start of every tick (not part of the game state).
   readonly changes: TileChangeLog;
@@ -125,6 +138,10 @@ export function createWorld(setup: GameSetup): World {
     border: new Set<number>(),
     capacity: 0,
     lastGrowth: 0,
+    peakTiles: 0,
+    eliminatedTick: -1,
+    lastLostTo: 0,
+    encircleDirty: true,
   }));
   return {
     tick: 0,
@@ -141,6 +158,7 @@ export function createWorld(setup: GameSetup): World {
     nextAttackId: 1,
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),
     scratchStamp: 0,
+    scratchQueue: new Int32Array(setup.map.width * setup.map.height),
     changes: new TileChangeLog(),
     events: [],
   };
@@ -163,6 +181,7 @@ export function setOwner(world: World, tile: number, newOwner: PlayerId): void {
     const previous = world.players[oldOwner - 1]!;
     previous.tiles--;
     previous.border.delete(tile);
+    if (newOwner !== NEUTRAL) previous.lastLostTo = newOwner;
   }
   if (newOwner !== NEUTRAL) world.players[newOwner - 1]!.tiles++;
   world.ownerHash =
@@ -211,9 +230,11 @@ export function touchesOwner(world: World, tile: number, owner: PlayerId): boole
 function refreshBorder(world: World, tile: number): void {
   const owner = world.owner[tile]!;
   if (owner === NEUTRAL) return;
-  const border = world.players[owner - 1]!.border;
-  if (touchesOtherOwner(world, tile, owner)) border.add(tile);
-  else border.delete(tile);
+  const player = world.players[owner - 1]!;
+  // Something changed at or next to this player's tile: their land may now be enclosed.
+  player.encircleDirty = true;
+  if (touchesOtherOwner(world, tile, owner)) player.border.add(tile);
+  else player.border.delete(tile);
 }
 
 /** A fresh stamp for world.scratchMarks: tiles marked with it count as "seen" in one operation. */

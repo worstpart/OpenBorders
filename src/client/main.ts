@@ -38,6 +38,7 @@ mount(App, {
       play: (opponents) => client?.startGame(opponents).catch(reportFatal),
       confirmSpawn: () => client?.confirmSpawn(),
       retreat: (attackId) => client?.retreat(attackId),
+      playAgain: () => client?.backToStart(),
     },
   },
 });

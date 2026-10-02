@@ -24,6 +24,25 @@ class UiState {
   attacks = $state.raw<readonly AttackSnapshot[]>([]);
   /** Share of home troops a click sends (client-side choice; sent with each command). */
   attackPercent = $state(DEFAULT_ATTACK_PERCENT);
+  winner = $state<PlayerId | null>(null);
+  gameOverReason = $state<"landShare" | "lastStanding" | "noneLeft" | null>(null);
+  /** Who eliminated the local player (null: nobody / not eliminated). */
+  eliminatedBy = $state<PlayerId | null>(null);
+  /** The local player closed the "you were eliminated" card to keep watching. */
+  spectating = $state(false);
+
+  /** Back to a clean slate for a new game. */
+  reset(): void {
+    this.phase = "spawn";
+    this.tick = 0;
+    this.playStartTick = -1;
+    this.players = [];
+    this.attacks = [];
+    this.winner = null;
+    this.gameOverReason = null;
+    this.eliminatedBy = null;
+    this.spectating = false;
+  }
 
   get me(): PlayerSnapshot | undefined {
     return this.players[this.localPlayerId - 1];

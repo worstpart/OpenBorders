@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPercent, formatTroops } from "../../src/client/format.ts";
+import { formatClock, formatPercent, formatTroops } from "../../src/client/format.ts";
 
 describe("number formatting", () => {
   it("formats troop counts compactly", () => {
@@ -10,6 +10,12 @@ describe("number formatting", () => {
     expect(formatTroops(12_400)).toBe("12.4K");
     expect(formatTroops(20_330)).toBe("20.3K");
     expect(formatTroops(1_250_000)).toBe("1.25M");
+  });
+
+  it("formats match time as m:ss", () => {
+    expect(formatClock(0)).toBe("0:00");
+    expect(formatClock(247.9)).toBe("4:07");
+    expect(formatClock(3_600)).toBe("60:00");
   });
 
   it("formats shares as percentages", () => {

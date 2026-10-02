@@ -224,11 +224,25 @@ Every 2 s (staggered per player), any piece of a player's territory that is
 neutral land — is annexed instantly by the surrounding player (if several surround it,
 the one with the longest shared border, or the one actively attacking). Coasts are safe.
 
+**As built (milestone 1.4):**
+- A cut-off **pocket** (any piece except the player's largest) falls when enclosed, by
+  one player or several. With several enclosers, the one attacking this player with the
+  biggest army takes it, otherwise the one with the longest shared border.
+- The player's **main territory** only falls when a *single* player surrounds it.
+  Otherwise every inland player bordered by two neighbours would be wiped out at once.
+- Checks run every 2 s per player (staggered by id) and are skipped when nothing changed
+  next to the player's land since the last check.
+
 ### 3.9 Elimination
 
 - A player with **0 tiles** is eliminated.
-- When an attacked player falls below **40 tiles**, their remaining land is absorbed by
-  the attacker and adjacent enemies (avoids tedious mop-up).
+- When an attacked player falls below **40 tiles** *and* holds at most **25% of the most
+  land they ever held**, their remaining land is absorbed by their biggest attacker
+  (avoids tedious mop-up). The peak-share condition (added in milestone 1.4) stops spawn
+  rushes: a fresh 49-tile start that loses 10 tiles keeps going instead of handing its
+  whole army over.
+- An eliminated player's own armies are lost; armies attacking them come home. When the
+  match ends, every army comes home.
 - Eliminations are visible moments: toast, map pulse, name greys out on the
   leaderboard.
 

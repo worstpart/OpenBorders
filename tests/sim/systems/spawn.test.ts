@@ -251,10 +251,12 @@ describe("the spawn phase", () => {
       { players: ["bot", "bot", "bot", "bot"], phase: "spawn" },
     );
     const frame = step(world);
-    // The first bot's disc takes all 3 land tiles; the others have nowhere to go.
+    // The first bot's disc takes all 3 land tiles; the others have nowhere to go —
+    // which also makes it the last player standing.
     expect(frame.players.reduce((sum, p) => sum + p.tiles, 0)).toBe(3);
     for (const player of frame.players) expect(player.alive).toBe(player.tiles > 0);
-    expect(frame.phase).toBe("playing");
+    expect(frame.phase).toBe("ended");
+    expect(frame.winner).toBe(frame.players.find((p) => p.tiles > 0)!.id);
   });
 
   it("protects players from attacks for the first 5 seconds of the match", () => {

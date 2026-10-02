@@ -104,6 +104,7 @@ export class GameClient {
     this.renderer.setLocalOwner(initial.localPlayerId);
     this.placements.clear();
     this.latestFrame = initial.frame;
+    ui.reset();
     ui.colors = colors;
     ui.localPlayerId = initial.localPlayerId;
     this.publish(initial.frame);
@@ -131,6 +132,22 @@ export class GameClient {
     this.host?.send({ type: "retreat", attackId });
   }
 
+  /** Ends the current game and returns to the start screen (the map stays). */
+  backToStart(): void {
+    this.host?.dispose();
+    this.host = null;
+    this.latestFrame = null;
+    if (this.map) {
+      this.owner = new Uint16Array(this.map.width * this.map.height);
+      this.renderer.setMap(this.map, this.owner);
+    }
+    this.renderer.setAttacks([], 0);
+    this.renderer.setHoverOwner(0);
+    this.placements.clear();
+    ui.reset();
+    ui.screen = "start";
+  }
+
   confirmSpawn(): void {
     const me = ui.me;
     if (ui.screen === "game" && ui.phase === "spawn" && me?.spawned && !me.ready) {
@@ -151,6 +168,11 @@ export class GameClient {
     for (const event of frame.events) {
       if (event.type === "commandRejected" && event.playerId === ui.localPlayerId) {
         console.info(`Command "${event.command}" rejected: ${event.reason}`);
+      } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
+        ui.eliminatedBy = event.by;
+      } else if (event.type === "gameOver") {
+        ui.winner = event.winner;
+        ui.gameOverReason = event.reason;
       }
     }
     this.publish(frame);

@@ -28,11 +28,30 @@ export type SimEvent =
       readonly target: PlayerId;
       /**
        * spent: out of troops · complete: nothing left to take · retreated: came home
-       * after a retreat · cancelled: destroyed by the target's opposing attack.
+       * after a retreat · cancelled: destroyed by the target's opposing attack ·
+       * eliminated: the attacker was eliminated and the army is lost.
        */
-      readonly reason: "spent" | "complete" | "retreated" | "cancelled";
+      readonly reason: "spent" | "complete" | "retreated" | "cancelled" | "eliminated";
       /** Troops that made it home. */
       readonly survivors: number;
+    }
+  | {
+      /** A fully enclosed piece of `playerId`'s land fell to `by`. */
+      readonly type: "encircled";
+      readonly playerId: PlayerId;
+      readonly by: PlayerId;
+      readonly tiles: number;
+    }
+  | {
+      readonly type: "eliminated";
+      readonly playerId: PlayerId;
+      /** Who finished them (the biggest attacker at the time), if anyone. */
+      readonly by: PlayerId | null;
+    }
+  | {
+      readonly type: "gameOver";
+      readonly winner: PlayerId | null;
+      readonly reason: "landShare" | "lastStanding" | "noneLeft";
     }
   | {
       readonly type: "commandRejected";

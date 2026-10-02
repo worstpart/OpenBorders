@@ -221,8 +221,9 @@ interface World {
 1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat)
 2. resolveCollisions opposing attacks cancel; same-target attacks merge
 3. advanceAttacks    each attack conquers tiles until its per-tick budget is spent
-4. eliminate         players below the threshold are absorbed; 0 tiles → dead
-5. encircle          staggered: annex fully enclosed pockets
+4. encircle          staggered: annex fully enclosed pockets
+5. eliminate         players below the threshold are absorbed; 0 tiles → dead
+                     (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
 7. thinkAI           bots emit commands for the NEXT tick (same validation path)
 8. checkVictory
@@ -273,6 +274,11 @@ network traffic and behave identically on every machine.
 - `setOwner` also maintains each player's **border set** (owned tiles touching a
   different owner); attacks seed their fronts from it. A test checks it against a full
   recomputation.
+- Encirclement flood-fills a player's pieces from their border tiles (every piece has
+  one) using shared scratch arrays; a per-player "something changed next to my land" flag
+  skips checks that would find nothing. Measured on the reference map over a full game
+  (scripted player, 7 idle bots): tick **0.20 ms avg, 3.4 ms p99, 6 ms max** — the spikes
+  are floods of a ~300k-tile territory.
 - Troop amounts are plain numbers (not integers) computed only with + − × ÷ and
   `Math.sqrt`, all exactly rounded by IEEE 754 → still bit-identical everywhere.
 

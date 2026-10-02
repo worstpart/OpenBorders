@@ -40,7 +40,10 @@ export function hashWorld(world: World): number {
       .addNumber(p.homeTroops)
       .addNumber(p.fieldTroops)
       .addInt(p.tiles)
-      .addNumber(p.capacity);
+      .addNumber(p.capacity)
+      .addInt(p.peakTiles)
+      .addInt(p.eliminatedTick)
+      .addInt(p.lastLostTo);
   }
   h.addInt(world.nextAttackId).addInt(world.attacks.length);
   for (const a of world.attacks) {
