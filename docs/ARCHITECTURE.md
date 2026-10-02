@@ -67,9 +67,11 @@
 | Server (Phase 3) | **Node 24 LTS + `ws`** | Runs the identical simulation; minimal moving parts | Bun/Deno (fine; Node is most mature), uWebSockets.js (later, for scale), Colyseus (room framework with its own state-sync model we don't want) |
 | Formatting | **Prettier**, TypeScript strict mode | Low ceremony; ESLint added only if we need custom rules | Biome |
 
-**Runtime requirement: Node 24 LTS.** The machine currently has Node **16.13.0**
-(end-of-life). Current Vite, Vitest and Svelte tooling require Node 20+. See
-`DECISIONS.md` D-013.
+**Runtime requirement: Node 24 LTS** (installed 24.19.0; see `DECISIONS.md` D-013).
+
+**Tool versions (milestone 1.0):** Vite 8, Vitest 5, Svelte 5.57, svelte-check 4,
+Prettier 3. TypeScript is pinned to **6.0.x** because `svelte-check` does not yet support
+TypeScript 7 (the new native compiler); revisit when it does.
 
 ---
 

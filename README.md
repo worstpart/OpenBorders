@@ -6,13 +6,43 @@ your neighbors, fight or ally, and control the map.
 > *Easy to understand in 30 seconds, difficult to master.*
 
 Inspired by the mechanics of [OpenFront](https://openfront.io/) but built as an
-independent implementation (pending decision D-001) with its own code, design and
+independent implementation (decision D-001) with its own code, design and
 presentation. Not affiliated with OpenFront.
 
 ## Status
 
-**Phase 0 — Research: complete.** Next: Phase 1 (playable prototype). See the
-latest handoff in `docs/handoffs/`.
+**Phase 1 — Playable prototype: in progress** (milestone progress in
+[docs/ROADMAP.md](docs/ROADMAP.md)). Phase 0 (research) is complete. A new working
+session starts by reading the latest handoff in `docs/handoffs/`.
+
+## Running it
+
+Requires **Node.js 24 LTS** and a browser with WebGL2 (all current desktop browsers).
+
+```bash
+npm install
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Starts the game at <http://localhost:5173> with instant reload |
+| `npm test` | Runs all tests once (`npm run test:watch` to re-run on save) |
+| `npm run check` | Type-checks TypeScript and Svelte files |
+| `npm run build` | Production build into `dist/` (`npm run preview` serves it) |
+| `npm run format` | Formats code with Prettier (Markdown is left as written) |
+
+## Code layout
+
+| Folder | What lives there |
+|---|---|
+| `src/sim/` | The deterministic game simulation: rules, map, systems, AI. No DOM, no packages, no randomness except the seeded RNG — enforced by tests |
+| `src/host/` | Runs the simulation and schedules command turns (`LocalHost` in Phase 1) |
+| `src/client/` | The browser game: `app/` (screens, session), `input/`, `camera/`, `render/` (WebGL2), `ui/` (Svelte HUD, design tokens) |
+| `tests/` | All tests, mirroring `src/`, plus guard tests for the rules above |
+| `tools/` | Command-line tools (e.g. the headless bots-only runner) |
+| `spikes/` | Throwaway experiments; never imported by `src/` |
+
+## Documentation
 
 | Document | What's in it |
 |---|---|
@@ -22,11 +52,6 @@ latest handoff in `docs/handoffs/`.
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, Phase 1 milestones, feature matrix, risk register |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decision log (accepted and proposed) |
 | [docs/handoffs/](docs/handoffs/) | One handoff per phase — **a new session starts by reading the latest one** |
-
-## Requirements (from Phase 1)
-
-- **Node.js 24 LTS** (installed: 24.19.0 with npm 11.17.0 — see D-013)
-- A browser with WebGL2 (all current desktop browsers)
 
 ## Rendering benchmark (Phase 0 spike)
 
@@ -40,4 +65,4 @@ Parameters: `w`, `h` (map size), `players`, `changes` (tile changes per tick),
 
 ## License
 
-To be decided (see D-001). No third-party game code or assets are included.
+To be decided. No third-party game code or assets are included.

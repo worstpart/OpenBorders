@@ -6,7 +6,7 @@
 | Phase | Goal | Status |
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
-| **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ⬜ |
+| **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | 🟡 |
 | **2 — Gameplay depth** | Economy, buildings, naval transport, diplomacy, better AI, more maps | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -30,7 +30,7 @@
 
 ---
 
-## Phase 1 — Playable prototype
+## Phase 1 — Playable prototype 🟡
 
 ### The vertical slice — exactly what's in
 
@@ -64,7 +64,7 @@ accounts, sound, settings screens, mobile layout, matchmaking, cosmetics.
 
 | # | Milestone | Done when |
 |---|---|---|
-| 1.0 | **Scaffold** — Vite + TS + Svelte + Vitest, folder structure, guard tests (banned APIs in `sim/`, import rules) | `npm run dev` serves the app shell; `npm test` passes; first commit |
+| 1.0 ✅ | **Scaffold** — Vite + TS + Svelte + Vitest, folder structure, guard tests (banned APIs in `sim/`, import rules) | `npm run dev` serves the app shell; `npm test` passes; first commit |
 | 1.1 | **Simulation core** — map + procedural generation, `GameRules`, world, players, troop capacity/growth, spawn command, tick loop, tick frames, state hash, ASCII-map test helper | Unit + golden tests pass; same seed ⇒ same hash |
 | 1.2 | **Rendering & camera** — terrain, territory, borders, labels, camera, `LocalHost`, session wiring | Map renders at 60 fps in the browser, spawning visible, console clean |
 | 1.3 | **Expansion & combat** — attack/retreat commands, directed priority, budgets & losses, merge/cancel, capture flash, fronts | Scenario tests on tiny maps pass; playable expansion & attacks in the browser |

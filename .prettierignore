@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+# Markdown docs and throwaway spikes are kept as authored.
+*.md
+spikes/
