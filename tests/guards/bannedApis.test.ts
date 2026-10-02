@@ -7,7 +7,9 @@ const matches = (source: string) => findBannedApis(file(source)).map((v) => v.ma
 
 describe("determinism guard: banned APIs in src/sim", () => {
   it("src/sim uses none of them", () => {
-    const violations = findBannedApis(readSourceFiles("src/sim", [".ts"]));
+    const files = readSourceFiles("src/sim", [".ts"]);
+    expect(files.length).toBeGreaterThan(0);
+    const violations = findBannedApis(files);
     const report = violations.map((v) => `${v.path}:${v.line} ${v.match} — ${v.reason}`);
     expect(report).toEqual([]);
   });

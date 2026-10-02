@@ -14,6 +14,9 @@
 
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    // Only syntax Node can strip without a build step (no enums, namespaces or
+    // constructor parameter properties), so tools/ can run sim code with plain `node`.
+    "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true

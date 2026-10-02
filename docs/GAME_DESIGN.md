@@ -66,6 +66,10 @@ All numbers live in one rules config (`GameRules`) — none are hard-coded in sy
   map from the same seed): plains, highlands, mountains, lakes, coast.
 - Starting size ≈ **1100 × 700 tiles** (~770k tiles, ~55% land). Tuned so the land
   race lasts ~60–90 s with 8 players.
+- Generation (implemented in milestone 1.1): domain-warped fractal noise minus a falloff
+  toward the edges; sea level chosen so 55% of tiles are land; only the largest landmass
+  is kept (no boats yet) and lakes under 80 tiles are filled; land is ~68% plains, 22%
+  highland, 10% mountain, with mountains following ridge noise so they form chains.
 - Tiles are 4-connected (N/S/W/E) for ownership and combat.
 - Terrain classes: **Plains** (fast, cheap), **Highland** (slower, costlier),
   **Mountain** (slowest, costliest), **Water** (impassable in Phase 1).
@@ -76,7 +80,13 @@ All numbers live in one rules config (`GameRules`) — none are hard-coded in sy
 - **Spawn phase:** the human clicks any valid land to choose a start (can re-pick until
   confirming / the phase ends). AI spawns randomly, keeping a minimum distance from
   everyone else. Single-player starts the moment the human confirms.
-- A spawn claims a small disc (radius ≈ 4, ~50 tiles).
+- A spawn claims a small disc (radius 4 = 49 tiles): only **neutral land connected to the
+  chosen tile** (a disc never jumps across water or takes someone else's land).
+- Random spawns (bots, or players who didn't pick) need ≥ 80% of a full disc, and keep
+  ≥ 70 tiles from other spawns when the map allows it (relaxed step by step on crowded
+  maps).
+- The human locks in their pick with *confirm*; in single-player the match starts at that
+  moment. Troops don't grow during the spawn phase.
 - **Spawn protection:** no player-vs-player attacks for the first **5 s**.
 
 ### 3.4 Troops

@@ -14,10 +14,12 @@ export class WebGL2UnavailableError extends Error {
 
 export class MapRenderer {
   readonly gl: WebGL2RenderingContext;
+  private readonly canvas: HTMLCanvasElement;
   private readonly resizeObserver: ResizeObserver;
   private clearColor: [number, number, number] = [0, 0, 0];
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
     const gl = canvas.getContext("webgl2", {
       antialias: false, // tiles are drawn as crisp texels; MSAA would only cost fill rate
       alpha: false,

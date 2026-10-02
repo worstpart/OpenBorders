@@ -217,11 +217,30 @@ network traffic and behave identically on every machine.
   is deterministic); comparators always have an ID tie-breaker.
 - A state **hash** is produced every N ticks for tests (and later for desync checks).
 
+### 5.4.1 Implementation notes (milestone 1.1)
+
+- **Player ids:** `1..n`, `0` = neutral; `world.players[id − 1]`. Owner ids live in a
+  `Uint16Array`, so a game has at most 65,535 players.
+- **One choke point for ownership:** `setOwner()` updates tile counts, the change log for
+  the tick frame and the ownership hash together, so they can't drift apart.
+- **Incremental state hash:** every (tile, owner) pair has a pseudo-random 32-bit value;
+  the ownership hash is their XOR, updated in O(1) per change. The full state hash
+  (`hashWorld`) adds tick, phase, players and RNG state and is cheap enough for every tick.
+- **Frames are copies** (`changedTiles` / `changedOwners` typed arrays, player snapshots),
+  never views into the live world — ready to be posted from a worker later.
+- **Math:** `detmath.ts` implements `log`, `exp` and `pow` with + − × ÷ only (accurate to
+  ~1e-15); `rng.ts` is sfc32 (32-bit integer ops). Map noise uses integer hashing and
+  polynomial interpolation.
+- **Node-runnable:** `tsconfig` sets `erasableSyntaxOnly` (no enums, namespaces or
+  constructor parameter properties), so `tools/` can run simulation code with plain
+  `node` (Node 24 strips types natively). Enum-like values use `as const` objects.
+
 ### 5.5 Commands (Phase 1)
 
 | Command | Payload | Notes |
 |---|---|---|
-| `spawn` | tile | only during spawn phase; validated |
+| `spawn` | tile | only during spawn phase; validated; picking again moves the spawn |
+| `confirmSpawn` | — | locks in the spawn; the match starts when every human has confirmed |
 | `attack` | target (player or neutral), **percent** (basis points), focus tile | the sim computes troops from the *current* home pool at execution time — clients never send absolute troop numbers |
 | `retreat` | attack id | |
 
@@ -363,12 +382,16 @@ simulation and a local turn scheduler.
 | Layer | What | How |
 |---|---|---|
 | Rules | Troop growth, capacity, costs, combat outcomes | Unit tests + **golden tests** pinning formula outputs |
-| Systems | Spawn, expansion, attacks, merging/cancelling, retreat, encirclement, elimination, victory | Tiny maps written as **ASCII art** in tests (readable by anyone) |
+| Systems | Spawn, expansion, attacks, merging/cancelling, retreat, encirclement, elimination, victory | Tiny maps written as **ASCII art** in tests (readable by anyone) — `tests/helpers/asciiMap.ts` |
 | Determinism | Same seed + commands → same hash | Run twice in-process; later Node vs Chromium/Firefox/WebKit via Playwright |
 | Guardrails | Banned APIs in `src/sim`, import boundaries | Tests that scan source files |
 | Full games | Bots-only matches finish with a winner, no exceptions, within tick budget | Headless runner (also used for balance metrics) |
 | Client | Attack % control, input mapping (click vs drag) | Component/unit tests; manual verification in the browser |
 | Regressions | Every fixed bug | A test that fails before the fix |
+
+All tests live in `tests/`, mirroring `src/` (so `src/sim` never imports a test
+framework). Guard tests also test their own checkers, so a broken pattern can't silently
+pass everything.
 
 ---
 
