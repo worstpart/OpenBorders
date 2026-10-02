@@ -78,6 +78,8 @@
       <div class="stats">
         <span>{formatTroops(owner.homeTroops)} troops</span>
         <span>{formatPercent(owner.tiles / ui.landTiles)} land</span>
+        {#if DEFAULT_RULES.economy.enabled}<span class="gold">{formatTroops(owner.gold)} gold</span
+          >{/if}
         {#if owner.tier}<span class="muted personality">{describeBot(owner)}</span>{/if}
       </div>
       {#if owner.team !== 0 && owner.team === ui.me?.team}
@@ -180,9 +182,14 @@
 
   .stats {
     display: flex;
-    gap: var(--space-3);
+    flex-wrap: wrap;
+    gap: 0 var(--space-3);
     margin-top: var(--space-1);
     color: var(--text-secondary);
+  }
+
+  .stats .gold {
+    color: var(--color-gold);
   }
 
   .badge {

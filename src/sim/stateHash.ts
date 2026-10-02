@@ -47,7 +47,8 @@ export function hashWorld(world: World): number {
       .addInt(p.lastLostTo)
       .addInt(p.traitorUntilTick)
       .addInt(p.betrayals)
-      .addInt(p.team);
+      .addInt(p.team)
+      .addNumber(p.gold);
   }
   for (const p of world.players) {
     if (p.brain) {
@@ -65,6 +66,8 @@ export function hashWorld(world: World): number {
   for (const r of world.allianceRequests) h.addInt(r.from).addInt(r.to).addInt(r.expiresTick);
   h.addInt(world.lastRequestTick.size);
   for (const [key, tick] of world.lastRequestTick) h.addInt(key).addInt(tick);
+  h.addInt(world.lastDonationTick.size);
+  for (const [key, tick] of world.lastDonationTick) h.addNumber(key).addInt(tick);
   h.addInt(world.pendingCommands.length);
   for (const c of world.pendingCommands) h.addInt(c.playerId).addString(JSON.stringify(c.command));
   h.addInt(world.nextAttackId).addInt(world.attacks.length);

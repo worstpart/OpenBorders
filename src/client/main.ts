@@ -60,6 +60,8 @@ mount(App, {
       renewAlliance: (ally) => client?.renewAlliance(ally),
       dismissRenewal: (ally) => client?.dismissRenewal(ally),
       breakAlliance: (ally) => client?.breakAlliance(ally),
+      mobilize: () => client?.mobilize(),
+      donate: (to, resource, percent) => client?.donate(to, resource, percent),
       pause: () => client?.pause(),
       closeMenu: () => client?.closeMenu(),
       setSpeed: (multiplier) => client?.setSpeed(multiplier),

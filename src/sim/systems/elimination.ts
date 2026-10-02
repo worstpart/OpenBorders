@@ -12,6 +12,7 @@
 import { nextScratchStamp, setOwner, type Player, type PlayerId, type World } from "../world.ts";
 import { endAttacksInvolving, primaryAttacker } from "./attacks.ts";
 import { dropDiplomacy } from "./diplomacy.ts";
+import { lootGold } from "./economy.ts";
 
 /** Tick system. */
 export function eliminate(world: World): void {
@@ -44,7 +45,8 @@ function eliminatePlayer(world: World, player: Player, by: PlayerId | null): voi
   player.fieldTroops = 0;
   player.capacity = 0;
   player.lastGrowth = 0;
-  world.events.push({ type: "eliminated", playerId: player.id, by });
+  const loot = lootGold(world, player, by);
+  world.events.push({ type: "eliminated", playerId: player.id, by, loot });
 }
 
 /** All tiles of a (small) player, found by flooding each piece from its border tiles. */

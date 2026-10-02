@@ -294,3 +294,24 @@ biggest member) and `World.winningTeam` names the team, so FFA code paths don't 
 user: politics between teams stay); tribes split among the teams (rejected: less food,
 and tribes are filler); teams spawning in their own regions (rejected by the user: nations
 spawn at random, humans choose).
+
+---
+
+## D-020 — Economy: land-linked gold, Mobilize, gifts, full loot · Accepted 2026-10-02
+
+**Context.** Milestone 2.4 (§6.1, Q6) adds gold before buildings exist (2.5). Asked at the
+start: whether troops can be donated at all, or only gold. During the milestone the user
+asked that conquering a player give **all** their leftover gold, with an animation.
+
+**Decision** (GAME_DESIGN §3.16). Income E2: 10 + 0.8·√tiles gold per tick (tribes half,
+never spent). Mobilize: 1 gold per troop, never past the cap (HUD: 10% of capacity per
+click, key M). Donations to allies and teammates — **troops too** (the user's choice),
+capped by the friend's room, and gold — each kind to each friend at most every 10 s.
+Loot: the eliminator takes all the victim's gold; the capturer's border shimmers gold and
+"+gold" rises from the captured land.
+
+**Consequences.** `rules.economy.enabled = false` reproduces 2.3. Gold is one more number
+in the hash and the frame; buildings (2.5) will spend the same gold.
+
+**Alternatives.** Gold-only donations (rejected by the user: rescuing a friend should be
+instant); flat income E1 (less legible); half the loot (my first note; the user asked for all).

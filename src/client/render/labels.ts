@@ -163,6 +163,21 @@ function localCentroid(
   return count > 0 ? { x: sumX / count, y: sumY / count } : { x: cx, y: cy };
 }
 
+/** "+12K gold" rising from a captured player's land (GAME_DESIGN.md §3.16). */
+export interface LootFloater {
+  /** Where the captured player's label was, in tiles. */
+  readonly x: number;
+  readonly y: number;
+  readonly gold: number;
+  /** 0 → 1 over the animation. */
+  readonly age: number;
+  /** Captured by the local player (bigger, brighter). */
+  readonly mine: boolean;
+}
+
+const LOOT_GOLD = "#ffd166";
+const LOOT_RISE_PX = 46;
+
 const MAX_NAME_PX = 26;
 /** Tribes are filler: small names, so the nations' labels dominate the map (2.1 playtest). */
 const MAX_TRIBE_NAME_PX = 12;
@@ -259,6 +274,40 @@ export class LabelLayer {
       ctx.strokeText(troops, sx, troopY);
       ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
       ctx.fillText(troops, sx, troopY);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Draws loot floaters over the labels (call after draw()). */
+  drawLoot(view: MapView, floaters: readonly LootFloater[]): void {
+    if (floaters.length === 0) return;
+    const ctx = this.context;
+    const halfW = this.canvas.clientWidth / 2;
+    const halfH = this.canvas.clientHeight / 2;
+    for (const f of floaters) {
+      const sx = (f.x - view.centerX) * view.zoom + halfW;
+      const sy = (f.y - view.centerY) * view.zoom + halfH;
+      if (sx < -100 || sy < -100 || sx > halfW * 2 + 100 || sy > halfH * 2 + 100) continue;
+      const pop = Math.min(1, f.age * 6); // quick pop-in…
+      const size = (f.mine ? 22 : 14) * (0.7 + 0.3 * pop);
+      const y = sy - LOOT_RISE_PX * (1 - (1 - f.age) * (1 - f.age)); // …easing upward…
+      ctx.globalAlpha = pop * Math.min(1, (1 - f.age) * 2.5); // …fading at the end
+      const text = `+${formatTroops(f.gold)}`;
+      ctx.font = `800 ${size}px ${this.font}`;
+      const width = ctx.measureText(text).width;
+      const coin = size * 0.36;
+      const x = sx + coin;
+      ctx.lineWidth = Math.max(2, size * 0.2);
+      ctx.strokeStyle = "rgba(40, 26, 0, 0.7)";
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = LOOT_GOLD;
+      ctx.fillText(text, x, y);
+      // A coin in front of the number.
+      ctx.beginPath();
+      ctx.arc(x - width / 2 - coin * 1.2, y, coin, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, size * 0.08);
+      ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }

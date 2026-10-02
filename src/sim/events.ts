@@ -3,7 +3,7 @@
  * toasts and effects. Events describe outcomes; they never drive the simulation.
  */
 import type { Command } from "./commands.ts";
-import type { Phase, PlayerId } from "./world.ts";
+import type { DonationResource, Phase, PlayerId } from "./world.ts";
 
 export type SimEvent =
   | { readonly type: "phaseChanged"; readonly phase: Phase }
@@ -47,6 +47,8 @@ export type SimEvent =
       readonly playerId: PlayerId;
       /** Who finished them (the biggest attacker at the time), if anyone. */
       readonly by: PlayerId | null;
+      /** Gold `by` took from them (GAME_DESIGN.md §3.16). */
+      readonly loot: number;
     }
   | {
       readonly type: "gameOver";
@@ -77,6 +79,21 @@ export type SimEvent =
       readonly type: "allianceBroken";
       readonly breaker: PlayerId;
       readonly victim: PlayerId;
+    }
+  | {
+      /** Gold turned into home troops. */
+      readonly type: "mobilized";
+      readonly playerId: PlayerId;
+      readonly troops: number;
+      readonly gold: number;
+    }
+  | {
+      /** A friend gave troops or gold. */
+      readonly type: "donated";
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+      readonly resource: DonationResource;
+      readonly amount: number;
     }
   | {
       readonly type: "commandRejected";

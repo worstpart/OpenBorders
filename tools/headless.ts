@@ -6,7 +6,7 @@
  *                          [--width 1100 --height 700] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
- *                          [--no-alliances] [--teams N]
+ *                          [--no-alliances] [--teams N] [--no-economy]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -21,6 +21,9 @@
  * --no-alliances turns diplomacy off (GAME_DESIGN §3.14): games then play as before 2.2.
  * --teams N deals the nations round-robin into N teams (GAME_DESIGN §3.15; tribes have no
  * team); the report then counts wins by team and checks that teammates never fight.
+ * --no-economy turns gold off (GAME_DESIGN §3.16): games then play as in 2.3. Each game
+ * reports gold earned, mobilized, donated and looted, and the median income of the
+ * nations alive at minutes 1, 3 and 6.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -93,6 +96,21 @@ export interface GameReport {
     expired: number;
     betrayals: number;
   };
+  /** Gold (GAME_DESIGN §3.16), totals over all players. */
+  economy: {
+    earned: number;
+    mobilized: number;
+    mobilizes: number;
+    troopGifts: number;
+    troopsGiven: number;
+    goldGifts: number;
+    goldGiven: number;
+    looted: number;
+    /** Median gold per second of the nations alive at minutes 1, 3, 6 (null: game over). */
+    income1: number | null;
+    income3: number | null;
+    income6: number | null;
+  };
   tickMs: { avg: number; p99: number; max: number };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -126,9 +144,13 @@ async function main(): Promise<void> {
       personality: { type: "string" },
       "no-alliances": { type: "boolean", default: false },
       teams: { type: "string", default: "0" },
+      "no-economy": { type: "boolean", default: false },
     },
   });
-  const rules = loadRules(args.rules);
+  const loaded = loadRules(args.rules);
+  const rules = args["no-economy"]
+    ? { ...loaded, economy: { ...loaded.economy, enabled: false } }
+    : loaded;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -239,6 +261,19 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     betrayals: 0,
   };
   const isTribeId = (id: number) => world.players[id - 1]?.brain?.tier === "tribe";
+  const economy: GameReport["economy"] = {
+    earned: 0,
+    mobilized: 0,
+    mobilizes: 0,
+    troopGifts: 0,
+    troopsGiven: 0,
+    goldGifts: 0,
+    goldGiven: 0,
+    looted: 0,
+    income1: null,
+    income3: null,
+    income6: null,
+  };
   let reason = "timeout";
   let error: string | null = null;
 
@@ -268,6 +303,35 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         } else if (event.type === "allianceRenewed") diplomacy.renewed++;
         else if (event.type === "allianceEnded" && event.reason === "expired") diplomacy.expired++;
         else if (event.type === "allianceBroken") diplomacy.betrayals++;
+        else if (event.type === "mobilized") {
+          economy.mobilizes++;
+          economy.mobilized += event.gold;
+        } else if (event.type === "donated") {
+          if (event.resource === "troops") {
+            economy.troopGifts++;
+            economy.troopsGiven += event.amount;
+          } else {
+            economy.goldGifts++;
+            economy.goldGiven += event.amount;
+          }
+        }
+        if (event.type === "eliminated") economy.looted += event.loot;
+      }
+      for (const p of world.players) if (p.alive) economy.earned += p.lastIncome;
+      if (world.playStartTick >= 0) {
+        const played = world.tick - world.playStartTick;
+        for (const [minute, key] of [
+          [1, "income1"],
+          [3, "income3"],
+          [6, "income6"],
+        ] as const) {
+          if (played === minute * 60 * TICKS_PER_SECOND) {
+            const incomes = world.players
+              .filter((p) => p.alive && p.brain?.tier !== "tribe")
+              .map((p) => p.lastIncome * TICKS_PER_SECOND);
+            economy[key] = median(incomes);
+          }
+        }
       }
       if (world.tick % LEADER_SAMPLE_TICKS === 0) {
         const top = leadingSide(world);
@@ -312,6 +376,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     attacks,
     rejected,
     diplomacy,
+    economy,
     tickMs: {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
@@ -421,6 +486,19 @@ function summarize(
         key,
         round(reports.reduce((s, r) => s + r.diplomacy[key], 0) / Math.max(1, reports.length)),
       ]),
+    ),
+    economyPerGame: Object.fromEntries(
+      (Object.keys(reports[0]?.economy ?? {}) as (keyof GameReport["economy"])[]).map((key) =>
+        key.startsWith("income")
+          ? [key + "Median", median(reports.map((r) => r.economy[key]))]
+          : [
+              key,
+              Math.round(
+                reports.reduce((s, r) => s + (r.economy[key] ?? 0), 0) /
+                  Math.max(1, reports.length),
+              ),
+            ],
+      ),
     ),
     tickMs: {
       avg: round(reports.reduce((s, r) => s + r.tickMs.avg, 0) / Math.max(1, reports.length), 3),

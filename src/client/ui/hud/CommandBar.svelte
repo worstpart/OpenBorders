@@ -1,11 +1,21 @@
 <script lang="ts">
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
+  import { MOBILIZE_PERCENT, mobilizePreview } from "../../app/economy.ts";
   import { GROWTH_TEXT, troopBarModel } from "../../app/troopBar.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
 
+  interface Props {
+    onMobilize: () => void;
+  }
+
+  let { onMobilize }: Props = $props();
+
   const me = $derived(ui.me);
+  const economy = DEFAULT_RULES.economy.enabled;
+  const mobilize = $derived(me ? mobilizePreview(DEFAULT_RULES, me) : null);
+  const goldPerSecond = $derived(me ? (me.goldPerTick * 1000) / DEFAULT_RULES.tickMs : 0);
   const bar = $derived(
     me ? troopBarModel(me.homeTroops, me.fieldTroops, me.capacity, ui.attackPercent) : null,
   );
@@ -79,6 +89,39 @@
         </span>
       </div>
     </div>
+
+    {#if economy && mobilize}
+      <div class="economy">
+        <span class="gold" title="Gold: earned from your land every second (more land, more gold)">
+          <span class="coin" aria-hidden="true"></span>
+          {formatTroops(me.gold)} gold
+          <span class="income">+{formatTroops(goldPerSecond)}/s</span>
+        </span>
+        <button
+          type="button"
+          class="mobilize"
+          tabindex={-1}
+          disabled={mobilize.blocked !== null}
+          title={mobilize.blocked === "full"
+            ? "Your army is at its cap: nothing to mobilize"
+            : mobilize.blocked === "noGold"
+              ? "Not enough gold"
+              : `Turn gold into troops at once: +${MOBILIZE_PERCENT}% of your capacity per click, 1 gold per troop (key M)`}
+          onclick={onMobilize}
+        >
+          Mobilize
+          {#if mobilize.blocked === "full"}
+            <span class="muted">army full</span>
+          {:else if mobilize.blocked === "noGold"}
+            <span class="muted">no gold</span>
+          {:else}
+            <span class="buy">+{formatTroops(mobilize.troops)}</span>
+            <span class="muted">{formatTroops(mobilize.gold)} gold</span>
+          {/if}
+          <kbd>M</kbd>
+        </button>
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -304,6 +347,83 @@
     min-width: 56px;
     text-align: right;
     font-weight: 650;
+  }
+
+  .economy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--surface-hairline);
+    font-size: var(--text-sm);
+  }
+
+  .gold {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 650;
+    color: var(--color-gold);
+  }
+
+  .coin {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-gold);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, #000 22%, var(--color-gold));
+  }
+
+  .income {
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .mobilize {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 28px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--color-gold) 45%, transparent);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .mobilize:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-gold) 24%, transparent);
+  }
+
+  .mobilize:disabled {
+    border-color: var(--surface-hairline);
+    background: none;
+    color: var(--text-muted);
+    cursor: default;
+  }
+
+  .mobilize .buy {
+    color: var(--color-success);
+  }
+
+  .mobilize .muted {
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  kbd {
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 0.1);
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-secondary);
   }
 
   .custom {

@@ -21,6 +21,9 @@ export interface PlayerSnapshot {
   readonly fieldTroops: number;
   readonly capacity: number;
   readonly growthPerTick: number;
+  /** Gold, and gold earned in the last tick (GAME_DESIGN.md §3.16). */
+  readonly gold: number;
+  readonly goldPerTick: number;
   readonly peakTiles: number;
   /** Bots only: nation or tribe (GAME_DESIGN.md §3.13). */
   readonly tier: BotTier | null;
@@ -102,6 +105,8 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     fieldTroops: p.fieldTroops,
     capacity: p.capacity,
     growthPerTick: p.lastGrowth,
+    gold: p.gold,
+    goldPerTick: p.lastIncome,
     peakTiles: p.peakTiles,
     tier: p.brain?.tier ?? null,
     personality: p.brain?.tier === "nation" ? p.brain.personality : null,

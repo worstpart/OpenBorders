@@ -22,6 +22,9 @@
     renewAlliance: (ally: number) => void;
     dismissRenewal: (ally: number) => void;
     breakAlliance: (ally: number) => void;
+    /** Gold (GAME_DESIGN.md §3.16): buy troops; give a friend troops or gold. */
+    mobilize: () => void;
+    donate: (to: number, resource: "troops" | "gold", percent: number) => void;
     pause: () => void;
     closeMenu: () => void;
     setSpeed: (multiplier: number) => void;
@@ -80,7 +83,7 @@
   <Toasts />
   <HintCard onDismiss={actions.dismissHint} />
   <AttackChips onRetreat={actions.retreat} onCounter={actions.counter} />
-  <CommandBar />
+  <CommandBar onMobilize={actions.mobilize} />
   <HoverCard />
   <ContextMenu
     onAttack={actions.attackTile}
@@ -88,6 +91,7 @@
     onRequestAlliance={actions.requestAlliance}
     onRenewAlliance={actions.renewAlliance}
     onBreakAlliance={actions.breakAlliance}
+    onDonate={actions.donate}
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />

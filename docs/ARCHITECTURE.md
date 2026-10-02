@@ -219,7 +219,7 @@ interface World {
 
 ```
 1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat,
-                     alliance request/reply/renew/break)
+                     alliance request/reply/renew/break, mobilize, donate)
 1b. updateDiplomacy  alliance requests and alliances run out (milestone 2.2)
 2. resolveCollisions opposing attacks cancel; same-target attacks merge
 3. advanceAttacks    each attack conquers tiles until its per-tick budget is spent
@@ -227,6 +227,7 @@ interface World {
 5. eliminate         players below the threshold are absorbed; 0 tiles → dead
                      (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
+6b. earnGold         gold income (milestone 2.4)
 7. thinkAI           bots emit commands for the NEXT tick (world.pendingCommands,
                      applied first in step 1 — same validation path as people)
 8. checkVictory
@@ -271,6 +272,20 @@ the team (also on the `gameOver` event and the frame). Bots skip teammates and w
 enemies of their teammates (`ai.teamAssistPreference`, `ai.teamFocusPreference`); with no
 teams every factor is 1, so free-for-all games are unchanged. Client: `client/app/teams.ts`
 (lobby split, standings), `teamPlayerColors` (players.ts), teammates share the ally flag bit.
+
+**Economy (milestone 2.4, GAME_DESIGN §3.16).** `systems/economy.ts` owns gold:
+`player.gold` (an integer, hashed) and `player.lastIncome`; `earnGold` runs as tick step
+6b ("economy", right after troops) and also prunes `world.lastDonationTick` (per
+`donationKey(from, to, resource)`, hashed). Two commands: `mobilize` (percent of capacity,
+capped by the room under the cap and by gold) and `donate` (to an ally or teammate —
+`areFriendly` — troops capped by the friend's room, or gold). Elimination calls
+`lootGold`, and the `eliminated` event carries `loot`. Nations decide gold after their
+action (bot.ts `economy()`: gifts, then mobilize); tribes only earn. The HUD reuses the
+simulation's own `mobilizeTroops` / `donationAmount` (client/app/economy.ts). Captures with
+loot animate: the client keeps a short list of effects and writes their strength into bits
+2–7 of the palette alpha every animation frame (the shader's gold border and grow-in), and
+the label layer draws the rising "+gold". `rules.economy.enabled = false` (headless
+`--no-economy`) reproduces 2.3 games exactly.
 
 **Timing probe (milestone 2.0).** `runTick(world, turn, probe?)` calls `probe(step)` after
 each step (`TICK_STEPS`: commands, diplomacy, collisions, attacks, encircle, eliminate, troops, bots,

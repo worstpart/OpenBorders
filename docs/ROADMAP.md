@@ -156,7 +156,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.1 ✅ | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
 | 2.2 ✅ | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 ✅ | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
-| 2.4 | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | |
+| 2.4 ✅ | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | Gold earned, mobilized, given and looted in the browser; games no longer than before |
 | 2.5 | **Buildings** — City, Fort, Port (+ Market if the economy needs it) | |
 | 2.6 | **Naval transport** — boats from any coast, routes, beachheads, recall | |
 | 2.7 | **More maps** — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps | |
@@ -280,6 +280,36 @@ playtest. Browser: Teams start screen, team colours, mint teammate names/borders
 block, teammate hover card and right-click menu (fixed: a teammate you didn't border showed
 "Request alliance"), teammate-eliminated toast, "Team Red won the match" end card,
 free-for-all unchanged; clean console.
+
+**Milestone 2.4 result (2026-10-02)** — economy; design note GAME_DESIGN §3.16, decision
+**D-020** (the user chose that **troops can be donated too**, with limits; during the
+milestone they asked that conquering a player give **all** of their leftover gold, with an
+animation). Income 10 + 0.8·√tiles gold per tick (tribes half, never spent); Mobilize 1 gold
+per troop up to the cap (HUD: +10% of capacity per click, key M); gifts of troops (only what
+fits) or gold to allies and teammates, 10 s per friend and kind; full loot with a gold
+border shimmer and a rising "+gold" on the map. HUD: gold row and Mobilize button in the
+command bar, *Send troops / Send gold* in an ally's or teammate's menu, gold on the hover
+card, gift and loot toasts, a gold hint. Headless `--no-economy` and per-game gold stats.
+
+| Headless games | Median (longest) | 2.3 | Leader at min 3 wins | Mobilizes / troop gifts / gold gifts per game | Nation income at min 1 / 3 / 6 | Tick avg / worst p99 |
+|---|---|---|---|---|---|---|
+| 8 nations (100) | 7.1 min (14.5) | 7.6 | 30% | 0.6 / 0 / 0 | 1.0k / 2.0k / 3.1k gold/s | 0.68 / 6.9 ms |
+| 8 nations, `--no-economy` (100) | 7.6 min (14) — identical to 2.3 | 7.6 | 30% | — | — | 0.74 / 9.8 ms |
+| 10 nations + 100 tribes, Medium (50) | 11.8 min (19.5) | 13.0 | 16% | 3.5 / 0 / 0 | 0.8k / 1.5k / 2.2k | 0.79 / 5.8 ms |
+| 8 nations, 2 teams (100) | 5.0 min (11.2) | 4.7 | 75% | 0.7 / 0.2 / 0.1 | 1.0k / 2.0k / 2.3k | 0.59 / 4.5 ms |
+| 10 nations + 100 tribes, 2 teams (50) | 6.9 min (21.9) | 7.3 | 62% | 4.2 / 0.8 / 0.9 | 0.8k / 1.4k / 1.7k | 0.83 / 3.7 ms |
+
+No errors; every game has a winner; teammates never attacked each other. With the economy
+off, games are identical to 2.3 (same median, same wins by personality). Wins by
+personality (8 nations): turtle 34 · expander 21 · opportunist 25 · aggressor 20; with
+tribes turtles win 24 of 50 (2.2: 20) — still the thing to watch. **Balance finding:** the
+first AI (refill to half capacity after every attack, all-in defence, gifts to any friend)
+stretched tribe lobbies from 13 to 18 min — gold made every defender harder to beat. Nations
+now keep gold as a **war chest** spent right before attacking a player, and give only to
+teammates and human allies (two allied nations propping each other up stalled wars):
+11.6–12.1 min. Browser: gold row, Mobilize (button and M, capped at the cap), *Send gold* /
+*Send troops* to a teammate with cooldowns, toasts, full loot of a tribe with the gold
+border and "+1.4K" on the map; clean console.
 
 ## Phase 3 — Multiplayer
 

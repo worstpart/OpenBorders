@@ -55,7 +55,9 @@ describe("elimination", () => {
     expect(loser.alive).toBe(false);
     expect(loser.tiles).toBe(0);
     expect(loser.homeTroops + loser.fieldTroops).toBe(0);
-    expect(events).toContainEqual({ type: "eliminated", playerId: 2, by: 1 });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "eliminated", playerId: 2, by: 1 }),
+    );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "attackEnded",
@@ -87,7 +89,9 @@ describe("elimination", () => {
     const events = run(world, 2, [{ player: 1, command: attack(world, 2, 8, 2, 1_000) }]);
     expect(world.players[1]!.alive).toBe(false);
     expect(world.players[0]!.tiles).toBe(18 + 33);
-    expect(events).toContainEqual({ type: "eliminated", playerId: 2, by: 1 });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "eliminated", playerId: 2, by: 1 }),
+    );
   });
 
   it("a fresh start that lost a few tiles is not absorbed", () => {

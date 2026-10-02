@@ -201,6 +201,26 @@ export interface DiplomacyRules {
   readonly traitorDelay: number;
 }
 
+/**
+ * Gold (GAME_DESIGN.md §3.16): earned from land, spent on Mobilize (instant troops), given
+ * to friends. Model E2 of §6.1.
+ */
+export interface EconomyRules {
+  /** false: no gold at all (games play exactly as before milestone 2.4). */
+  readonly enabled: boolean;
+  /** Gold per tick of play: incomeBase + incomePerSqrtTile · √tiles, rounded down. */
+  readonly incomeBase: number;
+  readonly incomePerSqrtTile: number;
+  /** Tribes earn this share of the income (and never spend it: it becomes loot). */
+  readonly tribeIncomeShare: number;
+  /** Mobilize: gold per troop raised. */
+  readonly goldPerTroop: number;
+  /** Whoever eliminates a player takes this share of their gold. */
+  readonly lootShare: number;
+  /** Each kind of donation (troops, gold) to the same friend at most this often. */
+  readonly donationCooldownTicks: number;
+}
+
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
 export type Personality = (typeof PERSONALITIES)[number];
 
@@ -342,6 +362,19 @@ export interface AiRules {
   readonly expansionRecallAbove: number;
   /** Distance (tiles) beyond the bot's own radius where it looks for open land to aim at. */
   readonly expansionLookAhead: number;
+  /**
+   * Economy (GAME_DESIGN.md §3.16): right before attacking a player, nations mobilize all
+   * their gold can buy (a war chest) — if that's at least this share of their capacity.
+   */
+  readonly mobilizeMinShare: number;
+  /** Nations give a teammate or human ally who is losing a war this share of their home troops… */
+  readonly donateTroopsShare: number;
+  /**
+   * …and, when they sit at the cap (gold they can't use), this share of their gold to the
+   * one whose home troops are lowest, below this share of their capacity.
+   */
+  readonly donateGoldShare: number;
+  readonly giftGoldBelow: number;
   /** Nations hold at most this many alliances (GAME_DESIGN.md §3.14). */
   readonly maxAlliances: number;
   /** Nations never ally (or renew with) a player holding this share of the land or more. */
@@ -371,6 +404,7 @@ export interface GameRules {
   readonly ai: AiRules;
   readonly tribe: TribeRules;
   readonly diplomacy: DiplomacyRules;
+  readonly economy: EconomyRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -526,6 +560,11 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     expansionMargin: 1.25,
     expansionRecallAbove: 0.05,
     expansionLookAhead: 40,
+    // Economy (§3.16): gold is a war chest, spent on attacks; gifts go to friends in need.
+    mobilizeMinShare: 0.02,
+    donateTroopsShare: 0.25,
+    donateGoldShare: 0.5,
+    giftGoldBelow: 0.5,
     // Alliances (§3.14): a nation allies at most two players, never the runaway leader,
     // and keeps asking a reluctant player no more than every 90 s.
     maxAlliances: 2,
@@ -617,6 +656,21 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     traitorLoss: 0.6,
     traitorDelay: 0.75,
   },
+  economy: {
+    enabled: true,
+    // Spending all income on Mobilize adds ~20% of peak troop growth at every size: 49
+    // tiles → 16 gold/tick (peak growth 75), 50k → 189 (1,040), 200k → 367 (1,900).
+    incomeBase: 10,
+    incomePerSqrtTile: 0.8,
+    // Like their troop growth (D-017); unspent, it is the prize for eating them.
+    tribeIncomeShare: 0.5,
+    // One gold, one troop: the HUD's two numbers compare directly.
+    goldPerTroop: 1,
+    // User (2.4): conquering a player gives you all of their leftover gold.
+    lootShare: 1,
+    // 10 s per friend and kind: enough to rescue an ally, too slow to pump one player.
+    donationCooldownTicks: 100,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -632,6 +686,7 @@ export function makeRules(overrides: {
   ai?: Partial<AiRules>;
   tribe?: Partial<TribeRules>;
   diplomacy?: Partial<DiplomacyRules>;
+  economy?: Partial<EconomyRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -646,6 +701,7 @@ export function makeRules(overrides: {
     ai: { ...DEFAULT_RULES.ai, ...overrides.ai },
     tribe: { ...DEFAULT_RULES.tribe, ...overrides.tribe },
     diplomacy: { ...DEFAULT_RULES.diplomacy, ...overrides.diplomacy },
+    economy: { ...DEFAULT_RULES.economy, ...overrides.economy },
   });
 }
 

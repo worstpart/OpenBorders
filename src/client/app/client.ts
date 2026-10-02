@@ -8,15 +8,21 @@ import type { Command } from "../../sim/commands.ts";
 import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
-import type { PlayerSetup } from "../../sim/world.ts";
+import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
-import { computeLabelPlacements, LabelLayer, type LabelPlacement } from "../render/labels.ts";
+import {
+  computeLabelPlacements,
+  LabelLayer,
+  type LabelPlacement,
+  type LootFloater,
+} from "../render/labels.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { DEFAULT_RULES, type Difficulty } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { allianceStatus, diplomacyCards } from "./diplomacy.ts";
+import { donationKeyOf, MOBILIZE_PERCENT, mobilizePreview } from "./economy.ts";
 import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, pickNationNames, playerColors, teamPlayerColors } from "./players.ts";
@@ -37,6 +43,17 @@ export const MAP_SEED = 2;
 const LOCAL_PLAYER_ID = 1;
 /** Label positions are recomputed at most this often while territory changes. */
 const LABEL_REFRESH_MS = 250;
+/** The gold capture effect (GAME_DESIGN.md §3.16) lasts this long, in real time. */
+const LOOT_FX_MS = 2_400;
+
+/** A capture whose gold is pouring into the capturer (border shimmer + floating number). */
+interface LootEffect {
+  readonly capturer: number;
+  readonly x: number;
+  readonly y: number;
+  readonly gold: number;
+  readonly start: number;
+}
 
 export interface ClientElements {
   mapCanvas: HTMLCanvasElement;
@@ -65,6 +82,9 @@ export class GameClient {
   private lastFrameTime = performance.now();
   private readonly hints = new HintTracker(localHintStore);
   private nextToastId = 1;
+  /** Player flags from the latest frame (ally, traitor); loot effects are added per frame. */
+  private baseFlags: Uint8Array = new Uint8Array(1);
+  private lootEffects: LootEffect[] = [];
 
   constructor(elements: ClientElements) {
     this.mapCanvas = elements.mapCanvas;
@@ -201,6 +221,17 @@ export class GameClient {
     ui.dismissedRenewals = dismissed;
   }
 
+  /** Turns gold into troops: one click buys MOBILIZE_PERCENT of the capacity. */
+  mobilize(): void {
+    if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
+    this.host?.send({ type: "mobilize", percentBp: MOBILIZE_PERCENT * 100 });
+  }
+
+  /** Gives a friend `percent`% of our home troops or gold. */
+  donate(to: number, resource: DonationResource, percent: number): void {
+    this.host?.send({ type: "donate", to, resource, percentBp: Math.round(percent * 100) });
+  }
+
   retreat(attackId: number): void {
     this.host?.send({ type: "retreat", attackId });
   }
@@ -286,6 +317,8 @@ export class GameClient {
     this.renderer.setAttacks([], 0);
     this.renderer.setHoverOwner(0);
     this.placements.clear();
+    this.lootEffects = [];
+    this.baseFlags = new Uint8Array(1);
     ui.reset();
     ui.screen = "start";
   }
@@ -329,8 +362,27 @@ export class GameClient {
           dismissed.delete(ally);
           ui.dismissedRenewals = dismissed;
         }
+      } else if (event.type === "donated" && event.from === me) {
+        const sent = new Map(ui.myDonations);
+        sent.set(donationKeyOf(event.to, event.resource), frame.tick);
+        ui.myDonations = sent;
+      } else if (event.type === "mobilized" && event.playerId === me) {
+        this.hints.complete("gold");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
+      }
+      if (event.type === "eliminated" && event.by !== null && event.loot >= 1) {
+        // Labels refresh lazily, so the captured player's last label spot is still known.
+        const place = this.placements.get(event.playerId);
+        if (place) {
+          this.lootEffects.push({
+            capturer: event.by,
+            x: place.x,
+            y: place.y,
+            gold: event.loot,
+            start: performance.now(),
+          });
+        }
       } else if (event.type === "gameOver") {
         ui.winner = event.winner;
         ui.winningTeam = event.team;
@@ -399,7 +451,37 @@ export class GameClient {
     }
     ui.attackPeak = peaks;
     this.renderer.setAttacks(frame.attacks, frame.players.length);
-    this.renderer.setPlayerFlags(this.playerFlags(frame));
+    this.baseFlags = this.playerFlags(frame);
+  }
+
+  /**
+   * The player flags for this animation frame: the frame's ally/traitor bits plus the
+   * strength of each running gold capture effect in bits 2–7 (a quick rise, then a fade).
+   */
+  private animatedFlags(now: number): Uint8Array {
+    this.lootEffects = this.lootEffects.filter((e) => now - e.start < LOOT_FX_MS);
+    if (this.lootEffects.length === 0) return this.baseFlags;
+    const flags = this.baseFlags.slice();
+    for (const effect of this.lootEffects) {
+      if (effect.capturer >= flags.length) continue;
+      const age = (now - effect.start) / LOOT_FX_MS;
+      const strength = Math.min(1, age * 8) * (1 - age);
+      const level = Math.round(63 * strength);
+      if (level > flags[effect.capturer]! >> 2) {
+        flags[effect.capturer] = (flags[effect.capturer]! & 3) | (level << 2);
+      }
+    }
+    return flags;
+  }
+
+  private lootFloaters(now: number): LootFloater[] {
+    return this.lootEffects.map((e) => ({
+      x: e.x,
+      y: e.y,
+      gold: e.gold,
+      age: Math.min(1, (now - e.start) / LOOT_FX_MS),
+      mine: e.capturer === ui.localPlayerId,
+    }));
   }
 
   /**
@@ -496,6 +578,9 @@ export class GameClient {
       case "ally":
         this.allyWithHovered();
         break;
+      case "mobilize":
+        this.mobilize();
+        break;
       case "diplomacyYes":
       case "diplomacyNo":
         if (ui.screen === "game") this.answerTopCard(action === "diplomacyYes");
@@ -525,6 +610,7 @@ export class GameClient {
     this.updateHover();
     this.updateHint();
     this.refreshLabels(startedAt);
+    this.renderer.setPlayerFlags(this.animatedFlags(startedAt));
     this.renderer.render(view, this.currentTick(), time / 1000);
     const frame = this.latestFrame;
     const players = frame?.players ?? [];
@@ -542,6 +628,8 @@ export class GameClient {
           frame && p.traitorUntilTick > frame.tick ? "traitor" : friends.has(p.id) ? "ally" : null,
       })),
     );
+
+    this.labels.drawLoot(view, this.lootFloaters(startedAt));
 
     this.perf.recordFrame(performance.now() - startedAt, this.renderer.lastUploadMs);
     requestAnimationFrame((next) => this.animationFrame(next));
@@ -587,7 +675,11 @@ export class GameClient {
       playing &&
       protectionSecondsLeft(ui.previewContext) === 0 &&
       !!me?.neighbors?.some((id) => id !== 0);
-    const hint = this.hints.update({ playing, canAttackPlayer }, performance.now() / 1000);
+    const canMobilize = playing && !!me && mobilizePreview(DEFAULT_RULES, me).blocked === null;
+    const hint = this.hints.update(
+      { playing, canAttackPlayer, canMobilize },
+      performance.now() / 1000,
+    );
     if (hint !== ui.hint) ui.hint = hint;
   }
 

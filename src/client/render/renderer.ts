@@ -216,7 +216,8 @@ export class MapRenderer {
   }
 
   /**
-   * Per player id: 1 = the local player's ally, 2 = traitor (GAME_DESIGN.md §3.14). Kept
+   * Per player id: 1 = the local player's ally, 2 = traitor (GAME_DESIGN.md §3.14), bits
+   * 2–7 = strength of the gold capture effect (0–63, §3.16). Kept
    * in the palette's alpha channel; re-uploaded only when something changed.
    */
   setPlayerFlags(flags: Uint8Array): void {

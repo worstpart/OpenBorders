@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
   import { allianceStatus, formatCountdown } from "../../app/diplomacy.ts";
+  import { donationOptions } from "../../app/economy.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, previewClick } from "../../app/preview.ts";
   import { teamName } from "../../app/teams.ts";
@@ -13,6 +14,7 @@
     onRequestAlliance: (target: number) => void;
     onRenewAlliance: (ally: number) => void;
     onBreakAlliance: (ally: number) => void;
+    onDonate: (to: number, resource: "troops" | "gold", percent: number) => void;
     onClose: () => void;
   }
 
@@ -22,6 +24,7 @@
     onRequestAlliance,
     onRenewAlliance,
     onBreakAlliance,
+    onDonate,
     onClose,
   }: Props = $props();
   const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
@@ -56,6 +59,12 @@
       : [],
   );
   const alliance = $derived(menu ? allianceStatus(ui.diplomacyContext, menu.owner) : null);
+  /** Gifts to an ally or teammate (GAME_DESIGN.md §3.16). */
+  const gifts = $derived(
+    owner && !isMe && DEFAULT_RULES.economy.enabled && ui.friends.has(owner.id)
+      ? donationOptions(ui.donationContext, owner, ui.attackPercent)
+      : [],
+  );
   /** Breaking needs a second click (it makes you a traitor). */
   let confirmBreak = $state(false);
   $effect(() => {
@@ -221,6 +230,33 @@
       {/if}
     {/if}
 
+    {#if gifts.length > 0}
+      <div class="divider"></div>
+      <div class="group-label">Send {ui.attackPercent}% of your…</div>
+      {#each gifts as gift (gift.resource)}
+        <button
+          type="button"
+          role="menuitem"
+          class={gift.resource}
+          disabled={gift.blocked !== null}
+          onclick={() => act(() => onDonate(menu.owner, gift.resource, ui.attackPercent))}
+        >
+          {gift.resource === "troops" ? "Send troops" : "Send gold"}
+          <span class="muted">
+            {#if gift.blocked === "cooldown"}
+              again in {Math.ceil(gift.secondsLeft)} s
+            {:else if gift.blocked === "theyAreFull"}
+              their army is full
+            {:else if gift.blocked === "nothing"}
+              none to send
+            {:else}
+              {formatTroops(gift.amount)}
+            {/if}
+          </span>
+        </button>
+      {/each}
+    {/if}
+
     {#if myAttacks.length > 0}
       <div class="divider"></div>
       <button type="button" role="menuitem" onclick={() => act(() => onRetreatFrom(menu.owner))}>
@@ -301,6 +337,7 @@
     color: var(--text-primary);
     font: inherit;
     text-align: left;
+    white-space: nowrap;
     cursor: pointer;
   }
 
@@ -365,6 +402,19 @@
   .info.ally,
   button.ally {
     color: var(--color-ally);
+  }
+
+  button:disabled {
+    color: var(--text-muted);
+    cursor: default;
+  }
+
+  button:disabled:hover {
+    background: none;
+  }
+
+  button.gold:not(:disabled) {
+    color: var(--color-gold);
   }
 
   button.danger {

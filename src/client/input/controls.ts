@@ -25,7 +25,9 @@ export type KeyAction =
   | "ally"
   /** Yes / no to the top diplomacy card. */
   | "diplomacyYes"
-  | "diplomacyNo";
+  | "diplomacyNo"
+  /** Turn gold into troops (GAME_DESIGN.md §3.16). */
+  | "mobilize";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -66,6 +68,7 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   KeyK: "ally",
   KeyY: "diplomacyYes",
   KeyN: "diplomacyNo",
+  KeyM: "mobilize",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {

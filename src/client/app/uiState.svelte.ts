@@ -10,6 +10,7 @@ import type {
   PlayerSnapshot,
 } from "../../sim/frame.ts";
 import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
+import type { DonationContext } from "./economy.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
 import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
@@ -72,6 +73,8 @@ class UiState {
   allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
   /** Tick of the local player's last alliance request to each player (for the cooldown). */
   myRequests = $state.raw<ReadonlyMap<PlayerId, number>>(new Map());
+  /** Tick of the local player's last donation to each friend, by donationKeyOf(to, resource). */
+  myDonations = $state.raw<ReadonlyMap<string, number>>(new Map());
   /** Allies whose renewal prompt the local player closed with "Let it end". */
   dismissedRenewals = $state.raw<ReadonlySet<PlayerId>>(new Set());
   /** Share of home troops a click sends (client-side choice; sent with each command). */
@@ -104,6 +107,7 @@ class UiState {
     this.alliances = [];
     this.allianceRequests = [];
     this.myRequests = new Map();
+    this.myDonations = new Map();
     this.dismissedRenewals = new Set();
     this.winner = null;
     this.winningTeam = 0;
@@ -149,6 +153,11 @@ class UiState {
       requests: this.allianceRequests,
       myRequests: this.myRequests,
     };
+  }
+
+  /** What the donation options need (GAME_DESIGN.md §3.16). */
+  get donationContext(): DonationContext {
+    return { rules: DEFAULT_RULES, tick: this.tick, me: this.me, myDonations: this.myDonations };
   }
 
   /** The local player's allies. */

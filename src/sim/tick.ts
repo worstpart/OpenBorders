@@ -18,6 +18,7 @@ import {
   applyAllianceRequest,
   updateDiplomacy,
 } from "./systems/diplomacy.ts";
+import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -37,6 +38,7 @@ export const TICK_STEPS = [
   "encircle",
   "eliminate",
   "troops",
+  "economy",
   "bots",
   "victory",
   "frame",
@@ -81,6 +83,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 6. Troops regrow.
     growTroops(world);
     probe?.("troops");
+    // 6b. Gold comes in (GAME_DESIGN.md §3.16).
+    earnGold(world);
+    probe?.("economy");
     // 7. Bots decide; their commands apply next tick through step 1.
     thinkBots(world);
     probe?.("bots");
@@ -131,6 +136,10 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyAllianceRenew(world, player, command.ally);
     case "allianceBreak":
       return applyAllianceBreak(world, player, command.ally);
+    case "mobilize":
+      return applyMobilize(world, player, command.percentBp);
+    case "donate":
+      return applyDonate(world, player, command.to, command.resource, command.percentBp);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

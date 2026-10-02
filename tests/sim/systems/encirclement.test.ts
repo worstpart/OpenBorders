@@ -85,7 +85,9 @@ describe("encirclement", () => {
       `),
     );
     expect(events).toContainEqual({ type: "encircled", playerId: 2, by: 1, tiles: 2 });
-    expect(events).toContainEqual({ type: "eliminated", playerId: 2, by: 1 });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "eliminated", playerId: 2, by: 1 }),
+    );
   });
 
   it("coasts are safe", () => {

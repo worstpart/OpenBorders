@@ -28,6 +28,10 @@
  *
  * Teams (GAME_DESIGN.md §3.15): nations never target or ask a teammate, and prefer enemies
  * who attack a teammate or whom a teammate already attacks, so a team focuses its fire.
+ *
+ * Gold (GAME_DESIGN.md §3.16): nations save gold as a war chest and mobilize it right
+ * before attacking a player; they help teammates and human allies in need (troops to one
+ * losing a war, spare gold to one who can use it). Tribes only earn.
  */
 import {
   attackLossFactor,
@@ -46,6 +50,7 @@ import {
   isAllied,
   isTraitor,
 } from "../systems/diplomacy.ts";
+import { donationCooldownLeft, troopRoom } from "../systems/economy.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
@@ -91,10 +96,105 @@ export function thinkBots(world: World): void {
       : decide(world, bot, style, skill, brain.idleThinks, around);
     const actions: readonly Command[] =
       decided === null ? [] : Array.isArray(decided) ? decided : [decided as Command];
-    for (const command of actions) world.pendingCommands.push({ playerId: bot.id, command });
+    const gold =
+      !tribe && world.rules.economy.enabled
+        ? economy(world, bot, style, actions)
+        : { before: [], after: [] };
+    for (const command of [...gold.before, ...actions, ...gold.after]) {
+      world.pendingCommands.push({ playerId: bot.id, command });
+    }
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
     brain.idleThinks = actions.length === 0 && wasting ? brain.idleThinks + 1 : 0;
   }
+}
+
+/**
+ * A nation's gold and gifts (GAME_DESIGN.md §3.16), decided with its action.
+ *
+ * Gold is a war chest: right before attacking a player the nation mobilizes all it can, so
+ * gold makes strikes stronger. (Refilling the army after every attack — the first
+ * version — made every nation harder to beat and stretched big lobbies from 13 to 18 min.)
+ *
+ * Gifts, after the action, when it isn't under attack itself: troops to the teammate or
+ * human ally losing a war worst, if it has troops to spare; half its gold to the one with
+ * the emptiest army while its own army sits at the cap. Never to allied nations: two
+ * nations propping each other up stalled wars (milestone 2.4 headless runs).
+ */
+function economy(
+  world: World,
+  bot: Player,
+  style: PersonalityRules,
+  actions: readonly Command[],
+): { before: Command[]; after: Command[] } {
+  const ai = world.rules.ai;
+  const capacity = bot.capacity;
+  const before: Command[] = [];
+  const after: Command[] = [];
+  if (capacity <= 0) return { before, after };
+  let home = bot.homeTroops;
+  let gold = bot.gold;
+  if (actions.some((c) => c.type === "attack" && c.target !== NEUTRAL)) {
+    const chest = Math.min(troopRoom(bot), gold / world.rules.economy.goldPerTroop);
+    if (chest >= ai.mobilizeMinShare * capacity) {
+      before.push({ type: "mobilize", percentBp: bps(chest / capacity) });
+      home += chest;
+      gold -= chest * world.rules.economy.goldPerTroop;
+    }
+  }
+  // Home troops once this think's attacks have left.
+  for (const c of actions) if (c.type === "attack") home -= (home * c.percentBp) / 10_000;
+  if (incomingTroops(world, bot.id) > 0) return { before, after };
+
+  let needy: Player | null = null;
+  let worst = 0;
+  let poorest: Player | null = null;
+  let poorestFill = ai.giftGoldBelow;
+  for (const friend of world.players) {
+    if (!friend.alive || friend.id === bot.id || troopRoom(friend) < 1) continue;
+    const teammate = sameTeam(world, bot.id, friend.id);
+    const humanAlly = friend.kind === "human" && isAllied(world, bot.id, friend.id);
+    if (!teammate && !humanAlly) continue;
+    const deficit = incomingTroops(world, friend.id) - friend.homeTroops;
+    if (deficit > worst && donationCooldownLeft(world, bot.id, friend.id, "troops") === 0) {
+      worst = deficit;
+      needy = friend;
+    }
+    const fill = friend.homeTroops / Math.max(1, friend.capacity);
+    if (fill < poorestFill && donationCooldownLeft(world, bot.id, friend.id, "gold") === 0) {
+      poorestFill = fill;
+      poorest = friend;
+    }
+  }
+  if (needy && home >= style.attackAt * capacity) {
+    after.push({
+      type: "donate",
+      to: needy.id,
+      resource: "troops",
+      percentBp: bps(ai.donateTroopsShare),
+    });
+  }
+  const atCap = bot.homeTroops + bot.fieldTroops >= ai.wastingAt * capacity;
+  if (poorest && atCap && gold >= ai.mobilizeMinShare * capacity) {
+    after.push({
+      type: "donate",
+      to: poorest.id,
+      resource: "gold",
+      percentBp: bps(ai.donateGoldShare),
+    });
+  }
+  return { before, after };
+}
+
+/** Troops in the armies attacking this player. */
+function incomingTroops(world: World, id: PlayerId): number {
+  let troops = 0;
+  for (const a of world.attacks) if (a.target === id && a.retreatTick < 0) troops += a.troops;
+  return troops;
+}
+
+/** A share as basis points (1..10,000). */
+function bps(share: number): number {
+  return Math.max(1, Math.min(10_000, Math.round(share * 10_000)));
 }
 
 /** What a bot sees along its border. */

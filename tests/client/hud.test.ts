@@ -47,6 +47,8 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
     fieldTroops: 0,
     capacity: 20_000,
     growthPerTick: 0,
+    gold: 0,
+    goldPerTick: 0,
     peakTiles: 100,
     tier: "nation",
     personality: null,
@@ -112,9 +114,9 @@ describe("toasts", () => {
       [
         { type: "attackStarted", attackId: 1, attacker: 2, target: 1 },
         { type: "attackStarted", attackId: 2, attacker: 3, target: 2 },
-        { type: "eliminated", playerId: 4, by: 1 },
-        { type: "eliminated", playerId: 5, by: 3 },
-        { type: "eliminated", playerId: 1, by: 3 },
+        { type: "eliminated", playerId: 4, by: 1, loot: 0 },
+        { type: "eliminated", playerId: 5, by: 3, loot: 0 },
+        { type: "eliminated", playerId: 1, by: 3, loot: 0 },
         { type: "encircled", playerId: 1, by: 2, tiles: 1200 },
         { type: "encircled", playerId: 3, by: 2, tiles: 50 },
         { type: "encircled", playerId: 3, by: 1, tiles: 2 },
@@ -132,9 +134,9 @@ describe("toasts", () => {
 
   it("in big lobbies, reports other eliminations only when they bordered us", () => {
     const events = [
-      { type: "eliminated", playerId: 4, by: 3 },
-      { type: "eliminated", playerId: 5, by: 3 },
-      { type: "eliminated", playerId: 6, by: 1 },
+      { type: "eliminated", playerId: 4, by: 3, loot: 0 },
+      { type: "eliminated", playerId: 5, by: 3, loot: 0 },
+      { type: "eliminated", playerId: 6, by: 1, loot: 0 },
     ] as const;
     const toasts = toastsForEvents(events, 1, names, (id) => id === 5);
     expect(toasts.map((t) => t.text)).toEqual(["P3 eliminated P5", "You eliminated P6"]);

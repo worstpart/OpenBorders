@@ -62,6 +62,10 @@ export interface Player {
   traitorUntilTick: number;
   /** Alliances this player has broken. */
   betrayals: number;
+  /** Gold in the treasury (an integer; GAME_DESIGN.md §3.16). */
+  gold: number;
+  /** Gold earned in the last tick (shown on the HUD). */
+  lastIncome: number;
   /** Team number (1..), or 0 = no team (free-for-all, and tribes in team games; §3.15). */
   readonly team: number;
   /** Bots only. */
@@ -136,6 +140,8 @@ export interface World {
   allianceRequests: AllianceRequest[];
   /** Tick of each player's last request to another player, by requestKey(from, to). */
   readonly lastRequestTick: Map<number, number>;
+  /** Tick of each player's last donation, by donationKey(from, to, resource) (§3.16). */
+  readonly lastDonationTick: Map<number, number>;
   /** Commands bots decided on this tick; applied first thing next tick, like any command. */
   pendingCommands: StampedCommand[];
   nextAttackId: number;
@@ -205,6 +211,14 @@ export function requestKey(from: PlayerId, to: PlayerId): number {
   return from * 0x10000 + to;
 }
 
+/** What a donation gives (GAME_DESIGN.md §3.16). */
+export type DonationResource = "troops" | "gold";
+
+/** Key of a donation cooldown: from → to, per resource. */
+export function donationKey(from: PlayerId, to: PlayerId, resource: DonationResource): number {
+  return requestKey(from, to) * 2 + (resource === "gold" ? 1 : 0);
+}
+
 export const MAX_PLAYERS = 0xffff; // owner ids are stored in a Uint16Array
 
 export function createWorld(setup: GameSetup): World {
@@ -235,6 +249,8 @@ export function createWorld(setup: GameSetup): World {
     lastLostTo: 0,
     traitorUntilTick: -1,
     betrayals: 0,
+    gold: 0,
+    lastIncome: 0,
     team: p.team ?? 0,
     encircleDirty: true,
     brain: p.kind === "bot" ? createBrain(p, rng) : null,
@@ -256,6 +272,7 @@ export function createWorld(setup: GameSetup): World {
     alliances: new Map(),
     allianceRequests: [],
     lastRequestTick: new Map(),
+    lastDonationTick: new Map(),
     pendingCommands: [],
     nextAttackId: 1,
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),

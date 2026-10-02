@@ -6,6 +6,7 @@
 import type { SimEvent } from "../../sim/events.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
 import type { PlayerId } from "../../sim/world.ts";
+import { formatTroops } from "../format.ts";
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -114,7 +115,9 @@ export function toastsForEvents(
         toasts.push(
           event.by === me
             ? {
-                text: `You eliminated ${nameOf(event.playerId)}`,
+                text:
+                  `You eliminated ${nameOf(event.playerId)}` +
+                  (event.loot >= 1 ? ` and took ${formatTroops(event.loot)} gold` : ""),
                 tone: "success",
                 player: event.playerId,
               }
@@ -194,6 +197,23 @@ export function toastsForEvents(
           });
         }
         break;
+      case "donated": {
+        const what = `${formatTroops(event.amount)} ${event.resource === "gold" ? "gold" : "troops"}`;
+        if (event.to === me) {
+          toasts.push({
+            text: `${nameOf(event.from)} sent you ${what}`,
+            tone: "success",
+            player: event.from,
+          });
+        } else if (event.from === me) {
+          toasts.push({
+            text: `You sent ${nameOf(event.to)} ${what}`,
+            tone: "info",
+            player: event.to,
+          });
+        }
+        break;
+      }
       case "phaseChanged":
         if (event.phase === "playing") {
           toasts.push({ text: "The match has started — expand!", tone: "info" });

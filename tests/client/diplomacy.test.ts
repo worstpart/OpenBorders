@@ -25,6 +25,8 @@ function player(id: number): PlayerSnapshot {
     fieldTroops: 0,
     capacity: 20_000,
     growthPerTick: 0,
+    gold: 0,
+    goldPerTick: 0,
     peakTiles: 100,
     tier: id === 1 ? null : "nation",
     personality: null,

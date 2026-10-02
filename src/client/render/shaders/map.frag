@@ -10,7 +10,8 @@ uniform float uZoom;         // device pixels per tile
 uniform vec2 uMapSize;       // tiles
 uniform sampler2D uTerrain;  // rgb = terrain color, a = hillshade (0.5 = flat)
 uniform usampler2D uOwner;   // r = owner id (WATER for water), g = tick of last capture
-uniform sampler2D uPalette;  // player colors, 256 ids per row; a = flags (1 ally, 2 traitor)
+uniform sampler2D uPalette;  // player colors, 256 ids per row; a = flags (1 ally, 2 traitor,
+                             // bits 2–7: strength of the gold capture effect, 0–63)
 uniform sampler2D uWar;      // r > 0 at (attacker, target): attacker is attacking target
 uniform uint uWarSize;       // players + 1
 uniform float uTick;         // current tick + fraction of the next one
@@ -32,6 +33,7 @@ const float FRONT_TILES = 0.85;     // ...and at least this share of a tile when
 const vec3 ATTACK_RED = vec3(1.0, 0.16, 0.12);
 const vec3 ALLY_MINT = vec3(0.62, 1.0, 0.84);   // the local player's allies' borders
 const vec3 TRAITOR_CORAL = vec3(1.0, 0.42, 0.34); // stripes over a traitor's land
+const vec3 LOOT_GOLD = vec3(1.0, 0.8, 0.3);      // a capture's gold flowing in (§3.16)
 const uint FLAG_ALLY = 1u;
 const uint FLAG_TRAITOR = 2u;
 const float SHADE_DECODE = 255.0 / 128.0;
@@ -116,12 +118,16 @@ void main() {
       grown = smoothstep(v - 0.1, v + 0.1, progress * progress * 1.3 + 0.05);
       glowing = grown * (1.0 - progress);
     }
+    uint flags = playerFlags(owner);
+    // Just captured a whole player (GAME_DESIGN.md §3.16): their gold pours in — the
+    // new land grows in gold and the capturer's border shimmers gold for a moment.
+    float loot = float(flags >> 2u) / 63.0;
+    float sweep = 0.5 + 0.5 * sin((screen.x + screen.y) / (uBorderPx * 10.0) - uSeconds * 9.0);
     color = mix(color, own, (FILL + (owner == uHoverOwner ? HOVER_FILL : 0.0)) * grown);
-    color = mix(color, mix(own, vec3(1.0), 0.55), glowing * 0.8);
+    color = mix(color, mix(mix(own, vec3(1.0), 0.55), LOOT_GOLD, min(1.0, loot * 2.0)), glowing * 0.8);
 
     // Traitors (GAME_DESIGN.md §3.14): slowly moving coral stripes, the same width on
     // screen at every zoom, for as long as the mark lasts.
-    uint flags = playerFlags(owner);
     if ((flags & FLAG_TRAITOR) != 0u) {
       float period = uBorderPx * 9.0;
       float phase = fract((screen.x + screen.y) / period - uSeconds * 0.5);
@@ -163,11 +169,16 @@ void main() {
     }
 
     bool ally = (flags & FLAG_ALLY) != 0u;
-    float width = uBorderPx * (owner == uLocalOwner ? 1.35 : ally ? 1.3 : 1.0);
+    float width = uBorderPx * (owner == uLocalOwner ? 1.35 : ally ? 1.3 : 1.0) * (1.0 + 1.2 * loot);
     float edge = (1.0 - smoothstep(width - 0.75, width + 0.75, dPx)) * grown;
     vec3 border = owner == uLocalOwner ? mix(own, vec3(1.0), 0.55)
                 : ally ? mix(own, ALLY_MINT, 0.8)
                 : own * 0.5;
+    if (loot > 0.0) {
+      float band = 1.0 - smoothstep(0.0, uBorderPx * 7.0, dPx);
+      color = mix(color, LOOT_GOLD, band * loot * (0.25 + 0.3 * sweep));
+      border = mix(border, mix(LOOT_GOLD, vec3(1.0), sweep * 0.45), loot);
+    }
     color = mix(color, border, edge);
   }
 

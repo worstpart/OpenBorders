@@ -4,7 +4,7 @@
  * simulation validates each one when it executes; invalid commands are rejected and
  * reported as events (they are normal in multiplayer, e.g. a stale click).
  */
-import type { PlayerId } from "./world.ts";
+import type { DonationResource, PlayerId } from "./world.ts";
 
 export type Command =
   /** Choose (or move) your starting position. Spawn phase only. */
@@ -34,7 +34,19 @@ export type Command =
   /** During the renewal window: agree to extend the alliance with `ally`. */
   | { readonly type: "allianceRenew"; readonly ally: PlayerId }
   /** End the alliance with `ally` now; the breaker becomes a traitor for a while. */
-  | { readonly type: "allianceBreak"; readonly ally: PlayerId };
+  | { readonly type: "allianceBreak"; readonly ally: PlayerId }
+  /**
+   * Spend gold on instant home troops (GAME_DESIGN.md §3.16): up to this share of your
+   * capacity (basis points), limited by your gold and the room under the cap.
+   */
+  | { readonly type: "mobilize"; readonly percentBp: number }
+  /** Give an ally or teammate a share (basis points) of your home troops or your gold. */
+  | {
+      readonly type: "donate";
+      readonly to: PlayerId;
+      readonly resource: DonationResource;
+      readonly percentBp: number;
+    };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

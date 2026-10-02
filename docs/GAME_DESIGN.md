@@ -547,6 +547,49 @@ wins — each team starts with about half the land. Neither dropping the "gang u
 nor an 80% team goal changed that much, so the goal stays 70%; the playtest decides. With
 two teams, nations don't ally across teams (two sides left).
 
+### 3.16 Economy: gold, Mobilize, donations (milestone 2.4)
+
+Model **E2 + Mobilize** (§6.1, Q6): gold comes from land, sublinearly, and before
+buildings exist (2.5) it buys one thing — troops, instantly, within your capacity.
+Donations between friends (§6.4) come with it. Design note written before building; the
+user chose on 2026-10-02 that **troops can be donated too**, with limits (D-020).
+
+**The rules**
+
+| Rule | Value | Why |
+|---|---|---|
+| Income | every tick of play: **10 + 0.8 · √tiles** gold (rounded down). Spawn start (49 tiles) ≈ 16/tick (160/s); a mid-game empire of 50k tiles ≈ 190/tick (1.9k/s); 200k tiles ≈ 370/tick | "Land = income" is intuitive; the square root damps the snowball (4× the land → 2× the gold). The base keeps a small player in the game |
+| Tribes | **half** the income, and they **never spend it** | They're filler (D-017); their gold piles up as loot — eating a tribe that survived long pays |
+| Mobilize | spend **1 gold per troop** for instant home troops, at most up to your capacity (home + field ≤ capacity, as always). The HUD buys **10% of your capacity** per click (key **M**); if gold is short it buys what you can afford | Gold is a reserve army that doesn't count toward the cap and can't be killed — but deploying it fills you past the growth sweet spot. Best right after an attack (back to ½, where growth peaks) or right before one |
+| How much it's worth | spending all income ≈ **+20% of peak troop growth** at every size (early 16 vs 75 troops/tick, mid 190 vs 1,040) | Noticeable, not dominant; buildings will compete for the same gold |
+| Loot | conquering a player (eliminating them) gives you **all their leftover gold** — nations' and tribes' alike (user request during 2.4; the note first said half). On the map the capturer's border shimmers gold for ~2 s and "+12K" with a coin rises from where the captured land was | Finishing players off pays, and you see it pay. Nobody gets the gold if no one eliminated them |
+| Donations | to an **ally or teammate**: troops (from your home troops) or gold, a share chosen with the usual send % (default 25%). Each kind to each friend at most every **10 s**. Troops can't push the friend over their capacity (only what fits is sent; nothing if they're full) | Rescue a friend under attack, or pool gold in a team. The cap and the cooldown limit "feeding" one player (D-020) |
+| Off switch | `rules.economy.enabled = false` (headless `--no-economy`): no gold at all, games play exactly as in 2.3 | Regression check |
+
+**AI (as built).** *Nations* keep gold as a **war chest**: right before they attack a
+player they mobilize all it buys (if that's at least 2% of their capacity), so gold makes
+their strikes stronger. They **give troops** — a quarter of their home troops — to a
+teammate or human ally who is losing a war (incoming armies bigger than the friend's home
+troops), if they aren't under attack themselves and sit at their attack threshold; and a
+nation at its cap (gold it can't use) gives half its gold to the teammate or human ally
+with the emptiest army (below half). They **don't give to allied nations.** *Tribes* only
+earn. Why (headless, 10 nations + 100 tribes, Medium, 30 games): the first version —
+refill to half capacity after every attack, all-in defence, gifts to any friend — made
+every nation harder to beat and stretched games from 13 to 18 min; spending gold on attacks
+alone gave 14.9 min, and also dropping gifts between allied nations (who propped each other
+up) 11.6–12.1 min.
+
+**HUD**
+
+- **Command bar:** gold and income next to the troop numbers; a **Mobilize** button with
+  the troops it buys and their cost (key M), disabled at the cap or without gold.
+- **Right-click menu on an ally or teammate:** *Send troops* and *Send gold* with the
+  current send % and the amounts, or the seconds left on the cooldown.
+- **Hover card:** other players' gold.
+- **Toasts:** troops/gold received from a friend; loot taken ("You took 12k gold from …").
+- **Headless:** `--no-economy`; per game gold earned, mobilized, donated and looted, and
+  the median gold income at minutes 1, 3 and 6.
+
 ---
 
 ## 4. Interaction model
