@@ -16,6 +16,12 @@
     attackTile: (tile: number, percent: number) => void;
     /** Answer an incoming attack by attacking its sender. */
     counter: (attackId: number) => void;
+    /** Alliances (GAME_DESIGN.md §3.14). Asking someone who asked you accepts. */
+    requestAlliance: (target: number) => void;
+    replyAlliance: (from: number, accept: boolean) => void;
+    renewAlliance: (ally: number) => void;
+    dismissRenewal: (ally: number) => void;
+    breakAlliance: (ally: number) => void;
     pause: () => void;
     closeMenu: () => void;
     setSpeed: (multiplier: number) => void;
@@ -28,6 +34,7 @@
   import { ui } from "../app/uiState.svelte.ts";
   import AttackChips from "./hud/AttackChips.svelte";
   import CommandBar from "./hud/CommandBar.svelte";
+  import DiplomacyCards from "./hud/DiplomacyCards.svelte";
   import ContextMenu from "./hud/ContextMenu.svelte";
   import HintCard from "./hud/HintCard.svelte";
   import HoverCard from "./hud/HoverCard.svelte";
@@ -63,6 +70,11 @@
   </main>
 {:else}
   <YouChip />
+  <DiplomacyCards
+    onReply={actions.replyAlliance}
+    onRenew={actions.renewAlliance}
+    onDismissRenewal={actions.dismissRenewal}
+  />
   <Leaderboard onMenu={actions.pause} />
   <SpawnPrompt onConfirm={actions.confirmSpawn} />
   <Toasts />
@@ -73,6 +85,9 @@
   <ContextMenu
     onAttack={actions.attackTile}
     onRetreatFrom={actions.retreatFrom}
+    onRequestAlliance={actions.requestAlliance}
+    onRenewAlliance={actions.renewAlliance}
+    onBreakAlliance={actions.breakAlliance}
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />

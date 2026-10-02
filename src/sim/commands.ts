@@ -23,7 +23,18 @@ export type Command =
       readonly percentBp: number;
     }
   /** Stop an attack; its army comes home after a delay, minus a penalty against players. */
-  | { readonly type: "retreat"; readonly attackId: number };
+  | { readonly type: "retreat"; readonly attackId: number }
+  /**
+   * Ask `target` for an alliance (GAME_DESIGN.md §3.14). If they already asked us, this
+   * accepts their request.
+   */
+  | { readonly type: "allianceRequest"; readonly target: PlayerId }
+  /** Accept or decline `from`'s open request. */
+  | { readonly type: "allianceReply"; readonly from: PlayerId; readonly accept: boolean }
+  /** During the renewal window: agree to extend the alliance with `ally`. */
+  | { readonly type: "allianceRenew"; readonly ally: PlayerId }
+  /** End the alliance with `ally` now; the breaker becomes a traitor for a while. */
+  | { readonly type: "allianceBreak"; readonly ally: PlayerId };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

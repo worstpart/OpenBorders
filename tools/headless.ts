@@ -6,6 +6,7 @@
  *                          [--width 1100 --height 700] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
+ *                          [--no-alliances]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -17,6 +18,7 @@
  * {"troops": {"growthFloor": 20}}), to try a balance change before editing rules.ts.
  * --personality gives every nation the same personality. --bots is the number of nations
  * (the smart bots of GAME_DESIGN §3.11/§3.13); --tribes adds that many weak filler bots.
+ * --no-alliances turns diplomacy off (GAME_DESIGN §3.14): games then play as before 2.2.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -70,6 +72,16 @@ export interface GameReport {
   eliminations: number;
   attacks: number;
   rejected: number;
+  /** Alliance activity (GAME_DESIGN §3.14); nationAlliances = between two non-tribes. */
+  diplomacy: {
+    requests: number;
+    declined: number;
+    formed: number;
+    nationAlliances: number;
+    renewed: number;
+    expired: number;
+    betrayals: number;
+  };
   tickMs: { avg: number; p99: number; max: number };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -101,8 +113,10 @@ async function main(): Promise<void> {
       quiet: { type: "boolean", default: false },
       rules: { type: "string" },
       personality: { type: "string" },
+      "no-alliances": { type: "boolean", default: false },
     },
   });
+  const rules = loadRules(args.rules);
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -113,8 +127,9 @@ async function main(): Promise<void> {
     width: Number(args.width),
     height: Number(args.height),
     maxTicks: Number(args["max-minutes"]) * 60 * TICKS_PER_SECOND,
-    rules: loadRules(args.rules),
-
+    rules: args["no-alliances"]
+      ? { ...rules, diplomacy: { ...rules.diplomacy, enabled: false } }
+      : rules,
     personality: parsePersonality(args.personality),
   };
   const workerCount = Math.max(
@@ -196,6 +211,16 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   let eliminations = 0;
   let attacks = 0;
   let rejected = 0;
+  const diplomacy = {
+    requests: 0,
+    declined: 0,
+    formed: 0,
+    nationAlliances: 0,
+    renewed: 0,
+    expired: 0,
+    betrayals: 0,
+  };
+  const isTribeId = (id: number) => world.players[id - 1]?.brain?.tier === "tribe";
   let reason = "timeout";
   let error: string | null = null;
 
@@ -213,6 +238,15 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         else if (event.type === "attackStarted") attacks++;
         else if (event.type === "commandRejected") rejected++;
         else if (event.type === "gameOver") reason = event.reason;
+        else if (event.type === "allianceRequested") diplomacy.requests++;
+        else if (event.type === "allianceRequestEnded" && event.reason === "declined") {
+          diplomacy.declined++;
+        } else if (event.type === "allianceFormed") {
+          diplomacy.formed++;
+          if (!isTribeId(event.a) && !isTribeId(event.b)) diplomacy.nationAlliances++;
+        } else if (event.type === "allianceRenewed") diplomacy.renewed++;
+        else if (event.type === "allianceEnded" && event.reason === "expired") diplomacy.expired++;
+        else if (event.type === "allianceBroken") diplomacy.betrayals++;
       }
       if (world.tick % LEADER_SAMPLE_TICKS === 0) {
         const top = world.players.reduce((a, b) => (b.tiles > a.tiles ? b : a));
@@ -253,6 +287,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     eliminations,
     attacks,
     rejected,
+    diplomacy,
     tickMs: {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
@@ -284,6 +319,8 @@ function describe(report: GameReport, done: number, total: number): string {
     `(${report.winnerPersonality ?? "-"}) by ${report.reason} after ${report.minutes} min, ` +
     `land 90% ${report.land90Minutes ?? "-"} / all ${report.landRaceMinutes ?? "-"} min, ` +
     `${report.leadChanges} lead changes, ` +
+    `${report.diplomacy.formed} alliances (${report.diplomacy.nationAlliances} between nations), ` +
+    `${report.diplomacy.betrayals} betrayals, ` +
     `tick avg ${report.tickMs.avg} / p99 ${report.tickMs.p99} / max ${report.tickMs.max} ms` +
     (report.error ? `\n  ERROR: ${report.error}` : "")
   );
@@ -331,6 +368,12 @@ function summarize(
     winsByTier: Object.fromEntries(tierWins),
     winsByPersonality: Object.fromEntries(wins),
     rejectedCommands: reports.reduce((s, r) => s + r.rejected, 0),
+    diplomacyPerGame: Object.fromEntries(
+      (Object.keys(reports[0]?.diplomacy ?? {}) as (keyof GameReport["diplomacy"])[]).map((key) => [
+        key,
+        round(reports.reduce((s, r) => s + r.diplomacy[key], 0) / Math.max(1, reports.length)),
+      ]),
+    ),
     tickMs: {
       avg: round(reports.reduce((s, r) => s + r.tickMs.avg, 0) / Math.max(1, reports.length), 3),
       worstP99: Math.max(...reports.map((r) => r.tickMs.p99)),

@@ -30,6 +30,10 @@ export interface PlayerSnapshot {
   readonly difficulty: Difficulty | null;
   /** Tick the player was eliminated, or -1. */
   readonly eliminatedTick: number;
+  /** A traitor until this tick (compare with the frame's tick); -1 = never. */
+  readonly traitorUntilTick: number;
+  /** Alliances this player has broken. */
+  readonly betrayals: number;
   /**
    * Whose land touches this player's (0 = neutral), ascending — what a click can reach.
    * Humans only (the HUD needs it); null for bots, to save the work every tick.
@@ -48,6 +52,22 @@ export interface AttackSnapshot {
   readonly retreating: boolean;
 }
 
+export interface AllianceSnapshot {
+  /** The lower player id and the higher one. */
+  readonly a: PlayerId;
+  readonly b: PlayerId;
+  readonly expiresTick: number;
+  /** Who has agreed to renew during the renewal window. */
+  readonly renewA: boolean;
+  readonly renewB: boolean;
+}
+
+export interface AllianceRequestSnapshot {
+  readonly from: PlayerId;
+  readonly to: PlayerId;
+  readonly expiresTick: number;
+}
+
 export interface TickFrame {
   readonly tick: number;
   readonly phase: Phase;
@@ -57,6 +77,8 @@ export interface TickFrame {
   readonly changedOwners: Uint16Array;
   readonly players: readonly PlayerSnapshot[];
   readonly attacks: readonly AttackSnapshot[];
+  readonly alliances: readonly AllianceSnapshot[];
+  readonly allianceRequests: readonly AllianceRequestSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Hash of the full game state after this tick. */
@@ -81,6 +103,8 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     personality: p.brain?.tier === "nation" ? p.brain.personality : null,
     difficulty: p.brain?.tier === "nation" ? p.brain.difficulty : null,
     eliminatedTick: p.eliminatedTick,
+    traitorUntilTick: p.traitorUntilTick,
+    betrayals: p.betrayals,
     neighbors: p.kind === "human" && p.alive ? landNeighbors(world, p) : null,
   }));
 }
@@ -105,6 +129,14 @@ export function buildFrame(world: World): TickFrame {
       focusTile: a.focusTile,
       retreating: a.retreatTick >= 0,
     })),
+    alliances: [...world.alliances.values()].map((a) => ({
+      a: a.a,
+      b: a.b,
+      expiresTick: a.expiresTick,
+      renewA: a.renewA,
+      renewB: a.renewB,
+    })),
+    allianceRequests: world.allianceRequests.map((r) => ({ ...r })),
     events: world.events.slice(),
     winner: world.winner,
     hash: hashWorld(world),

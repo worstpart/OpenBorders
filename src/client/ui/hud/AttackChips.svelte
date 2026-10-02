@@ -27,7 +27,7 @@
       army,
       p?.homeTroops ?? 0,
       p?.tiles ?? 0,
-      lossFactorOf(DEFAULT_RULES, ui.me, p),
+      lossFactorOf(DEFAULT_RULES, ui.me, p, ui.tick),
     );
   }
 
@@ -48,7 +48,7 @@
             attack.troops,
             me.homeTroops,
             me.tiles,
-            lossFactorOf(DEFAULT_RULES, ui.players[attack.attacker - 1], me),
+            lossFactorOf(DEFAULT_RULES, ui.players[attack.attacker - 1], me, ui.tick),
           )
         : null}
       <li class="chip incoming" style:--player-color={ui.colorOf(attack.attacker)}>

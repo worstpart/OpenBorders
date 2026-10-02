@@ -58,6 +58,10 @@ export interface Player {
   eliminatedTick: number;
   /** The last player who took land from this one (0 = nobody yet). */
   lastLostTo: PlayerId;
+  /** Marked a traitor (broke an alliance) until this tick; -1 = never (GAME_DESIGN.md §3.14). */
+  traitorUntilTick: number;
+  /** Alliances this player has broken. */
+  betrayals: number;
   /** Bots only. */
   readonly brain: BotBrain | null;
   /**
@@ -89,6 +93,8 @@ export interface BotBrain {
   nextThinkTick: number;
   /** Consecutive thinks spent at the troop cap without acting (see AiRules.boredomThinks). */
   idleThinks: number;
+  /** Who betrayed this bot, and until which tick it holds the grudge (GAME_DESIGN.md §3.14). */
+  readonly grudges: Map<PlayerId, number>;
 }
 
 export interface GameSetup {
@@ -116,6 +122,12 @@ export interface World {
   ownerHash: number;
   /** Active attacks, in launch order (the order they are processed in). */
   attacks: Attack[];
+  /** Alliances by pairKey(a, b), in the order they were formed (GAME_DESIGN.md §3.14). */
+  readonly alliances: Map<number, Alliance>;
+  /** Open alliance requests, oldest first. */
+  allianceRequests: AllianceRequest[];
+  /** Tick of each player's last request to another player, by requestKey(from, to). */
+  readonly lastRequestTick: Map<number, number>;
   /** Commands bots decided on this tick; applied first thing next tick, like any command. */
   pendingCommands: StampedCommand[];
   nextAttackId: number;
@@ -151,6 +163,38 @@ export interface Attack {
   readonly scheduled: Map<number, number>;
   /** Seeds this attack's own vein pattern (organic spread). */
   readonly growthSeed: number;
+  /** Retreating without the usual loss (the two sides just became allies). */
+  freeRetreat: boolean;
+}
+
+/** Two players who can't attack each other until the alliance ends or one breaks it. */
+export interface Alliance {
+  /** The lower player id… */
+  readonly a: PlayerId;
+  /** …and the higher one. */
+  readonly b: PlayerId;
+  readonly formedTick: number;
+  /** The alliance ends at this tick unless both renew it during the renewal window. */
+  expiresTick: number;
+  /** a / b asked to renew during the current renewal window. */
+  renewA: boolean;
+  renewB: boolean;
+}
+
+export interface AllianceRequest {
+  readonly from: PlayerId;
+  readonly to: PlayerId;
+  readonly expiresTick: number;
+}
+
+/** Key of an unordered pair of players. */
+export function pairKey(a: PlayerId, b: PlayerId): number {
+  return a < b ? a * 0x10000 + b : b * 0x10000 + a;
+}
+
+/** Key of an ordered pair (from → to). */
+export function requestKey(from: PlayerId, to: PlayerId): number {
+  return from * 0x10000 + to;
 }
 
 export const MAX_PLAYERS = 0xffff; // owner ids are stored in a Uint16Array
@@ -176,6 +220,8 @@ export function createWorld(setup: GameSetup): World {
     peakTiles: 0,
     eliminatedTick: -1,
     lastLostTo: 0,
+    traitorUntilTick: -1,
+    betrayals: 0,
     encircleDirty: true,
     brain: p.kind === "bot" ? createBrain(p, rng) : null,
   }));
@@ -191,6 +237,9 @@ export function createWorld(setup: GameSetup): World {
     winner: null,
     ownerHash: 0,
     attacks: [],
+    alliances: new Map(),
+    allianceRequests: [],
+    lastRequestTick: new Map(),
     pendingCommands: [],
     nextAttackId: 1,
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),
@@ -213,6 +262,7 @@ function createBrain(setup: PlayerSetup, rng: Rng): BotBrain {
     difficulty: setup.difficulty ?? "hard",
     nextThinkTick: -1,
     idleThinks: 0,
+    grudges: new Map(),
   };
 }
 

@@ -52,6 +52,8 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
     personality: null,
     difficulty: "hard",
     eliminatedTick: -1,
+    traitorUntilTick: -1,
+    betrayals: 0,
     neighbors: null,
     ...overrides,
   };

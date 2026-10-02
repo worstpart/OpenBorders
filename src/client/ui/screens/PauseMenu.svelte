@@ -17,6 +17,8 @@
     ["Q / E · Shift+wheel", "Send −5% / +5%"],
     ["WASD · arrows", "Pan"],
     ["Space", "Center on your land"],
+    ["K", "Ally with the player under the cursor"],
+    ["Y / N", "Answer the top alliance card"],
     ["Esc", "Pause / close menus"],
   ];
 

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { allianceStatus, formatCountdown, traitorSecondsLeft } from "../../app/diplomacy.ts";
   import { describeBot } from "../../app/players.ts";
+  import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, outcomeText, previewClick } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
@@ -31,6 +33,8 @@
       : undefined,
   );
   const terrain = $derived(hover ? TERRAIN[hover.terrain] : undefined);
+  const alliance = $derived(hover ? allianceStatus(ui.diplomacyContext, hover.owner) : null);
+  const traitorFor = $derived(traitorSecondsLeft(DEFAULT_RULES, ui.tick, owner));
 
   // Keep the card on screen: flip to the other side of the cursor near the edges.
   const left = $derived(
@@ -75,6 +79,16 @@
         <span>{formatPercent(owner.tiles / ui.landTiles)} land</span>
         {#if owner.tier}<span class="muted personality">{describeBot(owner)}</span>{/if}
       </div>
+      {#if alliance?.kind === "ally"}
+        <div class="badge ally">Ally · {formatCountdown(alliance.secondsLeft)} left</div>
+      {:else if alliance?.kind === "theyAsked"}
+        <div class="badge ally">Wants an alliance</div>
+      {/if}
+      {#if traitorFor > 0}
+        <div class="badge traitor">
+          Traitor · {Math.ceil(traitorFor)} s — attacks on them cost less
+        </div>
+      {/if}
       {#if attacksMe}<div class="badge danger">Attacking you</div>{/if}
       {#if myAttack}<div class="badge">
           You're attacking ({formatTroops(myAttack.troops)} left)
@@ -96,7 +110,9 @@
       {#if (preview.kind === "expand" || preview.kind === "attack") && terrain?.note}
         <div class="muted">{terrain.name}: {terrain.note}</div>
       {/if}
-      {#if preview.kind === "notReachable"}
+      {#if preview.kind === "allied"}
+        <span class="muted">Allied — break the alliance first (right-click)</span>
+      {:else if preview.kind === "notReachable"}
         <span class="muted">
           {hover.owner === 0
             ? "Not reachable — you don't border this land"
@@ -168,6 +184,15 @@
     padding: 1px var(--space-2);
     border-radius: 999px;
     background: rgb(255 255 255 / 0.08);
+  }
+
+  .badge.ally {
+    color: var(--color-ally);
+  }
+
+  .badge.traitor {
+    color: var(--color-traitor);
+    font-weight: 600;
   }
 
   .badge.danger {

@@ -20,6 +20,8 @@ export type ClickPreview =
   | { readonly kind: "attack"; readonly army: number; readonly outlook: BattleOutlook }
   | { readonly kind: "own" }
   | { readonly kind: "notReachable" }
+  /** Allies can't attack each other (GAME_DESIGN.md §3.14). */
+  | { readonly kind: "allied" }
   | { readonly kind: "protected"; readonly seconds: number }
   | { readonly kind: "noTroops" }
   | { readonly kind: "inactive" };
@@ -31,6 +33,8 @@ export interface PreviewContext {
   readonly playStartTick: number;
   readonly me: PlayerSnapshot | undefined;
   readonly players: readonly PlayerSnapshot[];
+  /** The local player's allies (empty when left out). */
+  readonly allies?: ReadonlySet<PlayerId>;
 }
 
 /** Seconds of spawn protection left (0 once attacks on players are allowed). */
@@ -48,6 +52,7 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
   if (!me.neighbors?.includes(target)) return { kind: "notReachable" };
   const defender = target === 0 ? null : ctx.players[target - 1];
   if (target !== 0 && !defender?.alive) return { kind: "notReachable" };
+  if (ctx.allies?.has(target)) return { kind: "allied" };
   const seconds = protectionSecondsLeft(ctx);
   if (defender && seconds > 0) return { kind: "protected", seconds };
   const army = troopsToSend(me.homeTroops, percent);
@@ -68,18 +73,27 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
       army,
       defender.homeTroops,
       defender.tiles,
-      lossFactorOf(ctx.rules, me, defender),
+      lossFactorOf(ctx.rules, me, defender, ctx.tick),
     ),
   };
 }
 
-/** Taking a tribe's land is cheaper for anyone but a tribe (D-017). */
+/**
+ * Taking a tribe's land is cheaper for anyone but a tribe (D-017), and a traitor's for
+ * everyone (GAME_DESIGN.md §3.14).
+ */
 export function lossFactorOf(
   rules: GameRules,
   attacker: PlayerSnapshot | undefined,
   defender: PlayerSnapshot | undefined,
+  tick: number,
 ): number {
-  return attackLossFactor(rules, attacker?.tier === "tribe", defender?.tier === "tribe");
+  return attackLossFactor(
+    rules,
+    attacker?.tier === "tribe",
+    defender?.tier === "tribe",
+    (defender?.traitorUntilTick ?? -1) > tick,
+  );
 }
 
 export const ODDS_LABEL: Record<Odds, string> = {

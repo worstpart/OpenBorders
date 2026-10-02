@@ -23,6 +23,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-014 | Name: **OpenBorder** (was the working title "Borderline") | **Accepted** 2026-10-02 (user) |
 | D-016 | Phase 2 order: big lobbies → Tribes & Nations → alliances → teams | **Accepted** 2026-10-02 |
 | D-017 | Tribes are weaker by stats; Nations stay fair | **Accepted** 2026-10-02 |
+| D-018 | Alliances: timed and renewable, no shared victory, betrayal costly | **Accepted** 2026-10-02 |
 
 ---
 
@@ -238,3 +239,28 @@ include the tribe discount so the odds the HUD shows stay true.
 
 **Alternatives.** (a) fair tribes that are only simpler — rejected by the user; tribes
 would still hold full armies and stall attackers.
+
+---
+
+## D-018 — Alliances: timed and renewable, no shared victory, betrayal costly · Accepted 2026-10-02
+
+**Context.** Milestone 2.2 (D-016) adds alliances. The handoff left three questions open:
+how many alliances at once, whether allies share a win, and what "traitor" means in numbers.
+
+**Decision** (GAME_DESIGN §3.14). Requests expire after 20 s (30 s before asking the same
+player again); alliances last 5 min and are extended only if **both** renew in the last
+30 s. **No cap** on alliances for players (nations limit themselves to two). **Only your
+own land counts** for victory — a shared win is what teams (2.3) are for; nations never
+ally or renew when only two contenders remain, so a game can't stall on a final pair of
+allies. Breaking an alliance makes you a **traitor for 30 s**: attackers pay 0.6× losses
+and move faster; tribes attack neighbouring traitors first; nations weigh traitors 2× as
+targets (the user asked for this during the milestone) and the betrayed nation holds a
+5-minute grudge. Whether a nation is the kind to betray a given ally is decided once per
+alliance (difficulty × personality), so betrayals stay occasional.
+
+**Consequences.** Games run a little longer (see ROADMAP 2.2 results); `rules.diplomacy
+.enabled = false` reproduces the 2.1 game exactly, which keeps balance comparisons honest.
+
+**Alternatives.** Permanent alliances until broken (rejected: blocs would freeze the map);
+allies' land counted together (rejected: that is teams mode, 2.3); a per-think random
+betrayal chance (rejected: over a 5-minute alliance nearly every one ended in betrayal).

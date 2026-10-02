@@ -415,6 +415,84 @@ all troop numbers were too big on the map (made smaller; tribe troops only when 
 in), and evenly spaced tribes looked "very organized" (now scattered at random, nations
 still spread evenly). Tribe populations themselves were fine and are unchanged.
 
+### 3.14 Alliances (milestone 2.2)
+
+Timed, renewable alliances with a price for betrayal (D-016; ideas from OpenFront, research
+§3.19 and §3.21 — our own numbers and code). Design note written before building; results
+below. All numbers live in `rules.diplomacy`; `enabled: false` turns the whole system off
+(lobbies then play exactly as in 2.1 — the regression check).
+
+**The rules**
+
+| Rule | Value | Why |
+|---|---|---|
+| Ask | Any living player, any time during play (spawn protection included); you don't need to border them | Alliances are about the whole map, not only neighbours |
+| Request expires | after **20 s** | Long enough to read and decide, short enough not to linger |
+| Ask the same player again | after **30 s** (from your last request to them) | No request spam |
+| Both asked each other | the second request **accepts** the first | Natural: two players clicking "ally" at each other are allies |
+| Allies | **can't attack each other**; armies already fighting between them come home **without** the 20% retreat loss | Forming an alliance is peace, at once and at no cost |
+| Encirclement | allies never capture each other's land; a piece enclosed only by allies is safe; with mixed enclosers only the non-allies count | Otherwise an ally could swallow your pockets for free |
+| Lasts | **5 min**, then ends on its own | Alliances are recurring decisions, not permanent blocs |
+| Renew | in the last **30 s** both players are asked; if **both** agree it is extended by 5 min | Either side can let it lapse without becoming a traitor |
+| Break | at any time; the breaker is a **traitor for 30 s** | Betrayal is possible but costly |
+| Traitor | anyone attacking a traitor loses **0.6×** troops per tile and moves **1.33× faster** (0.75× the delay per tile); tribes attack a neighbouring traitor first; nations weigh traitors **2×** as targets (user request during 2.2) and the betrayed nation holds a grudge | A visible, short window of weakness: the betrayed side and its neighbours can strike back |
+| How many | **no cap** for players; nations hold at most 2 alliances (bots' own restraint) | A human may ally many tribes — but then can't eat them without becoming a traitor; the trade-off is the decision |
+| Victory | **only your own land counts** (70% or last standing); alliances don't share a win | Shared victory is what teams (2.3) are for. Two allies left alone will have to fight: nations never ally or renew when only two contenders are left |
+| Elimination | an eliminated player's alliances and requests vanish | — |
+
+**AI**
+
+- **Tribes** accept every request and renewal (on their next think, 4–8 s), never ask,
+  never break. Once regrown they attack a neighbouring traitor (who isn't their ally)
+  before anything else — even while open land remains.
+- **Nations** never ally tribes (tribes are food) and decide everything else by *threat*,
+  *strength* and *shared enemies* (strength = home + field troops):
+  - they refuse traitors, anyone who betrayed *them* in the last 5 min (a grudge), a
+    runaway leader (≥ 25% of the land), anyone when they already hold 2 alliances, and
+    anyone when only two contenders (nations and humans) are left;
+  - they refuse a player they are beating (their own attack on them is expected to take
+    ≥ 40% of the land);
+  - a **neighbour** is welcome if it is clearly stronger (≥ 1.25×, appeasement), if both
+    fight the same enemy, or if the nation is at war with another nation or human and the
+    neighbour isn't much weaker (≥ 0.6×, a safe flank); a far-away player is welcome if
+    it is not much weaker (≥ 0.6×). Turtles accept from 0.8× without a reason;
+    aggressors want 1.5× from neighbours;
+  - **asking**: at most one request per think, to the strongest bordering player it would
+    welcome, at most every 90 s per player;
+  - **renewing**: if it would still welcome the ally;
+  - **betraying**: an ally counts as a target again when an attack on them is expected
+    to take nearly all their land — Hard betrays then whenever its personality allows,
+    Medium sometimes; Easy betrays at random and earlier (even for half their land).
+    Turtles never betray, expanders half as often, aggressors and opportunists fully;
+  - **Easy** nations are "confused": a quarter of their answers are flipped at random
+    (Medium a tenth, Hard never).
+
+| Difficulty | Betrays for at least | Chance (× personality) | Answers flipped |
+|---|---|---|---|
+| Easy | 50% of the ally's land | 15% | 25% |
+| Medium | 90% | 30% | 10% |
+| Hard | 99% | 100% | 0% |
+
+**HUD**
+
+- **Right-click menu** on another player: *Request alliance* (or *Accept their request*,
+  *Request sent · 14 s*, *Ask again in 18 s*); on an ally: *Allied · 3:12 left* and
+  *Break alliance* (asks for a second click: "you'll be a traitor for 30 s"). Allies show
+  no attack options.
+- **Keys:** **K** = ally with the player under the cursor (request or accept); **Y / N**
+  = yes / no to the top diplomacy card.
+- **Diplomacy cards** (left, under the you-chip): incoming requests with a 20 s bar,
+  *Accept* / *Decline*; renewal prompts in the last 30 s ("Alliance with X ends in 0:24")
+  with *Renew* / *Let it end*, then "Waiting for X…".
+- **Toasts:** accepted, declined, expired, ended, renewed, "X betrayed you!", "You
+  betrayed X — traitor for 30 s"; others' betrayals only if one of them borders you.
+- **Map:** allies' borders in mint, a little thicker; a traitor's land carries moving
+  coral stripes while the mark lasts; allies' names in mint.
+- **Leaderboard:** a handshake mark by allies; a *traitor* tag.
+- **Hover card:** "Ally · 3:12 left", "Traitor · 24 s — attacks on them cost less"; the
+  preview says "Allied — break the alliance first (right-click)". The odds include the
+  traitor discount (`battle.ts`), like the tribe discount.
+
 ---
 
 ## 4. Interaction model
@@ -607,10 +685,9 @@ allowed, boat troops count toward the cap. Warships only if transports prove fun
 
 ### 6.4 Diplomacy (Phase 2)
 
-Alliance requests (expire in 20 s), alliances last ~5 min and renew only if both agree,
-allies can't attack each other, **betrayal** marks you a traitor for 30 s (weaker
-defense, visible marker), donate troops/gold with cooldowns, quick pings/emotes, mark a
-target for allies. No free-text chat in game.
+Alliances: **built in milestone 2.2, see §3.14.** Still to come: donate troops/gold
+with cooldowns (2.4), quick pings/emotes (2.8), mark a target for allies. No free-text
+chat in game.
 
 ### 6.5 AI (Phase 2+)
 

@@ -10,7 +10,7 @@ uniform float uZoom;         // device pixels per tile
 uniform vec2 uMapSize;       // tiles
 uniform sampler2D uTerrain;  // rgb = terrain color, a = hillshade (0.5 = flat)
 uniform usampler2D uOwner;   // r = owner id (WATER for water), g = tick of last capture
-uniform sampler2D uPalette;  // player colors, 256 ids per row
+uniform sampler2D uPalette;  // player colors, 256 ids per row; a = flags (1 ally, 2 traitor)
 uniform sampler2D uWar;      // r > 0 at (attacker, target): attacker is attacking target
 uniform uint uWarSize;       // players + 1
 uniform float uTick;         // current tick + fraction of the next one
@@ -30,6 +30,10 @@ const float VEIN_SCALE = 0.3;       // growth veins: about one every 3 tiles (tw
 const float FRONT_MIN_WIDTH = 6.0;  // front glow width when zoomed out, in border widths
 const float FRONT_TILES = 0.85;     // ...and at least this share of a tile when zoomed in
 const vec3 ATTACK_RED = vec3(1.0, 0.16, 0.12);
+const vec3 ALLY_MINT = vec3(0.62, 1.0, 0.84);   // the local player's allies' borders
+const vec3 TRAITOR_CORAL = vec3(1.0, 0.42, 0.34); // stripes over a traitor's land
+const uint FLAG_ALLY = 1u;
+const uint FLAG_TRAITOR = 2u;
 const float SHADE_DECODE = 255.0 / 128.0;
 
 uint ownerAt(ivec2 tile) {
@@ -39,6 +43,10 @@ uint ownerAt(ivec2 tile) {
 
 vec3 playerColor(uint id) {
   return texelFetch(uPalette, ivec2(int(id % 256u), int(id / 256u)), 0).rgb;
+}
+
+uint playerFlags(uint id) {
+  return uint(texelFetch(uPalette, ivec2(int(id % 256u), int(id / 256u)), 0).a * 255.0 + 0.5);
 }
 
 bool isAttacking(uint attacker, uint target) {
@@ -111,6 +119,16 @@ void main() {
     color = mix(color, own, (FILL + (owner == uHoverOwner ? HOVER_FILL : 0.0)) * grown);
     color = mix(color, mix(own, vec3(1.0), 0.55), glowing * 0.8);
 
+    // Traitors (GAME_DESIGN.md §3.14): slowly moving coral stripes, the same width on
+    // screen at every zoom, for as long as the mark lasts.
+    uint flags = playerFlags(owner);
+    if ((flags & FLAG_TRAITOR) != 0u) {
+      float period = uBorderPx * 9.0;
+      float phase = fract((screen.x + screen.y) / period - uSeconds * 0.5);
+      float stripe = smoothstep(0.42, 0.5, phase) * (1.0 - smoothstep(0.92, 1.0, phase));
+      color = mix(color, TRAITOR_CORAL, stripe * 0.32 * grown);
+    }
+
     // Distance (in tiles) from this pixel to the nearest edge or corner shared with a
     // tile of a different owner; converted to pixels, so borders have the same on-screen
     // width at every zoom level. Each side draws its own half of a shared border.
@@ -144,9 +162,12 @@ void main() {
       }
     }
 
-    float width = uBorderPx * (owner == uLocalOwner ? 1.35 : 1.0);
+    bool ally = (flags & FLAG_ALLY) != 0u;
+    float width = uBorderPx * (owner == uLocalOwner ? 1.35 : ally ? 1.3 : 1.0);
     float edge = (1.0 - smoothstep(width - 0.75, width + 0.75, dPx)) * grown;
-    vec3 border = owner == uLocalOwner ? mix(own, vec3(1.0), 0.55) : own * 0.5;
+    vec3 border = owner == uLocalOwner ? mix(own, vec3(1.0), 0.55)
+                : ally ? mix(own, ALLY_MINT, 0.8)
+                : own * 0.5;
     color = mix(color, border, edge);
   }
 

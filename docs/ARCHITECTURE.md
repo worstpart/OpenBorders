@@ -218,7 +218,9 @@ interface World {
 ### 5.3 Tick order
 
 ```
-1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat)
+1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat,
+                     alliance request/reply/renew/break)
+1b. updateDiplomacy  alliance requests and alliances run out (milestone 2.2)
 2. resolveCollisions opposing attacks cancel; same-target attacks merge
 3. advanceAttacks    each attack conquers tiles until its per-tick budget is spent
 4. encircle          staggered: annex fully enclosed pockets
@@ -242,8 +244,24 @@ and the bots use in their estimates). `PlayerSnapshot` carries `tier` and `diffi
 Tribes never draw a personality from the RNG, so adding tribes doesn't change the nations'
 draws, and lobbies without tribes are bit-identical to Phase 1.
 
+**Alliances (milestone 2.2, GAME_DESIGN §3.14).** `systems/diplomacy.ts` owns the state:
+`world.alliances` (a Map keyed by `pairKey(a, b)`, insertion-ordered so iteration is
+deterministic), `world.allianceRequests` and `world.lastRequestTick` (per ordered pair,
+for the 30 s cooldown and the bots' 90 s pace; old entries are pruned), plus
+`player.traitorUntilTick` / `betrayals` and `brain.grudges` — all hashed. Attack
+validation rejects allies; forming an alliance retreats the armies between the two with
+`attack.freeRetreat` (no penalty); the traitor discount is one more factor in
+`attackLossFactor` (losses) and in `layerDelay` (speed); encirclement drops allied
+enclosers; elimination drops the player's alliances. A bot's think may now emit several
+commands (diplomacy, then its action — e.g. `allianceBreak` + `attack` for a betrayal).
+Whether a nation betrays a given ally is decided once per alliance from a hash of
+(bot, ally, formedTick), not a random draw per think. `rules.diplomacy.enabled = false`
+(headless `--no-alliances`) reproduces 2.1 games exactly. Frames carry `alliances` and
+`allianceRequests`; the HUD logic is in `client/app/diplomacy.ts`, and the map shows
+allies/traitors through flag bits in the palette texture's alpha channel.
+
 **Timing probe (milestone 2.0).** `runTick(world, turn, probe?)` calls `probe(step)` after
-each step (`TICK_STEPS`: commands, collisions, attacks, encircle, eliminate, troops, bots,
+each step (`TICK_STEPS`: commands, diplomacy, collisions, attacks, encircle, eliminate, troops, bots,
 victory, frame). The simulation still never reads a clock; the headless runner times the
 gaps between calls and reports `systemsMs` (average and worst per step) and the steps of
 each game's slowest tick.
@@ -306,6 +324,10 @@ each game's slowest tick.
 | `retreat` | attack id | the army stops at once and returns after 2 s (−20% from players) |
 | `attack` | target (player or neutral), **percent** (basis points), focus tile | the sim computes troops from the *current* home pool at execution time — clients never send absolute troop numbers |
 | `retreat` | attack id | |
+| `allianceRequest` | target | 2.2: asking someone who asked you accepts; 20 s expiry, 30 s cooldown per target |
+| `allianceReply` | from, accept | answer an open request |
+| `allianceRenew` | ally | only in the last 30 s; extended once both agreed |
+| `allianceBreak` | ally | ends it now; the breaker is a traitor for 30 s |
 
 ### 5.6 Host abstraction
 

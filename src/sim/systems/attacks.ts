@@ -28,6 +28,7 @@ import {
   type PlayerId,
   type World,
 } from "../world.ts";
+import { isAllied, isTraitor } from "./diplomacy.ts";
 import { isSpawnProtected } from "./spawn.ts";
 import { gradientNoise } from "../map/noise.ts";
 import { TileQueue } from "./tileQueue.ts";
@@ -55,6 +56,7 @@ export function applyAttackCommand(
   if (target !== NEUTRAL) {
     if (!getPlayer(world, target)!.alive) return "that player is gone";
     if (isSpawnProtected(world)) return "spawn protection is still on";
+    if (isAllied(world, player.id, target)) return "you're allied with them";
   }
   const troops = Math.floor((player.homeTroops * percentBp) / 10_000);
   if (troops < 1) return "not enough troops";
@@ -81,6 +83,7 @@ export function applyAttackCommand(
       front: new TileQueue(),
       scheduled: new Map(),
       growthSeed: world.rng.nextUint32(),
+      freeRetreat: false,
     };
     world.attacks.push(attack);
     world.events.push({ type: "attackStarted", attackId: attack.id, attacker: player.id, target });
@@ -97,10 +100,19 @@ export function applyRetreatCommand(world: World, player: Player, attackId: numb
   const attack = world.attacks.find((a) => a.id === attackId);
   if (!attack || attack.ended || attack.attacker !== player.id) return "no such attack";
   if (attack.retreatTick >= 0) return "already retreating";
+  retreatAttack(world, attack, false);
+  return null;
+}
+
+/**
+ * Stops an attack; its army comes home after `retreatTicks`, minus the retreat penalty
+ * against a player unless `free` (the two sides just became allies).
+ */
+export function retreatAttack(world: World, attack: Attack, free: boolean): void {
   attack.retreatTick = world.tick + world.rules.attack.retreatTicks;
+  attack.freeRetreat = free;
   attack.front.clear();
   attack.scheduled.clear();
-  return null;
 }
 
 /**
@@ -275,6 +287,9 @@ function layerDelay(world: World, attack: Attack, tile: number): number {
     let ratio = clamp(curve, combat.delayRatioMin, combat.delayRatioMax);
     if (r > combat.hopelessRatio) ratio *= r / combat.hopelessRatio;
     delay = combat.layerDelayTicks * terrainValue(combat.terrainDelay, terrain) * ratio;
+    // Traitors are overrun faster (GAME_DESIGN.md §3.14).
+    if (isTraitor(world, getPlayer(world, attack.target)))
+      delay *= world.rules.diplomacy.traitorDelay;
   }
   return delay;
 }
@@ -302,13 +317,14 @@ export function tileCost(world: World, attack: Attack, tile: number): number {
   const { combat } = world.rules;
   const defender = getPlayer(world, attack.target)!;
   const ratio = clamp(outnumbering(world, attack), combat.lossRatioMin, combat.lossRatioMax);
-  const tribeDiscount = attackLossFactor(
+  const discount = attackLossFactor(
     world.rules,
     isTribe(getPlayer(world, attack.attacker)),
     isTribe(defender),
+    isTraitor(world, defender),
   );
   return (
-    tribeDiscount *
+    discount *
     terrainValue(combat.terrainLoss, terrain) *
     ratio *
     (combat.lossBase + combat.lossDensity * defenderDensity(defender))
@@ -386,7 +402,7 @@ type EndReason = "spent" | "complete" | "retreated" | "cancelled" | "eliminated"
 function endAttack(world: World, attack: Attack, reason: EndReason): void {
   const attacker = getPlayer(world, attack.attacker)!;
   let survivors = reason === "eliminated" ? 0 : Math.max(0, attack.troops);
-  if (reason === "retreated" && attack.target !== NEUTRAL) {
+  if (reason === "retreated" && attack.target !== NEUTRAL && !attack.freeRetreat) {
     survivors *= 1 - world.rules.attack.retreatPenalty;
   }
   attacker.homeTroops += survivors;

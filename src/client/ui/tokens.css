@@ -24,6 +24,9 @@
   --color-danger: #ff7a6b;
   --color-success: #5fd39a;
   --color-warning: #f5c26b;
+  /* Alliances (GAME_DESIGN.md §3.14): allies in mint, traitors in coral */
+  --color-ally: #a6f5d2;
+  --color-traitor: #ffa08f;
 
   /* The world behind the map (deep water / outside the map) */
   --world-background: #1b324c;

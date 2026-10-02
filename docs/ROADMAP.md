@@ -154,7 +154,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 |---|---|---|
 | 2.0 ✅ | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
 | 2.1 ✅ | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
-| 2.2 | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
+| 2.2 ✅ | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | |
 | 2.5 | **Buildings** — City, Fort, Port (+ Market if the economy needs it) | |
@@ -225,7 +225,34 @@ the game renamed **OpenBorder** (D-014). 40 games each, 10 nations + 100 tribes:
 win 80/80; median Medium 13.8 min, Hard 10.3 min; 8-nation games identical to before.
 
 Open for later: tribes don't yet react to alliances or traitors (2.2); nations don't
-yet decide about alliances (2.2).
+yet decide about alliances (2.2). *(Done in 2.2.)*
+
+**Milestone 2.2 result (2026-10-02)** — alliances; design note GAME_DESIGN §3.14, decision
+**D-018**. Requests (20 s, 30 s cooldown), 5-minute alliances renewed only by both,
+traitors for 30 s (0.6× losses and faster fronts for their attackers; tribes hit
+neighbouring traitors first; nations weigh traitors 2× — the user's request during the
+milestone). HUD: right-click menu, K / Y / N keys, diplomacy cards, toasts, mint ally
+borders, coral traitor stripes, leaderboard tags. Headless `--no-alliances` and per-game
+diplomacy stats.
+
+| Headless games | Winner | Median (longest) | Alliances / renewals / betrayals per game | Wins: turtle / expander / opportunist / aggressor | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 10 nations + 100 tribes, Easy (50) | nation 50/50 | 18.5 min (32.6) — 2.1: 16.7 | 14.2 / 8.0 / 1.8 | 27 / 12 / 8 / 3 | 0.81 / 6.7 ms |
+| … Medium (50) | nation 50/50 | 13.0 min (24.5) — 2.1: 12.6–13.8 | 9.1 / 1.0 / 1.3 | 20 / 13 / 10 / 7 | 0.86 / 7.9 ms |
+| … Hard (50) | nation 50/50 | 10.4 min (13.7) — 2.1: 9.7–10.3 | 7.3 / 0.1 / 2.5 | 25 / 10 / 10 / 5 | 0.95 / 6.6 ms |
+| 15 nations + 110 tribes, Medium, Large (20) | nation 20/20 | 16.1 min (20.5) | 15.7 / 2.9 / 2.3 | 7 / 8 / 3 / 2 | 1.6 / 12.7 ms* |
+| 8 nations (100) | — | 7.6 min (14) | 6.0 / 0.1 / 1.9 | 26 / 30 / 28 / 16 | 0.73 / 6.9 ms |
+| 8 nations, `--no-alliances` (100) | — | 7.1 min (15.5) | — | 34 / 24 / 30 / 12 | 0.77 / 7.0 ms |
+
+* 7 games in parallel on the Large map (encirclement floods, see 2.0). No errors, every
+game has a winner. With alliances off, games are identical to 2.1/Phase 1 (same median,
+same wins). Alliances lengthen games a little (Easy most: its nations renew 8 times a
+game; Hard nations almost never renew and betray most). About three of four requests are
+declined: nations mostly ask stronger neighbours, who rarely need them. **Watch:** turtles
+(quick to ally, never betray) win 40–54% of tribe games (2.1 Medium: 34%) — believable,
+left for the playtest. Browser: every flow checked (request, accept with Y, decline, renew
+with the card, let it end, expiry, break → traitor stripes/tags/toasts, alliance ends when
+an ally is eliminated), clean console.
 
 ## Phase 3 — Multiplayer
 

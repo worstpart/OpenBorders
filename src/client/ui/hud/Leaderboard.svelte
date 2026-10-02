@@ -27,6 +27,7 @@
     else if (myRank >= TOP) top.push({ player: ranked[myRank]!, rank: myRank + 1 });
     return top;
   });
+  const allies = $derived(ui.allies);
   const alive = $derived(ui.players.filter((p) => p.alive).length);
   const clock = $derived(
     ui.phase === "spawn" ? "Spawn" : formatClock((ui.tick - ui.playStartTick) / 10),
@@ -85,7 +86,17 @@
             >
               <span class="rank">{rank === 0 ? "—" : rank}</span>
               <span class="dot" aria-hidden="true"></span>
-              <span class="name">{player.name}</span>
+              <span class="who">
+                <span class="name">{player.name}</span>
+                {#if allies.has(player.id)}
+                  <span class="tag ally" title="Your ally">ally</span>
+                {/if}
+                {#if player.alive && player.traitorUntilTick > ui.tick}
+                  <span class="tag traitor" title="Broke an alliance: cheaper to attack for a while"
+                    >traitor</span
+                  >
+                {/if}
+              </span>
               <span class="land">{formatPercent(player.tiles / ui.landTiles)}</span>
               <span class="troops" title="Troops at home">{formatTroops(player.homeTroops)}</span>
             </li>
@@ -253,6 +264,30 @@
     height: 10px;
     border-radius: 50%;
     background: var(--player-color);
+  }
+
+  .who {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .tag {
+    flex: none;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.08);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .tag.ally {
+    color: var(--color-ally);
+  }
+
+  .tag.traitor {
+    color: var(--color-traitor);
   }
 
   .name {

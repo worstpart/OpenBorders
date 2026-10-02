@@ -8,14 +8,19 @@ import type { GameRules } from "./rules.ts";
 
 /**
  * Multiplier on the attacker's losses per tile: anyone but a tribe pays less to take a
- * tribe's land (D-017, GAME_DESIGN.md §3.13).
+ * tribe's land (D-017, GAME_DESIGN.md §3.13), and everyone pays less against a traitor
+ * (GAME_DESIGN.md §3.14).
  */
 export function attackLossFactor(
   rules: GameRules,
   attackerIsTribe: boolean,
   defenderIsTribe: boolean,
+  defenderIsTraitor = false,
 ): number {
-  return defenderIsTribe && !attackerIsTribe ? rules.tribe.lossWhenAttacked : 1;
+  return (
+    (defenderIsTribe && !attackerIsTribe ? rules.tribe.lossWhenAttacked : 1) *
+    (defenderIsTraitor ? rules.diplomacy.traitorLoss : 1)
+  );
 }
 
 /**

@@ -43,13 +43,26 @@ export function hashWorld(world: World): number {
       .addNumber(p.capacity)
       .addInt(p.peakTiles)
       .addInt(p.eliminatedTick)
-      .addInt(p.lastLostTo);
+      .addInt(p.lastLostTo)
+      .addInt(p.traitorUntilTick)
+      .addInt(p.betrayals);
   }
   for (const p of world.players) {
     if (p.brain) {
       h.addString(p.brain.personality).addInt(p.brain.nextThinkTick).addInt(p.brain.idleThinks);
+      h.addInt(p.brain.grudges.size);
+      for (const [id, until] of p.brain.grudges) h.addInt(id).addInt(until);
     }
   }
+  h.addInt(world.alliances.size);
+  for (const a of world.alliances.values()) {
+    h.addInt(a.a).addInt(a.b).addInt(a.formedTick).addInt(a.expiresTick);
+    h.addInt(a.renewA).addInt(a.renewB);
+  }
+  h.addInt(world.allianceRequests.length);
+  for (const r of world.allianceRequests) h.addInt(r.from).addInt(r.to).addInt(r.expiresTick);
+  h.addInt(world.lastRequestTick.size);
+  for (const [key, tick] of world.lastRequestTick) h.addInt(key).addInt(tick);
   h.addInt(world.pendingCommands.length);
   for (const c of world.pendingCommands) h.addInt(c.playerId).addString(JSON.stringify(c.command));
   h.addInt(world.nextAttackId).addInt(world.attacks.length);
@@ -62,6 +75,7 @@ export function hashWorld(world: World): number {
       .addInt(a.growthSeed)
       .addInt(a.tilesTaken)
       .addInt(a.retreatTick)
+      .addInt(a.freeRetreat)
       .addInt(a.front.size)
       .addNumber(a.front.peekTime());
   }

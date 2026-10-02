@@ -64,6 +64,14 @@ export class LocalHost implements SimHost {
     };
   }
 
+  /**
+   * Development checks only (the debug hook): a command as if another player sent it,
+   * e.g. a bot asking the local player for an alliance. Solo games only.
+   */
+  sendAs(playerId: PlayerId, command: Command): void {
+    this.pending.push({ playerId, command });
+  }
+
   send(command: Command): void {
     this.pending.push({ playerId: this.localPlayerId, command });
   }

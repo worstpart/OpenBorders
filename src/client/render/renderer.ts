@@ -86,6 +86,9 @@ export class MapRenderer {
   private warTexture: WebGLTexture | null = null;
   private warSize = 0;
   private warKey = "";
+  private colors: readonly string[] = [];
+  /** The player flags last uploaded (see setPlayerFlags). */
+  private flagsKey = "";
   private map: MapState | null = null;
   private hoverOwner = 0;
   private localOwner = 0;
@@ -207,12 +210,30 @@ export class MapRenderer {
 
   /** Colors per player id as "#rrggbb" (index 0 = neutral, unused). */
   setPlayerColors(colors: readonly string[]): void {
+    this.colors = colors;
+    this.flagsKey = "";
+    this.uploadPalette(new Uint8Array(0));
+  }
+
+  /**
+   * Per player id: 1 = the local player's ally, 2 = traitor (GAME_DESIGN.md §3.14). Kept
+   * in the palette's alpha channel; re-uploaded only when something changed.
+   */
+  setPlayerFlags(flags: Uint8Array): void {
+    const key = flags.join("");
+    if (key === this.flagsKey) return;
+    this.flagsKey = key;
+    this.uploadPalette(flags);
+  }
+
+  private uploadPalette(flags: Uint8Array): void {
     const { gl } = this;
+    const colors = this.colors;
     const rows = Math.max(1, Math.ceil(colors.length / PALETTE_ROW));
     const texels = new Uint8Array(PALETTE_ROW * rows * 4);
     colors.forEach((hex, id) => {
       const [r, g, b] = parseHexColor(hex);
-      texels.set([r, g, b, 255], id * 4);
+      texels.set([r, g, b, flags[id] ?? 0], id * 4);
     });
     if (this.paletteTexture) gl.deleteTexture(this.paletteTexture);
     this.paletteTexture = createTexture(gl, gl.NEAREST, gl.NEAREST);

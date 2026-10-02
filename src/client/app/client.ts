@@ -16,6 +16,7 @@ import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { DEFAULT_RULES, type Difficulty } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
+import { allianceStatus, diplomacyCards } from "./diplomacy.ts";
 import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, pickNationNames, playerColors } from "./players.ts";
@@ -161,7 +162,33 @@ export class GameClient {
       renderer: () => this.renderer,
       /** Sends a command as the local player (scripted browser checks). */
       send: (command: Command) => this.host?.send(command),
+      /** Sends a command as another player (e.g. a bot asking us for an alliance). */
+      sendAs: (playerId: number, command: Command) => this.host?.sendAs(playerId, command),
     };
+  }
+
+  /** Asks `target` for an alliance (or accepts their request). */
+  requestAlliance(target: number): void {
+    this.host?.send({ type: "allianceRequest", target });
+  }
+
+  replyAlliance(from: number, accept: boolean): void {
+    this.host?.send({ type: "allianceReply", from, accept });
+  }
+
+  renewAlliance(ally: number): void {
+    this.host?.send({ type: "allianceRenew", ally });
+  }
+
+  breakAlliance(ally: number): void {
+    this.host?.send({ type: "allianceBreak", ally });
+  }
+
+  /** Dismisses a renewal prompt without renewing (the alliance just runs out). */
+  dismissRenewal(ally: number): void {
+    const dismissed = new Set(ui.dismissedRenewals);
+    dismissed.add(ally);
+    ui.dismissedRenewals = dismissed;
   }
 
   retreat(attackId: number): void {
@@ -276,6 +303,22 @@ export class GameClient {
         console.info(`Command "${event.command}" rejected: ${event.reason}`);
       } else if (event.type === "attackStarted" && event.attacker === me) {
         this.hints.complete(event.target === 0 ? "expand" : "attack");
+      } else if (event.type === "allianceRequested" && event.from === me) {
+        const sent = new Map(ui.myRequests);
+        sent.set(event.to, frame.tick);
+        ui.myRequests = sent;
+        this.hints.complete("ally");
+      } else if (
+        (event.type === "allianceRenewed" || event.type === "allianceEnded") &&
+        (event.a === me || event.b === me)
+      ) {
+        // A new renewal window may come later: forget an earlier "let it end".
+        const ally = event.a === me ? event.b : event.a;
+        if (ui.dismissedRenewals.has(ally)) {
+          const dismissed = new Set(ui.dismissedRenewals);
+          dismissed.delete(ally);
+          ui.dismissedRenewals = dismissed;
+        }
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
       } else if (event.type === "gameOver") {
@@ -328,12 +371,46 @@ export class GameClient {
     ui.playStartTick = frame.playStartTick;
     ui.players = frame.players;
     ui.attacks = frame.attacks;
+    ui.alliances = frame.alliances;
+    ui.allianceRequests = frame.allianceRequests;
     const peaks = new Map<number, number>();
     for (const attack of frame.attacks) {
       peaks.set(attack.id, Math.max(attack.troops, ui.attackPeak.get(attack.id) ?? 0));
     }
     ui.attackPeak = peaks;
     this.renderer.setAttacks(frame.attacks, frame.players.length);
+    this.renderer.setPlayerFlags(this.playerFlags(frame));
+  }
+
+  /** Per player id: 1 = the local player's ally, 2 = traitor (map markers, §3.14). */
+  private playerFlags(frame: TickFrame): Uint8Array {
+    const flags = new Uint8Array(frame.players.length + 1);
+    const me = ui.localPlayerId;
+    for (const a of frame.alliances) {
+      if (a.a === me) flags[a.b]! |= 1;
+      else if (a.b === me) flags[a.a]! |= 1;
+    }
+    for (const p of frame.players)
+      if (p.alive && p.traitorUntilTick > frame.tick) flags[p.id]! |= 2;
+    return flags;
+  }
+
+  /** K: ally with the player under the cursor (asks, or accepts their request). */
+  private allyWithHovered(): void {
+    const owner = ui.hover?.owner ?? 0;
+    const status = allianceStatus(ui.diplomacyContext, owner);
+    if (status.kind === "canAsk" || status.kind === "theyAsked") this.requestAlliance(owner);
+  }
+
+  /** Y / N: answer the top diplomacy card. */
+  private answerTopCard(yes: boolean): void {
+    const card = diplomacyCards(ui.diplomacyContext).find(
+      (c) => c.kind === "request" || (!c.waiting && !ui.dismissedRenewals.has(c.ally)),
+    );
+    if (!card) return;
+    if (card.kind === "request") this.replyAlliance(card.from, yes);
+    else if (yes) this.renewAlliance(card.ally);
+    else this.dismissRenewal(card.ally);
   }
 
   private primaryClick(at: ScreenPoint): void {
@@ -389,6 +466,13 @@ export class GameClient {
       case "percentUp":
         ui.attackPercent = stepPercent(ui.attackPercent, 1);
         break;
+      case "ally":
+        this.allyWithHovered();
+        break;
+      case "diplomacyYes":
+      case "diplomacyNo":
+        if (ui.screen === "game") this.answerTopCard(action === "diplomacyYes");
+        break;
     }
   }
 
@@ -415,7 +499,9 @@ export class GameClient {
     this.updateHint();
     this.refreshLabels(startedAt);
     this.renderer.render(view, this.currentTick(), time / 1000);
-    const players = this.latestFrame?.players ?? [];
+    const frame = this.latestFrame;
+    const players = frame?.players ?? [];
+    const allies = ui.allies;
     this.labels.draw(
       view,
       this.placements,
@@ -425,6 +511,8 @@ export class GameClient {
         troops: p.homeTroops,
         alive: p.alive,
         tribe: p.tier === "tribe",
+        relation:
+          frame && p.traitorUntilTick > frame.tick ? "traitor" : allies.has(p.id) ? "ally" : null,
       })),
     );
 

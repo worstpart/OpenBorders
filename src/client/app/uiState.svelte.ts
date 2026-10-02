@@ -3,7 +3,13 @@
  * (ARCHITECTURE.md §6); components never change game state directly — they call the
  * session's actions.
  */
-import type { AttackSnapshot, PlayerSnapshot } from "../../sim/frame.ts";
+import type {
+  AllianceRequestSnapshot,
+  AllianceSnapshot,
+  AttackSnapshot,
+  PlayerSnapshot,
+} from "../../sim/frame.ts";
+import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
 import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
@@ -58,6 +64,12 @@ class UiState {
   colors = $state.raw<readonly string[]>([]);
   players = $state.raw<readonly PlayerSnapshot[]>([]);
   attacks = $state.raw<readonly AttackSnapshot[]>([]);
+  alliances = $state.raw<readonly AllianceSnapshot[]>([]);
+  allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
+  /** Tick of the local player's last alliance request to each player (for the cooldown). */
+  myRequests = $state.raw<ReadonlyMap<PlayerId, number>>(new Map());
+  /** Allies whose renewal prompt the local player closed with "Let it end". */
+  dismissedRenewals = $state.raw<ReadonlySet<PlayerId>>(new Set());
   /** Share of home troops a click sends (client-side choice; sent with each command). */
   attackPercent = $state(DEFAULT_ATTACK_PERCENT);
   winner = $state<PlayerId | null>(null);
@@ -83,6 +95,10 @@ class UiState {
     this.playStartTick = -1;
     this.players = [];
     this.attacks = [];
+    this.alliances = [];
+    this.allianceRequests = [];
+    this.myRequests = new Map();
+    this.dismissedRenewals = new Set();
     this.winner = null;
     this.gameOverReason = null;
     this.eliminatedBy = null;
@@ -109,7 +125,31 @@ class UiState {
       playStartTick: this.playStartTick,
       me: this.me,
       players: this.players,
+      allies: this.allies,
     };
+  }
+
+  /** What the diplomacy HUD needs (GAME_DESIGN.md §3.14). */
+  get diplomacyContext(): DiplomacyContext {
+    return {
+      rules: DEFAULT_RULES,
+      phase: this.phase,
+      tick: this.tick,
+      me: this.me,
+      players: this.players,
+      alliances: this.alliances,
+      requests: this.allianceRequests,
+      myRequests: this.myRequests,
+    };
+  }
+
+  /** The local player's allies. */
+  get allies(): Set<PlayerId> {
+    return alliesOf(this.alliances, this.localPlayerId);
+  }
+
+  isTraitor(id: PlayerId): boolean {
+    return (this.players[id - 1]?.traitorUntilTick ?? -1) > this.tick;
   }
 
   colorOf(id: PlayerId): string {

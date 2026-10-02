@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
+  import { allianceStatus, formatCountdown } from "../../app/diplomacy.ts";
+  import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, previewClick } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
@@ -7,10 +9,21 @@
   interface Props {
     onAttack: (tile: number, percent: number) => void;
     onRetreatFrom: (target: number) => void;
+    onRequestAlliance: (target: number) => void;
+    onRenewAlliance: (ally: number) => void;
+    onBreakAlliance: (ally: number) => void;
     onClose: () => void;
   }
 
-  let { onAttack, onRetreatFrom, onClose }: Props = $props();
+  let {
+    onAttack,
+    onRetreatFrom,
+    onRequestAlliance,
+    onRenewAlliance,
+    onBreakAlliance,
+    onClose,
+  }: Props = $props();
+  const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 
   const WIDTH = 250;
   let menuElement = $state<HTMLElement | null>(null);
@@ -41,6 +54,12 @@
         )
       : [],
   );
+  const alliance = $derived(menu ? allianceStatus(ui.diplomacyContext, menu.owner) : null);
+  /** Breaking needs a second click (it makes you a traitor). */
+  let confirmBreak = $state(false);
+  $effect(() => {
+    if (menu) confirmBreak = false;
+  });
   const left = $derived(menu ? Math.max(8, Math.min(menu.x, viewportWidth - WIDTH - 8)) : 0);
   const top = $derived(menu ? Math.max(8, Math.min(menu.y, viewportHeight - height - 8)) : 0);
 
@@ -122,7 +141,9 @@
       {/each}
     {:else if blocked && !isMe}
       <div class="info">
-        {#if blocked.kind === "notReachable"}
+        {#if blocked.kind === "allied"}
+          Allies can't attack each other.
+        {:else if blocked.kind === "notReachable"}
           You don't border {menu.owner === 0 ? "this land" : "them"} yet.
         {:else if blocked.kind === "protected"}
           Spawn protection: {Math.ceil(blocked.seconds)} s.
@@ -137,6 +158,63 @@
         {formatTroops(ui.me?.homeTroops ?? 0)} troops at home defend it. Click neutral or enemy land to
         act.
       </div>
+    {/if}
+
+    {#if alliance && alliance.kind !== "none"}
+      <div class="divider"></div>
+      {#if alliance.kind === "ally"}
+        <div class="info ally">
+          Allied · {formatCountdown(alliance.secondsLeft)} left
+          {#if alliance.renewable && alliance.renewedByMe}· waiting for them to renew{/if}
+        </div>
+        {#if alliance.renewable && !alliance.renewedByMe}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => act(() => onRenewAlliance(menu.owner))}
+          >
+            Renew alliance <span class="muted">+5:00</span>
+          </button>
+        {/if}
+        {#if confirmBreak}
+          <button
+            type="button"
+            role="menuitem"
+            class="danger"
+            onclick={() => act(() => onBreakAlliance(menu.owner))}
+          >
+            Break it — you'll be a traitor for {TRAITOR_SECONDS} s
+          </button>
+        {:else}
+          <button type="button" role="menuitem" onclick={() => (confirmBreak = true)}>
+            Break alliance…
+          </button>
+        {/if}
+      {:else if alliance.kind === "theyAsked"}
+        <button
+          type="button"
+          role="menuitem"
+          class="ally"
+          onclick={() => act(() => onRequestAlliance(menu.owner))}
+        >
+          Accept their alliance <span class="muted">{Math.ceil(alliance.secondsLeft)} s</span>
+        </button>
+      {:else if alliance.kind === "sent"}
+        <div class="info">
+          Alliance request sent · {Math.ceil(alliance.secondsLeft)} s
+        </div>
+      {:else if alliance.kind === "cooldown"}
+        <div class="info">Ask again for an alliance in {Math.ceil(alliance.secondsLeft)} s</div>
+      {:else}
+        <button
+          type="button"
+          role="menuitem"
+          class="ally"
+          onclick={() => act(() => onRequestAlliance(menu.owner))}
+        >
+          Request alliance <span class="muted">K</span>
+        </button>
+      {/if}
     {/if}
 
     {#if myAttacks.length > 0}
@@ -278,6 +356,16 @@
     padding: var(--space-1) var(--space-2) var(--space-2);
     color: var(--text-secondary);
     line-height: 1.45;
+  }
+
+  .info.ally,
+  button.ally {
+    color: var(--color-ally);
+  }
+
+  button.danger {
+    color: var(--color-danger);
+    font-weight: 600;
   }
 
   .divider {

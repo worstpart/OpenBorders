@@ -20,7 +20,12 @@ export type KeyAction =
   | "preset4"
   | "preset5"
   | "percentDown"
-  | "percentUp";
+  | "percentUp"
+  /** Ally with the player under the cursor (request, or accept theirs). */
+  | "ally"
+  /** Yes / no to the top diplomacy card. */
+  | "diplomacyYes"
+  | "diplomacyNo";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -58,6 +63,9 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   Numpad5: "preset5",
   KeyQ: "percentDown",
   KeyE: "percentUp",
+  KeyK: "ally",
+  KeyY: "diplomacyYes",
+  KeyN: "diplomacyNo",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {

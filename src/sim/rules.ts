@@ -179,6 +179,28 @@ export interface VictoryRules {
   readonly minLandShare: number;
 }
 
+/**
+ * Alliances (GAME_DESIGN.md §3.14): timed, renewable, with a price for betrayal.
+ */
+export interface DiplomacyRules {
+  /** false: no alliances at all (lobbies play exactly as before milestone 2.2). */
+  readonly enabled: boolean;
+  /** A request is answered within this many ticks or it expires. */
+  readonly requestTicks: number;
+  /** A player may ask the same player again this many ticks after their last request. */
+  readonly requestCooldownTicks: number;
+  /** An alliance lasts this long (and each renewal adds as much). */
+  readonly durationTicks: number;
+  /** Both allies are asked to renew during the last this-many ticks. */
+  readonly renewWindowTicks: number;
+  /** Breaking an alliance marks the breaker a traitor for this long… */
+  readonly traitorTicks: number;
+  /** …during which anyone attacking them pays this share of the normal losses per tile… */
+  readonly traitorLoss: number;
+  /** …and waits this share of the normal delay per tile (moves faster). */
+  readonly traitorDelay: number;
+}
+
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
 export type Personality = (typeof PERSONALITIES)[number];
 
@@ -203,6 +225,13 @@ export interface PersonalityRules {
   readonly attacksWhileExpanding: boolean;
   /** Extra preference for targets busy fighting someone else (their home pool is low). */
   readonly preferBusyTargets: number;
+  /**
+   * A neighbour this many times stronger (troops at home and in the field) is welcome as
+   * an ally with no other reason: appeasement (GAME_DESIGN.md §3.14).
+   */
+  readonly allyWithout: number;
+  /** Multiplies the difficulty's betrayal chance (0 = never betrays). */
+  readonly betrayal: number;
 }
 
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
@@ -220,6 +249,12 @@ export interface DifficultyRules {
   readonly counters: boolean;
   /** Tops up wars that can still be won (otherwise lets them run out). */
   readonly reinforces: boolean;
+  /** Betrays an ally when an attack is expected to take at least this share of their land… */
+  readonly betrayMinGain: number;
+  /** …with this chance (times the personality's betrayal factor). */
+  readonly betrayChance: number;
+  /** Share of alliance answers flipped at random ("confused" nations). */
+  readonly allyConfusion: number;
 }
 
 /**
@@ -253,6 +288,11 @@ export interface AiRules {
    * the other nations (GAME_DESIGN.md §3.13).
    */
   readonly tribePreference: number;
+  /**
+   * Nations weigh a traitor (someone who just broke an alliance) this many times higher as
+   * a target, on top of the traitor discount (GAME_DESIGN.md §3.14).
+   */
+  readonly traitorPreference: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -295,6 +335,18 @@ export interface AiRules {
   readonly expansionRecallAbove: number;
   /** Distance (tiles) beyond the bot's own radius where it looks for open land to aim at. */
   readonly expansionLookAhead: number;
+  /** Nations hold at most this many alliances (GAME_DESIGN.md §3.14). */
+  readonly maxAlliances: number;
+  /** Nations never ally (or renew with) a player holding this share of the land or more. */
+  readonly allyLeaderShare: number;
+  /** A far-away player, or a neighbour while at war elsewhere, must be this strong (×). */
+  readonly allyMinStrength: number;
+  /** Nations refuse a player their own attack is expected to take this much land from. */
+  readonly allyRefuseWhenWinning: number;
+  /** Nations ask the same player at most this often. */
+  readonly allyRequestEveryTicks: number;
+  /** A nation refuses alliances with whoever betrayed it, for this long. */
+  readonly grudgeTicks: number;
   readonly personalities: Readonly<Record<Personality, PersonalityRules>>;
 }
 
@@ -311,6 +363,7 @@ export interface GameRules {
   readonly victory: VictoryRules;
   readonly ai: AiRules;
   readonly tribe: TribeRules;
+  readonly diplomacy: DiplomacyRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -416,13 +469,40 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   ai: {
     // Hard is how every bot played in Phase 1 (2–5 s, full logic).
     difficulties: {
-      easy: { thinkMinTicks: 60, thinkMaxTicks: 100, counters: false, reinforces: false },
-      medium: { thinkMinTicks: 40, thinkMaxTicks: 70, counters: true, reinforces: false },
-      hard: { thinkMinTicks: 20, thinkMaxTicks: 50, counters: true, reinforces: true },
+      // Betrayal (§3.14): Hard betrays only for a sure kill, Easy at random and earlier.
+      easy: {
+        thinkMinTicks: 60,
+        thinkMaxTicks: 100,
+        counters: false,
+        reinforces: false,
+        betrayMinGain: 0.5,
+        betrayChance: 0.15,
+        allyConfusion: 0.25,
+      },
+      medium: {
+        thinkMinTicks: 40,
+        thinkMaxTicks: 70,
+        counters: true,
+        reinforces: false,
+        betrayMinGain: 0.9,
+        betrayChance: 0.3,
+        allyConfusion: 0.1,
+      },
+      hard: {
+        thinkMinTicks: 20,
+        thinkMaxTicks: 50,
+        counters: true,
+        reinforces: true,
+        betrayMinGain: 0.99,
+        betrayChance: 1,
+        allyConfusion: 0,
+      },
     },
     // Milestone 2.1 trace (10 nations + 100 tribes): without these, nations fought each
     // other from minute 2 and the survivor then ate ~50 tribes one by one (~3 a minute).
     tribePreference: 3,
+    // User request (2.2): breaking an alliance should make you a target for nations too.
+    traitorPreference: 2,
     maxTribeWars: 3,
     counterAbove: 1.1,
     counterSize: 1.3,
@@ -436,6 +516,14 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     expansionMargin: 1.25,
     expansionRecallAbove: 0.05,
     expansionLookAhead: 40,
+    // Alliances (§3.14): a nation allies at most two players, never the runaway leader,
+    // and keeps asking a reluctant player no more than every 90 s.
+    maxAlliances: 2,
+    allyLeaderShare: 0.25,
+    allyMinStrength: 0.6,
+    allyRefuseWhenWinning: 0.4,
+    allyRequestEveryTicks: 900,
+    grudgeTicks: 3_000,
     // Every bot waits for its troops to regrow toward the 50% sweet spot before acting:
     // a player who keeps sending most of their pool barely grows.
     personalities: {
@@ -448,6 +536,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         attackMaxShare: 0.7,
         attacksWhileExpanding: false,
         preferBusyTargets: 0,
+        allyWithout: 1.25,
+        betrayal: 0.5,
       },
       aggressor: {
         expandAt: 0.45,
@@ -458,6 +548,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         attackMaxShare: 0.85,
         attacksWhileExpanding: true,
         preferBusyTargets: 0.3,
+        allyWithout: 1.5,
+        betrayal: 1,
       },
       turtle: {
         expandAt: 0.5,
@@ -468,6 +560,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         attackMaxShare: 0.6,
         attacksWhileExpanding: false,
         preferBusyTargets: 0,
+        allyWithout: 0.8,
+        betrayal: 0,
       },
       opportunist: {
         expandAt: 0.4,
@@ -478,6 +572,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         attackMaxShare: 0.75,
         attacksWhileExpanding: false,
         preferBusyTargets: 1,
+        allyWithout: 1.25,
+        betrayal: 1,
       },
     },
   },
@@ -497,6 +593,20 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     attackShare: 0.3,
     minLandGain: 0.1,
   },
+  diplomacy: {
+    enabled: true,
+    // 20 s to answer, 30 s before asking the same player again, 5 min alliances renewed in
+    // their last 30 s (OpenFront's proven timings, research §3.19).
+    requestTicks: 200,
+    requestCooldownTicks: 300,
+    durationTicks: 3_000,
+    renewWindowTicks: 300,
+    // A short, sharp window: 30 s in which the betrayed side and its neighbours pay 40%
+    // less per tile and move a third faster against the traitor.
+    traitorTicks: 300,
+    traitorLoss: 0.6,
+    traitorDelay: 0.75,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -511,6 +621,7 @@ export function makeRules(overrides: {
   victory?: Partial<VictoryRules>;
   ai?: Partial<AiRules>;
   tribe?: Partial<TribeRules>;
+  diplomacy?: Partial<DiplomacyRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -524,6 +635,7 @@ export function makeRules(overrides: {
     victory: { ...DEFAULT_RULES.victory, ...overrides.victory },
     ai: { ...DEFAULT_RULES.ai, ...overrides.ai },
     tribe: { ...DEFAULT_RULES.tribe, ...overrides.tribe },
+    diplomacy: { ...DEFAULT_RULES.diplomacy, ...overrides.diplomacy },
   });
 }
 

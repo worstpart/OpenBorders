@@ -53,6 +53,29 @@ export type SimEvent =
       readonly winner: PlayerId | null;
       readonly reason: "landShare" | "lastStanding" | "noneLeft";
     }
+  | { readonly type: "allianceRequested"; readonly from: PlayerId; readonly to: PlayerId }
+  | {
+      /** A request was answered no, or ran out of time (`expired`). */
+      readonly type: "allianceRequestEnded";
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+      readonly reason: "declined" | "expired";
+    }
+  | { readonly type: "allianceFormed"; readonly a: PlayerId; readonly b: PlayerId }
+  | { readonly type: "allianceRenewed"; readonly a: PlayerId; readonly b: PlayerId }
+  | {
+      /** Ran out (`expired`), or one of them was eliminated (`eliminated`). */
+      readonly type: "allianceEnded";
+      readonly a: PlayerId;
+      readonly b: PlayerId;
+      readonly reason: "expired" | "eliminated";
+    }
+  | {
+      /** `breaker` broke the alliance with `victim` and is now a traitor. */
+      readonly type: "allianceBroken";
+      readonly breaker: PlayerId;
+      readonly victim: PlayerId;
+    }
   | {
       readonly type: "commandRejected";
       readonly playerId: PlayerId;

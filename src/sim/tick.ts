@@ -11,6 +11,13 @@ import {
   applyRetreatCommand,
   resolveCollisions,
 } from "./systems/attacks.ts";
+import {
+  applyAllianceBreak,
+  applyAllianceRenew,
+  applyAllianceReply,
+  applyAllianceRequest,
+  updateDiplomacy,
+} from "./systems/diplomacy.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -24,6 +31,7 @@ import { getPlayer, type Player, type World } from "./world.ts";
  */
 export const TICK_STEPS = [
   "commands",
+  "diplomacy",
   "collisions",
   "attacks",
   "encircle",
@@ -55,6 +63,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
   probe?.("commands");
 
   if (world.phase === "playing") {
+    // 1b. Alliance requests and alliances run out.
+    updateDiplomacy(world);
+    probe?.("diplomacy");
     // 2. Opposing armies cancel out.
     resolveCollisions(world);
     probe?.("collisions");
@@ -112,6 +123,14 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       );
     case "retreat":
       return applyRetreatCommand(world, player, command.attackId);
+    case "allianceRequest":
+      return applyAllianceRequest(world, player, command.target);
+    case "allianceReply":
+      return applyAllianceReply(world, player, command.from, command.accept === true);
+    case "allianceRenew":
+      return applyAllianceRenew(world, player, command.ally);
+    case "allianceBreak":
+      return applyAllianceBreak(world, player, command.ally);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

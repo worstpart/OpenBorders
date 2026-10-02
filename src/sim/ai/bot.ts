@@ -22,6 +22,9 @@
  * That is how a **nation** plays (GAME_DESIGN.md §3.13); its difficulty sets how often it
  * thinks and whether it counters and reinforces. **Tribes** — weak filler bots — think
  * every 4–8 s and only expand, or make small attacks on neighbours they can beat.
+ *
+ * Alliances (GAME_DESIGN.md §3.14): tribes accept every request and renewal and go after
+ * traitors; nations answer, ask, renew and betray by threat, strength and shared enemies.
  */
 import {
   attackLossFactor,
@@ -30,13 +33,24 @@ import {
 } from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isLand, tileAt, Terrain } from "../map/gameMap.ts";
+import { mix32 } from "../math/hash.ts";
 import { terrainValue, type DifficultyRules, type PersonalityRules } from "../rules.ts";
+import {
+  allianceCount,
+  findRequest,
+  getAlliance,
+  inRenewWindow,
+  isAllied,
+  isTraitor,
+} from "../systems/diplomacy.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
   isTribe,
   NEUTRAL,
   nextScratchStamp,
+  requestKey,
+  type Alliance,
   type Attack,
   type Player,
   type PlayerId,
@@ -59,18 +73,23 @@ export function thinkBots(world: World): void {
     if (world.tick < brain.nextThinkTick) continue;
     brain.nextThinkTick =
       world.tick + world.rng.nextIntBetween(pace.thinkMinTicks, pace.thinkMaxTicks);
-    const command = tribe
-      ? decideTribe(world, bot)
-      : decide(
-          world,
-          bot,
-          ai.personalities[brain.personality],
-          ai.difficulties[brain.difficulty],
-          brain.idleThinks,
-        );
-    if (command) world.pendingCommands.push({ playerId: bot.id, command });
+    const around = survey(world, bot);
+    const style = ai.personalities[brain.personality];
+    const skill = ai.difficulties[brain.difficulty];
+    const talk = !world.rules.diplomacy.enabled
+      ? []
+      : tribe
+        ? tribeDiplomacy(world, bot)
+        : nationDiplomacy(world, bot, style, skill, around);
+    for (const command of talk) world.pendingCommands.push({ playerId: bot.id, command });
+    const decided = tribe
+      ? decideTribe(world, bot, around)
+      : decide(world, bot, style, skill, brain.idleThinks, around);
+    const actions: readonly Command[] =
+      decided === null ? [] : Array.isArray(decided) ? decided : [decided as Command];
+    for (const command of actions) world.pendingCommands.push({ playerId: bot.id, command });
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
-    brain.idleThinks = !command && wasting ? brain.idleThinks + 1 : 0;
+    brain.idleThinks = actions.length === 0 && wasting ? brain.idleThinks + 1 : 0;
   }
 }
 
@@ -91,11 +110,11 @@ function decide(
   style: PersonalityRules,
   skill: DifficultyRules,
   idleThinks: number,
-): Command | null {
+  around: Surroundings,
+): Command | readonly Command[] | null {
   const ai = world.rules.ai;
   const mine = world.attacks.filter((a) => a.attacker === bot.id && a.retreatTick < 0);
   const incoming = world.attacks.filter((a) => a.target === bot.id && a.retreatTick < 0);
-  const around = survey(world, bot);
 
   // 1. Counter the biggest incoming army we can match (not just the biggest one: a huge
   //    army we can't stop mustn't keep us from stopping a small one).
@@ -155,9 +174,11 @@ function decide(
   if (wars.length >= ai.maxTribeWars) {
     return skill.reinforces ? reinforce(world, bot, style, wars[0]!, around) : null;
   }
-  const choice = chooseTarget(world, bot, style, around, incoming, idleThinks, wars);
+  const choice = chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars);
   if (!choice) return null;
-  return attackCommand(choice.target.id, choice.focus, choice.share);
+  const attack = attackCommand(choice.target.id, choice.focus, choice.share);
+  // Betrayal: break the alliance first; both commands apply next tick, in this order.
+  return choice.betray ? [{ type: "allianceBreak", ally: choice.target.id }, attack] : attack;
 }
 
 function attackCommand(target: PlayerId, focusTile: number, share: number): Command {
@@ -332,20 +353,24 @@ function chooseTarget(
   world: World,
   bot: Player,
   style: PersonalityRules,
+  skill: DifficultyRules,
   around: Surroundings,
   incoming: Attack[],
   idleThinks: number,
   wars: Attack[],
-): { target: Player; focus: number; share: number } | null {
+): { target: Player; focus: number; share: number; betray: boolean } | null {
   const ai = world.rules.ai;
   const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
   const boredom = Math.max(0, 1 - idleThinks / ai.boredomThinks);
   const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
-  let best: { target: Player; focus: number; share: number } | null = null;
+  let best: { target: Player; focus: number; share: number; betray: boolean } | null = null;
   let bestScore = 0;
   for (const [id, frontTile] of around.neighborFront) {
     const target = getPlayer(world, id)!;
     if (!target.alive || wars.some((a) => a.target === id)) continue;
+    // Allies are off limits — unless this nation is the kind to betray them (below).
+    const alliance = getAlliance(world, bot.id, id);
+    if (alliance && !willBetray(bot, alliance, id, style, skill)) continue;
     const defenders = Math.max(1, target.homeTroops);
     // Send enough to take everything if we can afford it, otherwise all we're willing to.
     const army = Math.min(
@@ -357,8 +382,10 @@ function chooseTarget(
       army / tileCostOfAll(world, bot, target),
     );
     if (gain < minGain) continue;
+    if (alliance && gain < skill.betrayMinGain) continue;
     const busy = world.attacks.some((a) => a.attacker === id && a.retreatTick < 0);
-    const hostile = incoming.some((a) => a.attacker === id);
+    const grudge = (bot.brain?.grudges.get(id) ?? -1) > world.tick;
+    const hostile = grudge || incoming.some((a) => a.attacker === id);
     const targetFill = target.capacity > 0 ? target.homeTroops / target.capacity : 1;
     const score =
       gain *
@@ -367,13 +394,19 @@ function chooseTarget(
       (hostile ? 1.5 : 1) *
       (2 - Math.min(1, targetFill)) * // depleted players are vulnerable
       (gain >= 0.99 ? 2 : 1) * // finishing a player off shrinks the field
-      (isTribe(target) ? ai.tribePreference : 1); // eat the tribes first
+      (isTribe(target) ? ai.tribePreference : 1) * // eat the tribes first
+      (isTraitor(world, target) ? ai.traitorPreference : 1); // punish betrayal
     if (score > bestScore) {
       bestScore = score;
       // Aim at the heart of their land (their start) if they still hold it: it splits
       // them and cuts off pockets for encirclement.
       const heart = target.spawnTile >= 0 && world.owner[target.spawnTile] === id;
-      best = { target, focus: heart ? target.spawnTile : frontTile, share: army / bot.homeTroops };
+      best = {
+        target,
+        focus: heart ? target.spawnTile : frontTile,
+        share: army / bot.homeTroops,
+        betray: alliance !== undefined,
+      };
     }
   }
   return best;
@@ -384,12 +417,21 @@ function chooseTarget(
  * once regrown, attack a random neighbour it can beat with a small share of its troops.
  * No counters, no reinforcing, no retreats — tribes are cheap and predictable.
  */
-function decideTribe(world: World, bot: Player): Command | null {
+function decideTribe(world: World, bot: Player, around: Surroundings): Command | null {
   const rules = world.rules.tribe;
   const ai = world.rules.ai;
   const fill = bot.capacity > 0 ? bot.homeTroops / bot.capacity : 0;
-  const around = survey(world, bot);
   const mine = world.attacks.filter((a) => a.attacker === bot.id && a.retreatTick < 0);
+  const atWar = mine.some((a) => a.target !== NEUTRAL);
+
+  // Traitors first, even while open land remains (GAME_DESIGN.md §3.14).
+  if (fill >= rules.attackAt && !atWar && !isSpawnProtected(world)) {
+    for (const [id, frontTile] of around.neighborFront) {
+      if (isTraitor(world, getPlayer(world, id)) && !isAllied(world, bot.id, id)) {
+        return attackCommand(id, frontTile, rules.attackShare);
+      }
+    }
+  }
 
   if (around.neutralFront >= 0) {
     if (fill < rules.expandAt) return null;
@@ -402,12 +444,12 @@ function decideTribe(world: World, bot: Player): Command | null {
   }
 
   if (fill < rules.attackAt || isSpawnProtected(world)) return null;
-  if (mine.some((a) => a.target !== NEUTRAL)) return null; // one war at a time
+  if (atWar) return null; // one war at a time
   const army = rules.attackShare * bot.homeTroops;
   const beatable: [PlayerId, number][] = [];
   for (const [id, frontTile] of around.neighborFront) {
     const target = getPlayer(world, id)!;
-    if (!target.alive) continue;
+    if (!target.alive || isAllied(world, bot.id, id)) continue;
     const gain = expectedLandShare(
       world.rules,
       army,
@@ -419,4 +461,170 @@ function decideTribe(world: World, bot: Player): Command | null {
   if (beatable.length === 0) return null;
   const [target, focus] = beatable[world.rng.nextInt(beatable.length)]!;
   return attackCommand(target, focus, rules.attackShare);
+}
+
+/** A tribe accepts every request and renews every alliance (GAME_DESIGN.md §3.14). */
+function tribeDiplomacy(world: World, bot: Player): Command[] {
+  const commands: Command[] = [];
+  for (const request of world.allianceRequests) {
+    if (request.to === bot.id) {
+      commands.push({ type: "allianceReply", from: request.from, accept: true });
+    }
+  }
+  for (const alliance of world.alliances.values()) {
+    const ally = otherSide(alliance, bot.id);
+    if (ally !== null && needsMyRenewal(world, alliance, bot.id)) {
+      commands.push({ type: "allianceRenew", ally });
+    }
+  }
+  return commands;
+}
+
+/**
+ * A nation's diplomacy on each think: answer every request, renew the alliances it still
+ * wants, and ask at most one bordering player for an alliance (GAME_DESIGN.md §3.14).
+ */
+function nationDiplomacy(
+  world: World,
+  bot: Player,
+  style: PersonalityRules,
+  skill: DifficultyRules,
+  around: Surroundings,
+): Command[] {
+  const commands: Command[] = [];
+  let count = allianceCount(world, bot.id);
+  for (const request of world.allianceRequests) {
+    if (request.to !== bot.id) continue;
+    const other = getPlayer(world, request.from)!;
+    const accept = welcomes(world, bot, other, style, skill, around, count, false);
+    if (accept) count++;
+    commands.push({ type: "allianceReply", from: request.from, accept });
+  }
+  for (const alliance of world.alliances.values()) {
+    const ally = otherSide(alliance, bot.id);
+    if (ally === null || !needsMyRenewal(world, alliance, bot.id)) continue;
+    const other = getPlayer(world, ally)!;
+    if (welcomes(world, bot, other, style, skill, around, count, true)) {
+      commands.push({ type: "allianceRenew", ally });
+    }
+  }
+
+  // Ask the strongest bordering player it would welcome (each one at most every 90 s).
+  const every = world.rules.ai.allyRequestEveryTicks;
+  let ask: Player | null = null;
+  for (const id of around.neighborFront.keys()) {
+    const other = getPlayer(world, id)!;
+    if (isTribe(other) || isAllied(world, bot.id, id)) continue;
+    if (findRequest(world, bot.id, id) || findRequest(world, id, bot.id)) continue;
+    const last = world.lastRequestTick.get(requestKey(bot.id, id));
+    if (last !== undefined && world.tick - last < every) continue;
+    if (ask && strength(other) <= strength(ask)) continue;
+    if (welcomes(world, bot, other, style, skill, around, count, false)) ask = other;
+  }
+  if (ask) commands.push({ type: "allianceRequest", target: ask.id });
+  return commands;
+}
+
+/**
+ * Would this nation have `other` as an ally (now, or for another term when renewing)?
+ * Never tribes (they're food), traitors, whoever betrayed it lately, a runaway leader,
+ * anyone once only two contenders are left, or a player it is beating. A neighbour is
+ * welcome if clearly stronger (appeasement), fighting the same enemy, or not much weaker
+ * while the nation is at war with someone else (a safe flank); a far-away player if it
+ * isn't much weaker. Easy and Medium nations sometimes answer at random.
+ */
+function welcomes(
+  world: World,
+  bot: Player,
+  other: Player,
+  style: PersonalityRules,
+  skill: DifficultyRules,
+  around: Surroundings,
+  count: number,
+  renewing: boolean,
+): boolean {
+  const ai = world.rules.ai;
+  if (!other.alive || isTribe(other) || isTraitor(world, other)) return false;
+  if ((bot.brain?.grudges.get(other.id) ?? -1) > world.tick) return false;
+  if (!renewing && count >= ai.maxAlliances) return false;
+  if (other.tiles >= ai.allyLeaderShare * world.map.landTiles) return false;
+  if (contenders(world) <= 2) return false;
+  const myWar = world.attacks.find(
+    (a) => a.attacker === bot.id && a.target === other.id && a.retreatTick < 0,
+  );
+  if (myWar) {
+    const gain = expectedLandShare(
+      world.rules,
+      myWar.troops,
+      Math.max(1, other.homeTroops),
+      lossFactor(world, bot, other),
+    );
+    if (gain >= ai.allyRefuseWhenWinning) return false;
+  }
+  const ratio = strength(other) / Math.max(1, strength(bot));
+  let want: boolean;
+  if (around.neighborFront.has(other.id)) {
+    const enemies = enemiesOf(world, bot.id);
+    enemies.delete(other.id);
+    let shared = false;
+    for (const id of enemiesOf(world, other.id)) if (enemies.has(id)) shared = true;
+    want =
+      ratio >= style.allyWithout || shared || (enemies.size > 0 && ratio >= ai.allyMinStrength);
+  } else {
+    want = ratio >= ai.allyMinStrength;
+  }
+  if (skill.allyConfusion > 0 && world.rng.nextFloat() < skill.allyConfusion) want = !want;
+  return want;
+}
+
+/**
+ * Whether this nation is the kind to betray this ally: decided once per alliance from the
+ * difficulty's chance × the personality's betrayal factor. (A random draw on every think
+ * would turn every alliance into a betrayal sooner or later.)
+ */
+function willBetray(
+  bot: Player,
+  alliance: Alliance,
+  ally: PlayerId,
+  style: PersonalityRules,
+  skill: DifficultyRules,
+): boolean {
+  const chance = skill.betrayChance * style.betrayal;
+  if (chance <= 0) return false;
+  if (chance >= 1) return true;
+  const roll = mix32(mix32(Math.imul(bot.id, 0x9e3779b1) ^ ally) ^ alliance.formedTick);
+  return roll / 0x1_0000_0000 < chance;
+}
+
+/** Nations and humans still in the game. */
+function contenders(world: World): number {
+  let count = 0;
+  for (const p of world.players) if (p.alive && !isTribe(p)) count++;
+  return count;
+}
+
+/** Non-tribe players this player is fighting (attacking or attacked by). */
+function enemiesOf(world: World, id: PlayerId): Set<PlayerId> {
+  const enemies = new Set<PlayerId>();
+  for (const a of world.attacks) {
+    if (a.retreatTick >= 0 || a.target === NEUTRAL) continue;
+    const other = a.attacker === id ? a.target : a.target === id ? a.attacker : NEUTRAL;
+    if (other !== NEUTRAL && !isTribe(getPlayer(world, other))) enemies.add(other);
+  }
+  return enemies;
+}
+
+/** Troops at home and in the field. */
+function strength(player: Player): number {
+  return player.homeTroops + player.fieldTroops;
+}
+
+function otherSide(alliance: Alliance, id: PlayerId): PlayerId | null {
+  return alliance.a === id ? alliance.b : alliance.b === id ? alliance.a : null;
+}
+
+/** The alliance is in its renewal window and `id` hasn't renewed yet. */
+function needsMyRenewal(world: World, alliance: Alliance, id: PlayerId): boolean {
+  const done = alliance.a === id ? alliance.renewA : alliance.renewB;
+  return !done && inRenewWindow(world, alliance);
 }

@@ -23,7 +23,12 @@ export interface LabelPlayer {
   alive: boolean;
   /** Tribes (weak filler bots) get a lighter label, so the nations stand out. */
   tribe?: boolean;
+  /** The local player's ally (mint name) or a traitor (coral name), GAME_DESIGN.md §3.14. */
+  relation?: "ally" | "traitor" | null;
 }
+
+const ALLY_NAME = "#a6f5d2";
+const TRAITOR_NAME = "#ffa08f";
 
 const CELL = 4;
 const FAR = 1 << 20;
@@ -232,7 +237,14 @@ export class LabelLayer {
       ctx.font = `${weight} ${size}px ${this.font}`;
       ctx.lineWidth = Math.max(2, size * 0.18);
       ctx.strokeStyle = "rgba(10, 14, 22, 0.55)";
-      ctx.fillStyle = player.tribe ? "rgba(255, 255, 255, 0.8)" : "#ffffff";
+      ctx.fillStyle =
+        player.relation === "ally"
+          ? ALLY_NAME
+          : player.relation === "traitor"
+            ? TRAITOR_NAME
+            : player.tribe
+              ? "rgba(255, 255, 255, 0.8)"
+              : "#ffffff";
       const showTroops = !player.tribe || size >= TRIBE_TROOPS_FROM_PX;
       const nameY = showTroops ? sy - size * 0.32 : sy;
       ctx.strokeText(player.name, sx, nameY);
