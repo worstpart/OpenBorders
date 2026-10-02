@@ -31,6 +31,18 @@ npm install
 | `npm run build` | Production build into `dist/` (`npm run preview` serves it) |
 | `npm run format` | Formats code with Prettier (Markdown is left as written) |
 
+## Controls (so far)
+
+| Input | Action |
+|---|---|
+| Left click | Choose / move your start (spawn phase) |
+| Enter | Confirm your start |
+| Drag (any button) | Pan |
+| Mouse wheel | Zoom toward the cursor |
+| W A S D / arrows | Pan |
+| Space | Center on your territory |
+| F3 or ` | Performance overlay |
+
 ## Code layout
 
 | Folder | What lives there |

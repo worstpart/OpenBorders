@@ -26,7 +26,7 @@
   --color-warning: #f5c26b;
 
   /* The world behind the map (deep water / outside the map) */
-  --world-background: #0f1724;
+  --world-background: #1b324c;
 
   /* Typography: three sizes + one display size */
   --font-ui: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -75,12 +75,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#map {
+#map,
+#labels {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+}
+
+#map {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#labels {
+  pointer-events: none;
 }
 
 /* The UI layer never blocks the map, except where a component opts in. */

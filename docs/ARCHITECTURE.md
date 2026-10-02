@@ -156,6 +156,23 @@ the whole map (the worst case for partial uploads), comparing:
   fractional time since the last tick.
 - **Performance overlay** (toggle key): FPS, frame CPU, tick ms, upload ms.
 
+**As built (milestone 1.2):**
+- *Owner texture* is `RG16UI`: owner id + the tick the tile was last captured (mod
+  65,536), so the capture flash is animated entirely in the shader. Changes mark
+  32×32-tile blocks dirty; only dirty blocks are uploaded (`UNPACK_ROW_LENGTH`/`SKIP`).
+- *Terrain texture* is `RGBA8`, mipmapped: color in RGB, hillshade in alpha (computed
+  once from blurred relief), so relief stays visible under territory colors. Water color
+  comes from distance to the coast, so the open ocean blends into the area outside the map.
+- *Borders*: per pixel, the distance to the nearest edge or corner shared with a different
+  owner (8 neighbors), converted to screen pixels → constant on-screen width at every zoom;
+  each side draws its own half (two-tone frontiers). The local player's border is lighter
+  and slightly wider.
+- *Labels*: chamfer distance transform on a 4× downsampled owner grid → deepest point of
+  each territory (tied cells averaged, then refined to the local centroid), recomputed at
+  most every 250 ms; drawn on a Canvas2D overlay, sized to fit, faded out when tiny.
+- Measured (Chrome, 1345×1274, 8 players, spawn phase + troop growth): **0.11 ms CPU per
+  frame**, 0.06 ms per tick, display-capped 165 fps.
+
 ---
 
 ## 5. Simulation architecture

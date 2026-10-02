@@ -1,32 +1,46 @@
-<script lang="ts">
-  interface Props {
-    /** Set when the map can't be drawn (e.g. no WebGL2); shown instead of the start screen. */
-    fatalError?: string | null;
+<script lang="ts" module>
+  /** What the UI may ask the game to do (it never changes game state itself). */
+  export interface AppActions {
+    play: (opponents: number) => void;
+    confirmSpawn: () => void;
   }
-
-  let { fatalError = null }: Props = $props();
 </script>
 
-<main class="screen">
-  {#if fatalError}
+<script lang="ts">
+  import { ui } from "../app/uiState.svelte.ts";
+  import SpawnPrompt from "./hud/SpawnPrompt.svelte";
+  import YouChip from "./hud/YouChip.svelte";
+  import StartScreen from "./screens/StartScreen.svelte";
+
+  interface Props {
+    actions: AppActions;
+  }
+
+  let { actions }: Props = $props();
+</script>
+
+{#if ui.fatalError}
+  <main class="center">
     <section class="card" role="alert">
       <h1>Can't start the game</h1>
-      <p>{fatalError}</p>
+      <p>{ui.fatalError}</p>
     </section>
-  {:else}
-    <section class="card">
-      <h1>Borderline</h1>
-      <p class="subtitle">Working title · prototype in development</p>
-      <p class="placeholder">
-        <strong>Placeholder start screen.</strong> The map and the Play button arrive with the playable
-        prototype (Phase 1, milestones 1.1–1.2).
-      </p>
-    </section>
-  {/if}
-</main>
+  </main>
+{:else if ui.screen === "loading"}
+  <main class="center">
+    <p class="loading" role="status">Generating the map…</p>
+  </main>
+{:else if ui.screen === "start"}
+  <main class="center">
+    <StartScreen onPlay={actions.play} />
+  </main>
+{:else}
+  <YouChip />
+  <SpawnPrompt onConfirm={actions.confirmSpawn} />
+{/if}
 
 <style>
-  .screen {
+  .center {
     position: absolute;
     inset: 0;
     display: grid;
@@ -48,12 +62,6 @@
 
   h1 {
     margin: 0;
-    font-size: var(--text-display);
-    font-weight: 650;
-    letter-spacing: -0.02em;
-  }
-
-  [role="alert"] h1 {
     font-size: var(--text-lg);
     color: var(--color-danger);
   }
@@ -63,17 +71,7 @@
     line-height: 1.5;
   }
 
-  .subtitle {
-    margin-top: var(--space-1);
+  .loading {
     color: var(--text-secondary);
-  }
-
-  .placeholder {
-    margin-top: var(--space-6);
-    padding: var(--space-3);
-    border: 1px dashed var(--surface-hairline);
-    border-radius: var(--radius-control);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
   }
 </style>
