@@ -13,6 +13,7 @@
  * on it. Directed attacks: border tiles nearer the click point join the front earlier.
  */
 import { isLand, isValidTile, tileX, tileY } from "../map/gameMap.ts";
+import { detPow } from "../math/detmath.ts";
 import { terrainValue } from "../rules.ts";
 import {
   getPlayer,
@@ -251,7 +252,7 @@ function stepDelay(world: World, attack: Attack, tile: number, from: number): nu
   }
   delay *= growthResistance(world, attack, tile);
   delay *= 1 - rules.fillShare * (ownNeighbors(world, tile, attack.attacker) - 1);
-  delay += world.rng.nextFloat() * rules.noiseTicks;
+  delay *= 1 + world.rng.nextFloat() * rules.noiseShare;
   return Math.max(MIN_DELAY_TICKS, delay);
 }
 
@@ -268,7 +269,8 @@ function layerDelay(world: World, attack: Attack, tile: number): number {
     delay = (expansion.layerDelayTicks * terrainValue(expansion.terrainDelay, terrain)) / speed;
   } else {
     const r = outnumbering(world, attack);
-    let ratio = clamp(r, combat.delayRatioMin, combat.delayRatioMax);
+    const curve = r < 1 ? detPow(r, combat.crushExponent) : r;
+    let ratio = clamp(curve, combat.delayRatioMin, combat.delayRatioMax);
     if (r > combat.hopelessRatio) ratio *= r / combat.hopelessRatio;
     delay = combat.layerDelayTicks * terrainValue(combat.terrainDelay, terrain) * ratio;
   }

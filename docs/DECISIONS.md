@@ -178,3 +178,24 @@ npm, so it was upgraded to **npm 11.17.0** (the version bundled with Node 24).
 decisions, environment, gotchas, exact next steps — commit it, and continue in a new
 chat that starts by reading that handoff. The docs, not chat history, are the source
 of truth.
+
+---
+
+## D-016 — Phase 2 starts with big lobbies, Tribes & Nations, alliances, teams · Accepted 2026-10-02
+
+**Context.** After playtesting Phase 1 the user asked for up to 125 bots, OpenFront-style
+*Tribes* (many weak filler bots) and *Nations* (smarter opponents), teams, and alliances
+that last and work like OpenFront's (timed, renewable, betrayal marks a traitor).
+
+**Decision.** These are new systems, not tuning, so they are **not** added to Phase 1:
+Phase 1 finishes its tuning (milestone 1.7) and is tagged first. They become the **first
+milestones of Phase 2** (2.0 big lobbies → 2.1 Tribes & Nations → 2.2 alliances → 2.3
+teams), ahead of the economy, buildings and boats (ROADMAP). Teams move up from Phase 3
+because team games against bots don't need a server. Scale comes first because tribes
+only make sense with many players, and alliances need many opponents to matter.
+
+**Clean room.** We reproduce the *ideas* documented in `OPENFRONT_RESEARCH.md` §3.19–3.22
+(alliance timings, traitor debuff, tribe/nation roles) with our own design and code.
+
+**Open within it.** Whether tribes get stat handicaps (OpenFront's do) or stay fair and
+are simply simpler (D-012) — decided in the 2.1 design note.

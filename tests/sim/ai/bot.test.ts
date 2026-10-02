@@ -12,7 +12,7 @@ import { worldFromAscii } from "../../helpers/asciiMap.ts";
 /** Bots think every tick, no randomness in fronts, no growth, no victory: exact scenarios. */
 const RULES = makeRules({
   ai: { thinkMinTicks: 1, thinkMaxTicks: 1 },
-  attack: { noiseTicks: 0 },
+  attack: { noiseShare: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
   victory: { landShare: 2 },
 });

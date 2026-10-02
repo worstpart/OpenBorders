@@ -31,6 +31,7 @@ npm install
 | `npm run build` | Production build into `dist/` (`npm run preview` serves it) |
 | `npm run format` | Formats code with Prettier (Markdown is left as written) |
 | `npm run headless -- --games 20` | Plays bots-only games without a browser and reports winners, game length, lead changes and tick times (options: `--bots`, `--seed`, `--map-seed`, `--max-minutes`, `--json file`, `--rules overrides.json` to try rule changes, `--personality` to give every bot the same one) |
+| `node tools/speeds.ts` | Measures how fast fronts move on each terrain and at each troop advantage (tiles per second); takes `--rules overrides.json` too |
 
 ## Controls (so far)
 

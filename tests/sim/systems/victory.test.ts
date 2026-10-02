@@ -7,7 +7,7 @@ import { runTick } from "../../../src/sim/tick.ts";
 import type { World } from "../../../src/sim/world.ts";
 import { worldFromAscii } from "../../helpers/asciiMap.ts";
 
-const RULES = makeRules({ attack: { noiseTicks: 0 }, troops: { growthFloor: 0, growthScale: 0 } });
+const RULES = makeRules({ attack: { noiseShare: 0 }, troops: { growthFloor: 0, growthScale: 0 } });
 
 function runUntilOver(world: World, maxTicks = 500): TickFrame[] {
   const frames: TickFrame[] = [];

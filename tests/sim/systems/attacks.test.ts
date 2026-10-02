@@ -13,7 +13,7 @@ import { ascii, ownersToAscii, worldFromAscii } from "../../helpers/asciiMap.ts"
  */
 /** Plain fronts: no organic shaping (veins, tip growth), so timings are exact. */
 const PLAIN = {
-  noiseTicks: 0,
+  noiseShare: 0,
   fillShare: 0,
   growth: { ...DEFAULT_RULES.attack.growth, onVein: 1, offVein: 1 },
 };
@@ -120,6 +120,22 @@ describe("expanding into neutral land", () => {
     expect(world.players[0]!.homeTroops).toBe(1_000 - 4 - 6);
   });
 
+  it("moves fastest over grass and slowest over mountains", () => {
+    const ticksToCross = (terrain: string) => {
+      const world = worldFromAscii("1" + terrain.repeat(20), {
+        rules: EXACT,
+        homeTroops: [100_000],
+      });
+      expand(world, 1, 20, 0, 100);
+      return runUntilIdle(world).length;
+    };
+    const grass = ticksToCross(".");
+    const highland = ticksToCross("^");
+    const mountain = ticksToCross("M");
+    expect(highland).toBeGreaterThan(1.5 * grass);
+    expect(mountain).toBeGreaterThan(3.5 * grass);
+  });
+
   it("stops when the army is spent", () => {
     const world = worldFromAscii(
       `
@@ -150,9 +166,10 @@ describe("expanding into neutral land", () => {
       return runUntilIdle(world).length + 1;
     };
     const fullSpeed = ticksToCross(10_000);
-    // 30 tiles × 3 ticks per layer (the first tile is taken 3 ticks after the command).
-    expect(fullSpeed).toBeGreaterThanOrEqual(90);
-    expect(fullSpeed).toBeLessThanOrEqual(92);
+    // 30 tiles × one layer delay each (the first tile falls one delay after the command).
+    const layer = DEFAULT_RULES.expansion.layerDelayTicks;
+    expect(fullSpeed).toBeGreaterThanOrEqual(30 * layer);
+    expect(fullSpeed).toBeLessThanOrEqual(30 * layer + 2);
     expect(ticksToCross(500)).toBeGreaterThan(fullSpeed * 2.5); // 500 of 2000 → quarter speed
   });
 
@@ -213,8 +230,8 @@ describe("front shape", () => {
     expect(shared / Math.max(a.size, b.size)).toBeLessThan(0.9);
     // …but the same pace (the shaping was tuned to keep the average speed).
     expect(Math.abs(a.size - b.size) / Math.max(a.size, b.size)).toBeLessThan(0.35);
-    expect(a.size).toBeGreaterThan(300);
-    expect(a.size).toBeLessThan(1_500);
+    expect(a.size).toBeGreaterThan(600); // ~6 tiles/s on grass (milestone 1.7)
+    expect(a.size).toBeLessThan(3_000);
   });
 });
 
@@ -315,7 +332,7 @@ describe("attacking a player", () => {
     expect(fight(13_000).defenderTiles).toBe(0);
   });
 
-  it("floods a much weaker player: 4× their troops advances ~4× as fast as an even fight", () => {
+  it("floods a much weaker player: the bigger the edge, the faster (crush curve)", () => {
     const tilesTakenIn = (ticks: number, army: number) => {
       // A one-tile-wide front, so tiles taken = how far the front got.
       const world = worldFromAscii("11" + "2".repeat(200), {
@@ -327,8 +344,14 @@ describe("attacking a player", () => {
       return world.attacks[0]?.tilesTaken ?? world.players[0]!.tiles - 2;
     };
     const even = tilesTakenIn(40, 10_000);
+    const double = tilesTakenIn(40, 20_000);
     const crushing = tilesTakenIn(40, 40_000);
-    expect(crushing).toBeGreaterThanOrEqual(3 * even);
+    const overwhelming = tilesTakenIn(40, 200_000);
+    // Faster than the edge grows: 2× → ~2.5× as fast, 4× → ~6×, 20× → the speed cap.
+    expect(double).toBeGreaterThanOrEqual(2.2 * even);
+    expect(crushing).toBeGreaterThanOrEqual(5 * even);
+    expect(overwhelming).toBeGreaterThanOrEqual(crushing);
+    expect(overwhelming).toBeGreaterThanOrEqual(0.9 * 40 * 2); // the cap: 2 tiles per tick
   });
 
   it("is blocked by spawn protection at the start of the match", () => {

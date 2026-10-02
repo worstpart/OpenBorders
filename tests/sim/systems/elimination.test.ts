@@ -8,7 +8,7 @@ import type { PlayerId, World } from "../../../src/sim/world.ts";
 import { worldFromAscii } from "../../helpers/asciiMap.ts";
 
 const RULES = makeRules({
-  attack: { noiseTicks: 0 },
+  attack: { noiseShare: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
   victory: { landShare: 2 },
 });

@@ -98,7 +98,24 @@ overrides from a JSON file), `--personality`, a 90%-land metric and a length his
 | Wins by personality | opp 31 · turtle 28 · exp 25 · agg 16 (per 100) | opp 60 · exp 54 · turtle 51 · agg 35 (per 200) |
 | Tick avg / worst p99 / worst max | 0.95 / 13.8 / 103 ms | 0.72 / 6.7 / 29 ms |
 
-Changes: bots size expansions to what their front can use and call back oversized ones
+**After the user's playtest (same day):** "land grabs feel long", "a much bigger player
+should crush a small one much faster", "grass fastest, mountains slow". Measured with
+the new `tools/speeds.ts`, then tuned (GAME_DESIGN §3.5–3.6):
+
+| Front speed (tiles/s) | Before | After |
+|---|---|---|
+| Open land: grass / highland / mountain | 2.9 / 2.4 / 1.9 | 6.3 / 3.7 / 1.5 |
+| Attack on grass at 1× / 2× / 4× / 10× the defender | 2.0 / 3.8 / 5.7 / 5.7 | 2.0 / 5.8 / 14.4 / 19.8 |
+| Attack on mountains at 1× | 1.4 | 0.7 |
+
+200 bot games after it: 200/200 winners; median **7.1 min** (<8: 134 · 8–12: 58 · 12–16: 6
+· 16–20: 1 · 20–30: 1), longest 24.5; 90% of land owned at **2.1 min**; leader at minute 3
+won 35%; wins: turtle 81 · opportunist 50 · expander 44 · aggressor 25 (turtles gain from
+mountain defence lines — revisit with Nations in 2.1); tick 0.75 avg / 7.3 worst p99 ms.
+Browser: 165 fps, 0.5–1 ms CPU per frame, 0.4 ms per tick. Games are shorter than the
+8–12 min target, accepted (GAME_DESIGN §7).
+
+Earlier changes: bots size expansions to what their front can use and call back oversized ones
 (GAME_DESIGN §3.11); anti-stall victory rule (§3.10). Tried and rejected: a growth floor
 that scales with capacity (leader at minute 3 then won 44% instead of 31% — more
 snowballing; the HUD's sweet-spot bar addresses overspending instead); four aggressor
@@ -127,26 +144,32 @@ machine being busy (the same games alone: ≤ 24 ms).
 
 ## Phase 2 — Gameplay depth (after Phase 1 is fun)
 
-Ordered by expected impact; each item gets a design note in `GAME_DESIGN.md` before
-implementation.
+Each item gets a design note in `GAME_DESIGN.md` before implementation. Order set with
+the user after the Phase 1 playtest (D-016): **scale, AI tiers, alliances and teams
+first**, then the economy and the rest. Milestone numbers are a plan, not a promise —
+each ends with headless metrics + a browser check, like Phase 1.
 
-1. **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1)
-2. **Buildings** — City, Fort, Port (+ Market if the economy needs it)
-3. **Naval transport** — boats from any coast, routes, beachheads, recall
-4. **Diplomacy** — alliance requests, timed alliances, betrayal, donations, pings
-5. **Better AI** — threat/opportunity evaluation, alliances, boats, building
-6. **Anti-stall** — basic declining win threshold done in 1.7; revisit with more players/maps
-7. **More maps** — real-world maps via our own pipeline (public-domain data) and/or
-   CC BY-SA maps if we choose to
-8. **Sound & game events** — first pass
-9. **WorkerHost** — move the simulation off the main thread when maps grow
+| # | Milestone | Done when |
+|---|---|---|
+| 2.0 | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
+| 2.1 | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
+| 2.2 | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
+| 2.3 | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
+| 2.4 | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | |
+| 2.5 | **Buildings** — City, Fort, Port (+ Market if the economy needs it) | |
+| 2.6 | **Naval transport** — boats from any coast, routes, beachheads, recall | |
+| 2.7 | **More maps** — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps | |
+| 2.8 | **Sound & game events** — first pass; pings & emotes | |
+
+Anti-stall: a basic declining win threshold was done in 1.7; revisit for teams and big
+lobbies.
 
 ## Phase 3 — Multiplayer
 
 Authoritative Node server (hybrid lockstep, `ARCHITECTURE.md` §7), lobbies (create /
 join by link / public), player names, reconnect via snapshots, spectators, server
 browser / simple matchmaking, command validation & rate limits, desync detection +
-resync, cross-browser determinism tests, teams mode.
+resync, cross-browser determinism tests, online teams (team games with bots come in 2.3).
 
 ## Phase 4 — Polish
 
@@ -185,8 +208,8 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Win at 80% land | 70% or last standing, anti-stall | ✅ | — | L | |
 | Overtime / Doomsday Clock | Declining threshold (70% → 50% after 15 min) | ✅ | — | L–M | Pulled into 1.7 to end stalemates |
 | Terrain affects cost & speed | Same 3 classes | ✅ | — | L | |
-| Tribes (400 filler bots) | Fewer bots with personalities | ✅ (basic) | — | M | |
-| Nations (smart AI, 4 difficulties, stat bonuses) | No stat bonuses; difficulty = speed + decisions | Basic | P2 smarter | H | |
+| Tribes (400 filler bots) | Phase 1: 7 bots with personalities; Phase 2: Tribes, up to 125 opponents | ✅ (basic) | P2 (2.0–2.1) | M | D-016 |
+| Nations (smart AI, 4 difficulties, stat bonuses) | No stat bonuses; difficulty = speed + decisions | Basic | P2 (2.1) | H | D-016 |
 | Leaderboard table | Mini top-5 + you | ✅ | Full stats P4 | L | |
 | Event feed | Toasts | ✅ | — | L | |
 | 22-step tutorial | Contextual hints | ✅ (hints) | P4 onboarding | M | |
@@ -201,13 +224,13 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Trade ships | Maybe | — | P3 | M | Depends on economy model |
 | Warships & naval combat | Maybe | — | P3+ | H | Only if transports are fun |
 | Atom/Hydrogen/MIRV, silos, SAMs, fallout | Not planned | — | P4+ / never | VH | Core must be fun without them |
-| Alliances (timed, mutual renewal) | Same | — | P2 | M | |
+| Alliances (timed, mutual renewal) | Same (5 min, renew in last 30 s, traitor 30 s) | — | P2 (2.2) | M | D-016 |
 | Traitor debuff | Same | — | P2 | L | |
 | Embargo | Only if we have trade | — | P3 | L | |
 | Donate gold/troops | Same | — | P2 | L | |
 | Emoji / quick chat | Pings & emotes | — | P2–P3 | L | No free text |
 | Target-player marker | Maybe | — | P3 | L | |
-| Teams / Duos / HvN | Teams | — | P3 | M | |
+| Teams / Duos / HvN | Teams (with bots in P2, online in P3) | — | P2 (2.3) | M | D-016 |
 | Public/private lobbies | Yes | — | P3 | H | |
 | Ranked 1v1/2v2 matchmaking | Later | — | P5 | H | |
 | Relay-only lockstep server | **Hybrid authoritative lockstep** | — | P3 | VH | Server decides outcomes |

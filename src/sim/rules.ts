@@ -75,9 +75,13 @@ export interface CombatRules {
   /** Ticks per tile of advance at r = 1 on plains. */
   readonly layerDelayTicks: number;
   /**
-   * Bounds on r for speed. Below 1 the front speeds up in proportion: an army with 4× the
-   * defender's home troops (r = 0.25) advances 4× as fast — crushing a much weaker
-   * player feels like a flood. Outnumbered attacks slow down up to 8×.
+   * Crush curve: below r = 1 the delay is r^crushExponent, so the front speeds up faster
+   * than the advantage grows — a much bigger army floods a small player.
+   */
+  readonly crushExponent: number;
+  /**
+   * Bounds on the delay factor. Outnumbered attacks (r > 1) slow down in proportion,
+   * up to 8×.
    */
   readonly delayRatioMin: number;
   readonly delayRatioMax: number;
@@ -115,8 +119,11 @@ export interface AttackRules {
    * so the tips of the front grow fastest — organic, lobed, finger-like fronts.
    */
   readonly fillShare: number;
-  /** Random extra delay (0..this) per tile, so fronts look organic. */
-  readonly noiseTicks: number;
+  /**
+   * Random extra delay per tile, as a share of its delay (0..this), so fronts look
+   * organic. A share, not a fixed time: terrain keeps its full effect on fast fronts.
+   */
+  readonly noiseShare: number;
   /**
    * Organic, virus-like spread: every attack follows its own random network of thin,
    * branching veins (ridged noise). On a vein the front races ahead; between veins it
@@ -273,18 +280,19 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // Cheap enough that early growth outpaces expansion (a race limited by speed and
     // geography); costly enough that big frontiers later make direction a real choice.
     costPerTile: { plains: 3, highland: 4, mountain: 6 },
-    // ~2.5 tiles/s on open plains (with noise); terrain, direction and army size slow it.
-    // On the reference map the land race with 8 players should last about a minute
-    // (GAME_DESIGN.md §3.2) — to be confirmed by headless games in milestone 1.7.
-    layerDelayTicks: 3,
-    terrainDelay: { plains: 1, highland: 1.25, mountain: 1.67 },
+    // Measured with tools/speeds.ts (milestone 1.7, after the playtest: "land grabs feel
+    // long; grass should be fastest, mountains slow"): ~6 tiles/s on grass, ~3.5 on
+    // highland, ~1.5 on mountains — geography shapes the land race. With 8 bots, 90% of
+    // the land is taken after ~2 min.
+    layerDelayTicks: 1.5,
+    terrainDelay: { plains: 1, highland: 1.7, mountain: 4 },
     fullSpeedArmy: 2_000,
     minSpeedShare: 0.1,
   },
   combat: {
-    // Mountains: ~1.5× losses and ~1.5× slower than plains.
+    // Mountains: ~1.5× losses and ~2.5× slower than plains — a natural defensive line.
     terrainLoss: { plains: 1, highland: 1.25, mountain: 1.5 },
-    terrainDelay: { plains: 1, highland: 1.25, mountain: 1.5 },
+    terrainDelay: { plains: 1, highland: 1.5, mountain: 2.5 },
     // At r = 1 against density d, a tile costs 3 + 1.2·d while the defender loses d.
     // Because the cost scales with r (= D/A), a fight follows Lanchester's square law:
     // an army A takes everything from a home pool D when A² > 1.2·D², i.e. with ~10% more
@@ -294,9 +302,12 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     lossDensity: 1.2,
     lossRatioMin: 0.5,
     lossRatioMax: 2.5,
-    // ~2.5 tiles/s at even odds: fights move about as fast as expansion.
+    // ~2 tiles/s at even odds on grass: slow enough to react to. The crush curve makes a
+    // much bigger army flood a small player (tools/speeds.ts): 2× → ~6 tiles/s,
+    // 4× → ~14, 10× and more → ~20 (the cap: two layers per tick).
     layerDelayTicks: 4,
-    delayRatioMin: 0.25,
+    crushExponent: 1.3,
+    delayRatioMin: 0.05,
     delayRatioMax: 8,
     hopelessRatio: 20,
   },
@@ -310,7 +321,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // like a growing colony rather than a geometric shape. Tuned so that the average
     // spread speed matches the old round fronts (same balance, different look).
     fillShare: -0.4,
-    noiseTicks: 2,
+    noiseShare: 0.67,
     growth: { veinScale: 0.05, veinSharpness: 3, onVein: 0.45, offVein: 1.5 },
     retreatTicks: 20,
     retreatPenalty: 0.2,

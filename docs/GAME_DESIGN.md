@@ -129,8 +129,8 @@ attack percentage.
 
 ```
 Cost per tile (troops)   plains 3 · highland 4 · mountain 6
-Front speed              one tile per layer delay: 3 ticks on plains (~2.5 tiles/s with noise)
-                          × terrain (plains 1 · highland 1.25 · mountain 1.67)
+Front speed              one tile per layer delay: 1.5 ticks on plains (~6 tiles/s with jitter)
+                          × terrain (plains 1 · highland 1.7 · mountain 4)
                           ÷ min(1, army / 2,000)     ← tiny armies crawl (floor 10% speed)
 ```
 
@@ -139,6 +139,13 @@ the front itself never advances faster than its layer delay (see §3.7).
 
 - Expansion is **directed** (§3.7): it flows outward from where you clicked first,
   then spreads.
+- **Geography matters** (milestone 1.7, after the playtest: "land grabs feel long; grass
+  should be fastest, mountains and snow slow"): measured with `tools/speeds.ts`, open
+  land falls at ~6 tiles/s on grass, ~3.5 on highland and ~1.5 on mountains. Territories
+  flow along green valleys and stop at ridges. With 8 bots, 90% of the land is owned
+  after ~2.1 min (was 2.8; 3.1 before right-sized bot expansions). The random jitter per
+  tile is now a share of the tile's delay (up to +67%), not a fixed time — a fixed time
+  had flattened the terrain differences on fast fronts.
 - Early on, regeneration outpaces expansion costs (a land race limited by speed and
   geography). As your frontier grows, expansion becomes troop-limited and *direction*
   becomes a real choice.
@@ -158,11 +165,20 @@ d  = defender home pool ÷ defender tiles          (defender density)
 
 attacker loss / tile = TERRAIN_LOSS × clamp(r, 0.5, 2.5) × (LOSS_BASE + LOSS_DENSITY × d)
 defender loss / tile = d
-layer delay (ticks)  = 4 × TERRAIN_SLOW × clamp(r, 0.8, 8)
+layer delay (ticks)  = 4 × TERRAIN_SLOW × clamp(r < 1 ? r^1.3 : r, 0.05, 8)
                        (× r/20 more when r > 20: hopeless attacks barely move)
 
-LOSS_BASE 3 · LOSS_DENSITY 1.2 · TERRAIN_LOSS = TERRAIN_SLOW = 1 / 1.25 / 1.5
+LOSS_BASE 3 · LOSS_DENSITY 1.2 · TERRAIN_LOSS 1 / 1.25 / 1.5 · TERRAIN_SLOW 1 / 1.5 / 2.5
 ```
+
+**Crush curve (milestone 1.7, after the playtest).** "When a much bigger player attacks a
+small one it should be way more rapid" (as in OpenFront). Before, speed rose in
+proportion to the edge and stopped rising at 4×: a 30× army moved no faster than a 4×
+one (5.7 tiles/s). Now the delay falls as r^1.3 down to 1/20, so overwhelming attacks
+flood (~20 tiles/s). Losses per tile are unchanged (still halved at 2× and beyond), so
+crushing is fast, not free. Even fights stay at ~2 tiles/s so the defender can react.
+This shortened bot games from a median 9.7 to 7.1 min, mostly by ending the mop-up of
+beaten players sooner (see ROADMAP 1.7).
 
 **Why LOSS_DENSITY = 1.2 (changed from 0.8 after the first play-test).** Because the
 attacker's cost scales with r = D/A while the defender loses d per tile, a fight follows
@@ -177,7 +193,8 @@ sending twice the defender's pool halves the cost per tile.
 | Commit more troops | Cheaper per tile *and* faster (r falls) |
 | Defender fighting elsewhere | Their home pool is lower → easier to attack everywhere |
 | Wide shared border | More frontier → faster attacks (for both sides) |
-| Mountains | ~1.5× losses and ~1.5× slower than plains |
+| Mountains | ~1.5× losses and ~2.5× slower than plains: natural defensive lines |
+| Much bigger army | **Crush curve**: speed grows faster than the edge — grass: even 2 tiles/s, 2× ≈ 6, 4× ≈ 14, 10×+ ≈ 20 (the cap) |
 | Two players attack each other | The two armies collide and cancel out first |
 
 - **Retreat:** cancel an attack from its chip (×). It stops advancing immediately;
@@ -543,7 +560,9 @@ profitable, distinct personalities. Same commands as humans.
 4. Playtests with a short checklist: Was the first minute clear? When did you feel
    "grow or strike"? Was there a moment you didn't know what to do?
 
-Target feel for Phase 1: matches of **8–12 minutes**, the leader at minute 3 wins less
+Target feel for Phase 1: matches of **8–12 minutes** (after the 1.7 speed changes,
+8-bot games run a median ~7 min — accepted: the playtest asked for faster land grabs and
+crushing attacks, and bigger lobbies in Phase 2 will lengthen games), the leader at minute 3 wins less
 than ~60% of games, and players attack every 10–30 s rather than waiting.
 
 ---

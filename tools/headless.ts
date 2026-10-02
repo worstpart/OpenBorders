@@ -16,20 +16,16 @@
  * {"troops": {"growthFloor": 20}}), to try a balance change before editing rules.ts.
  * --personality gives every bot the same personality.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import type { GameMap } from "../src/sim/map/gameMap.ts";
 import { generateContinent } from "../src/sim/map/generate.ts";
-import {
-  DEFAULT_RULES,
-  PERSONALITIES,
-  type GameRules,
-  type Personality,
-} from "../src/sim/rules.ts";
+import { PERSONALITIES, type GameRules, type Personality } from "../src/sim/rules.ts";
 import { runTick } from "../src/sim/tick.ts";
 import { createWorld, type World } from "../src/sim/world.ts";
+import { loadRules } from "./rulesFile.ts";
 
 interface Options {
   games: number;
@@ -94,9 +90,8 @@ async function main(): Promise<void> {
     width: Number(args.width),
     height: Number(args.height),
     maxTicks: Number(args["max-minutes"]) * 60 * TICKS_PER_SECOND,
-    rules: args.rules
-      ? (merge(DEFAULT_RULES, JSON.parse(readFileSync(args.rules, "utf8"))) as GameRules)
-      : DEFAULT_RULES,
+    rules: loadRules(args.rules),
+
     personality: parsePersonality(args.personality),
   };
   const workerCount = Math.max(
@@ -291,19 +286,6 @@ function histogram(sorted: number[], edges: number[]): Record<string, number> {
     const label =
       k === 0 ? `<${edges[0]}` : k < 0 ? `${edges.at(-1)}+` : `${edges[k - 1]}-${edges[k]}`;
     out[label] = (out[label] ?? 0) + 1;
-  }
-  return out;
-}
-
-/** Deep-merges plain objects: `patch` values replace `base` values, objects merge. */
-function merge(base: unknown, patch: unknown): unknown {
-  if (typeof base !== "object" || base === null || typeof patch !== "object" || patch === null) {
-    return patch;
-  }
-  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-  for (const [key, value] of Object.entries(patch)) {
-    if (!(key in out)) throw new Error(`unknown rule "${key}"`);
-    out[key] = merge(out[key], value);
   }
   return out;
 }
