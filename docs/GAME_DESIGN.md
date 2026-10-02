@@ -563,7 +563,7 @@ user chose on 2026-10-02 that **troops can be donated too**, with limits (D-020)
 | Mobilize | spend **1 gold per troop** for instant home troops, at most up to your capacity (home + field ≤ capacity, as always). The HUD buys **10% of your capacity** per click (key **M**); if gold is short it buys what you can afford | Gold is a reserve army that doesn't count toward the cap and can't be killed — but deploying it fills you past the growth sweet spot. Best right after an attack (back to ½, where growth peaks) or right before one |
 | How much it's worth | spending all income ≈ **+20% of peak troop growth** at every size (early 16 vs 75 troops/tick, mid 190 vs 1,040) | Noticeable, not dominant; buildings will compete for the same gold |
 | Loot | conquering a player (eliminating them) gives you **all their leftover gold** — nations' and tribes' alike (user request during 2.4; the note first said half). On the map the capturer's border shimmers gold for ~2 s and "+12K" with a coin rises from where the captured land was | Finishing players off pays, and you see it pay. Nobody gets the gold if no one eliminated them |
-| Donations | to an **ally or teammate**: troops (from your home troops) or gold, a share chosen with the usual send % (default 25%). Each kind to each friend at most every **10 s**. Troops can't push the friend over their capacity (only what fits is sent; nothing if they're full) | Rescue a friend under attack, or pool gold in a team. The cap and the cooldown limit "feeding" one player (D-020) |
+| Donations | *(Planned change, D-023, milestone 2.5: troops only to a friend you share a border with, or by airlift from an Airport in 2B.1; gold unchanged.)* To an **ally or teammate**: troops (from your home troops) or gold, a share chosen with the usual send % (default 25%). Each kind to each friend at most every **10 s**. Troops can't push the friend over their capacity (only what fits is sent; nothing if they're full) | Rescue a friend under attack, or pool gold in a team. The cap and the cooldown limit "feeding" one player (D-020) |
 | Off switch | `rules.economy.enabled = false` (headless `--no-economy`): no gold at all, games play exactly as in 2.3 | Regression check |
 
 **AI (as built).** *Nations* keep gold as a **war chest**: right before they attack a
@@ -590,13 +590,15 @@ up) 11.6–12.1 min.
 - **Headless:** `--no-economy`; per game gold earned, mobilized, donated and looted, and
   the median gold income at minutes 1, 3 and 6.
 
-### 3.17 Buildings & strategic warfare — design (PLANNED · proposed 2026-10-02, awaiting approval)
+### 3.17 Buildings & strategic warfare — design (PLANNED · 2026-10-02)
 
 > **Status: PLANNED.** Nothing in this section exists in the game yet. It is the design
 > the user asked for on 2026-10-02 (seven buildings with three levels each, Border
-> Defense, SAMs, Missile Silos and Airports) — written *before* any code, for approval.
-> Every number is a starting point for headless tuning. Where each part is built:
-> ROADMAP (2.5–2.7 and Phase 3B). Decisions: D-021 – D-023.
+> Defense, SAMs, Missile Silos and Airports) — written *before* any code. The user's
+> answers of 2026-10-02: air & strategic warfare comes **before multiplayer** (Phase 2B,
+> built bots-first); **troop gifts only over a shared border or by airlift**; **longer games
+> are fine**. Every number is a starting point for headless tuning. Where each part is
+> built: ROADMAP (2.5–2.7 and Phase 2B). Decisions: D-021 – D-023.
 
 **The test for every rule below: would this still feel like OpenFront?** The player
 should still spend most of the game looking at the map, expanding, watching borders,
@@ -650,8 +652,16 @@ levels are not readable on the map.
 | **Flight-sim micro** | Players steer planes | Every air/missile action = origin, target, commitment, go. The simulation flies, fights and returns |
 | **SAM bubbles** | Overlapping SAMs make the sky impenetrable | No stacking bonuses: each SAM fires its own few interceptors, each kills one plane; saturation (several flights, or strike the SAM first) beats it; SAMs are expensive and their radius small next to a territory |
 | **Snowball** | Rich players build L3 everything | Price grows +25% per level you own of a type; L3 totals are 8–10× the L1 price; gold income is √land; gold also buys troops (Mobilize), so every building is a troop you didn't buy |
-| **Short games** | Our games last 7–13 min (median); L3 airports/silos would never appear | Costs are sized to *our* economy (§3.17.8) and we measure game length every milestone. **Open question for the user:** do we accept games getting longer (OpenFront's run 20–40 min)? |
-| **Instant gifts vs airlift** | Troops can already be gifted instantly to any ally anywhere (D-020) — an airlift would be pointless | **Proposed (D-023):** troop gifts need a shared border; distant friends need an airlift (Airport I) — or a boat later. Gold gifts stay instant everywhere |
+| **Short games** | Our games last 7–13 min (median); L3 airports/silos would never appear | Costs are sized to *our* economy (§3.17.12) and we measure game length every milestone. **User (2026-10-02): longer games are fine** — L3 warfare should appear in a normal game (§3.17.12) |
+| **Instant gifts vs airlift** | Troops can already be gifted instantly to any ally anywhere (D-020) — an airlift would be pointless | **User (2026-10-02, D-023):** troops go to a friend **only over a shared border or by airlift** (Airport I) — not by boat. From milestone 2.5 on. Gold gifts stay instant everywhere |
+
+**Several fronts at once (unchanged).** As in OpenFront you can attack several players at
+the same time — one army per enemy. It's risky for the same reason: troops in the field
+leave your home troops low, so everyone you border finds you cheaper to attack. Against
+the *same* enemy, land clicks add to that enemy's army and move its aim (OpenFront merges
+land attacks on one target too). What changes with boats (2.7) and airdrops (2B.3): a
+landing is its **own** army, separate from your land attack on that enemy — as OpenFront's
+boat attacks are.
 
 #### 3.17.4 Shared rules for all buildings
 
@@ -798,7 +808,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Housing | III Metropolis | +250k (390k) | 20 s | +180k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | skyline with a tower, soft night glow, 3 pips |
 | Factory | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | shed + chimney |
 | Factory | II Industrial Complex | +150k (210k) | 10 s | +80 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | two halls, smoke puffs |
-| Factory | III Mega Industrial Complex | +350k (560k) | 20 s | +160 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 3B) | 60 | — | — | same — a prime target | large plant, 3 chimneys |
+| Factory | III Mega Industrial Complex | +350k (560k) | 20 s | +160 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B) | 60 | — | — | same — a prime target | large plant, 3 chimneys |
 | Port | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
 | Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (Border Defense II zone along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
@@ -855,9 +865,11 @@ lobbies ~20–30% less. Rough gold earned so far (if nothing is spent): **~40k b
 Compared with OpenFront (flat 1,000 gold/s; first city 125k ≈ 2 min of income; games
 20–40 min), our prices are about a third, because our games are about a third as long.
 **The tension:** today's median game (7–13 min) ends before most players reach L3 airports
-or silos. Buildings will make defending stronger and probably lengthen games; each
-milestone measures it. If the user wants L3 warfare to be common, games must get longer
-(e.g. a slower crush curve or a higher win share) — a direction question, not tuning.
+or silos. **The user accepts longer games (2026-10-02).** Provisional target, to confirm in
+the 2.10 and 2B playtests: a typical lobby (nations + tribes) runs a median **~15–20 min**,
+so a normal game reaches its first L3 buildings and the leaders reach L3 airports or silos.
+Buildings will lengthen games by themselves (stronger defence); if that isn't enough we
+tune the game's pace (crush curve, win share) rather than make L3 cheaper.
 
 #### 3.17.13 UI/UX
 

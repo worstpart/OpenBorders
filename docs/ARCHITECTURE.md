@@ -380,7 +380,7 @@ touch them.
 
 ### 5.7 Buildings, ranges and flights — *PLANNED (proposed 2026-10-02, not built)*
 
-Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 3B. The goal of 2.5 is that
+Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
 
 **Definitions in one place.** `rules.buildings[type]` holds, per type: placement
@@ -403,8 +403,8 @@ interface Building {
   targetLevel: 1 | 2 | 3;  // > level while constructing / upgrading
   readyTick: number;       // when the construction or upgrade completes (-1 = none)
   disabledUntilTick: number;
-  charges: number[];       // reload queue (SAM interceptors, silo slots) — 3B
-  cooldownUntilTick: number; // airport missions, strikes — 3B
+  charges: number[];       // reload queue (SAM interceptors, silo slots) — 2B
+  cooldownUntilTick: number; // airport missions, strikes — 2B
 }
 ```
 
@@ -436,17 +436,17 @@ damaged or destroyed, and updated per tile inside `setOwner` (a captured tile dr
 the best covering post of its new owner via the grid). `tileCost` / `layerDelay` in
 `attacks.ts` and `attackLossFactor` in `battle.ts` read one **zone-modifier** function
 (`zoneLossFactor(world, tile, attacker)`, `zoneSpeedFactor`) that also handles
-suppression zones (3B) — one hook, not one per feature. The client gets the field as an R8
+suppression zones (2B) — one hook, not one per feature. The client gets the field as an R8
 texture with dirty uploads; the map shader draws a level pattern on border edges of
 fortified tiles that face a non-friendly owner.
 
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild; (3B) airlift, airAssault, airStrike, launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild; (2B) airlift, airAssault, airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 3.  advanceAttacks     reads the zone modifiers (fortification, suppression)
-3b. advanceFlights     (3B) move flights, SAM/flak interceptions, arrivals:
+3b. advanceFlights     (2B) move flights, SAM/flak interceptions, arrivals:
                        airlift → friend's home troops; assault → beachhead attack (2.7);
                        strike/missile → damageBuilding + suppression zones
     (setOwner)         captured tiles transfer or destroy their building; fortLevel updates
@@ -454,19 +454,21 @@ fortified tiles that face a non-friendly owner.
 7.  thinkAI            + ai/build.ts (what/where/when to build and upgrade) — a separate module
 ```
 
-**Flights (3B.0).** `world.flights`: origin, target, owner, kind, planes, payload,
+**Flights (2B.0).** `world.flights`: origin, target, owner, kind, planes, payload,
 launchTick, arriveTick. Positions are a pure function of the tick (straight line), so a
 flight stores no per-tick movement state and the client animates it from the launch event
 alone. Interception: each tick, a flight's current cell in the spatial grid is checked for
 hostile SAMs with a ready interceptor whose radius contains it; a plane is targeted by one
 interceptor only, in id order (deterministic).
 
-**Beachhead attacks (2.7).** Today `world.attacks` holds one army per (attacker, target)
-pair and fronts start from the attacker's border. Boats (2.7) and airborne assaults (3B.3)
-need an attack whose front starts at a **landing tile**; it must not merge with the land
-attack on the same target (as in OpenFront). This changes the "one army per pair"
-invariant and is the main structural change of the plan — it is done once, in 2.7, and
-reused by 3B. Landing pockets are protected from encirclement while their attack advances.
+**Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
+(one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army
+(`launchAttack` finds it by attacker + target), and every front starts from the attacker's
+border. Boats (2.7) and airborne assaults (2B.3) need an army whose front starts at a
+**landing tile** and that does **not** merge with the land army against the same enemy
+(OpenFront's boat attacks don't merge either). So the merge lookup gains a "source" (land
+or a landing) and fronts can be seeded from a landing tile — the main structural change of
+the plan, done once in 2.7 and reused by 2B. Land attacks are unchanged. Landing pockets are protected from encirclement while their attack advances.
 
 **Frames and rendering.** Frames carry building deltas (added/changed/removed: id, type,
 owner, tile, level, targetLevel, readyTick, disabled) and flight launch/interception/

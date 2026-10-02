@@ -8,8 +8,8 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), Border Defense, naval, more maps | 🟡 2.0–2.4 ✅ · next 2.5 |
+| **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
-| **3B — Air & strategic warfare** *(PLANNED, proposed 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — placement after Phase 3 is the recommendation, awaiting the user (D-021) | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -158,12 +158,12 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.2 ✅ | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 ✅ | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 ✅ | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | Gold earned, mobilized, given and looted in the browser; games no longer than before |
-| 2.5 | **Building framework + Housing & Factory (levels I–III)** *(PLANNED)* — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
-| 2.6 | **Border Defense I–III** *(PLANNED)* — fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (3B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
-| 2.7 | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 3B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 3B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
+| 2.5 | **Building framework + Housing & Factory (levels I–III)** *(PLANNED)* — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
+| 2.6 | **Border Defense I–III** *(PLANNED)* — fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
+| 2.7 | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 | **More maps** *(was 2.7)* — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps; `WorkerHost`; re-check building spacing and range values on bigger maps | |
-| 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 3B) | |
-| 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; decide game-length target (§3.17.12) | The user approves the feel; Phase 2 handoff |
+| 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B) | |
+| 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
 
 Anti-stall: a basic declining win threshold was done in 1.7; revisit for teams and big
 lobbies.
@@ -314,6 +314,42 @@ teammates and human allies (two allied nations propping each other up stalled wa
 *Send troops* to a teammate with cooldowns, toasts, full loot of a tribe with the gold
 border and "+1.4K" on the map; clean console.
 
+## Phase 2B — Air & strategic warfare *(PLANNED)*
+
+Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before
+multiplayer** — the solo game gets its full depth first; Phase 3 then carries these
+systems as ordinary commands (D-006). I had recommended after multiplayer; the cost of
+this order is that multiplayer's risks (determinism across browsers, server load) are
+tested later, on more systems — Phase 3's determinism tests must cover flights and
+buildings from the start.
+
+**Bots first (user, 2026-10-02):** each milestone builds the simulation and the **nation
+AI** before the human controls. Nations place airports and SAMs and fly missions in
+headless bot-only games (metrics: flights per game, interceptions, assault success, game
+length) and in a spectated browser game; only when that looks right do we add the
+player's card, targeting and warnings. Bugs and balance problems show up in hundreds of
+bot games before anyone has to play them.
+
+| # | Milestone | Needs | Done when |
+|---|---|---|---|
+| 2B.0 | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
+| 2B.1 | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
+| 2B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
+| 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
+| 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
+| 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
+| 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol only if boats proved fun (feature matrix); full balance and AI pass across all buildings | 2.7, 2B.5 | Playtest approval; Phase 2B handoff |
+
+**Dependency map** (what must exist first):
+
+```
+2.5 building framework + range module ─┬─▶ 2.6 Border Defense ─(zone-modifier hook)──┐
+   (Housing, Factory prove 3 levels)   ├─▶ 2.7 boats + beachhead attack + Port I–II ─┤
+                                       └─▶ 2B.0 flights ─▶ 2B.1 Airport I ─▶ 2B.2 SAM ─┼─▶ 2B.3 Airport II
+                                                                     2B.2 ─▶ 2B.5 Silo  └─▶ 2B.4 Airport III
+2.2 alliances + 2.4 gifts ─▶ 2B.1 airlift        Phase 3 multiplayer carries all of it as commands
+```
+
 ## Phase 3 — Multiplayer
 
 Authoritative Node server (hybrid lockstep, `ARCHITECTURE.md` §7), lobbies (create /
@@ -321,7 +357,7 @@ join by link / public), player names, reconnect via snapshots, spectators, serve
 browser / simple matchmaking, command validation & rate limits, desync detection +
 resync, cross-browser determinism tests, online teams (team games with bots come in 2.3).
 
-**Buildings and (once built) air/strategic systems online — server authoritative**
+**Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
 outcome below is computed by it, never claimed by a client. Clients only *request*:
 `build`, `upgrade`, `cancelBuild`, and later `airlift`, `airAssault`, `airStrike`,
@@ -332,34 +368,6 @@ fortification field rebuilt from snapshot data, never sent; determinism tests th
 construction, capture, flights, SAM interception and missile damage across browsers;
 hashes include buildings and flights. Nothing about costs, damage, interception,
 transported troops, ownership changes or victory is ever taken from a client.
-
-## Phase 3B — Air & strategic warfare *(PLANNED, proposed 2026-10-02 — awaiting approval)*
-
-Design: GAME_DESIGN §3.17.7–3.17.8. Recommended **after Phase 3** (online play first —
-multiplayer is our riskiest unproven part, and these systems add only commands and
-simulation steps that the Phase 3 pipeline carries unchanged); the user may choose to run
-it before Phase 3 instead (then it is "Phase 2B"). Each milestone includes its AI and its
-headless metrics, like Phase 2.
-
-| # | Milestone | Needs | Done when |
-|---|---|---|---|
-| 3B.0 | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
-| 3B.1 | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back); **troop gifts need a shared border** (D-023) | 3B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
-| 3B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 3B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
-| 3B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 3B.1, 3B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
-| 3B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 3B.3 | Combined arms works: strike → suppress → assault → capture |
-| 3B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 3B.0, 3B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
-| 3B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol only if boats proved fun (feature matrix); full balance and AI pass across all buildings | 2.7, 3B.5 | Playtest approval; Phase 3B handoff |
-
-**Dependency map** (what must exist first):
-
-```
-2.5 building framework + range module ─┬─▶ 2.6 Border Defense ─(zone-modifier hook)──┐
-   (Housing, Factory prove 3 levels)   ├─▶ 2.7 boats + beachhead attack + Port I–II ─┤
-                                       └─▶ 3B.0 flights ─▶ 3B.1 Airport I ─▶ 3B.2 SAM ─┼─▶ 3B.3 Airport II
-                                                                     3B.2 ─▶ 3B.5 Silo  └─▶ 3B.4 Airport III
-2.2 alliances + 2.4 gifts ─▶ 3B.1 airlift        Phase 3 multiplayer carries all of it as commands
-```
 
 ## Phase 4 — Polish
 
@@ -414,15 +422,15 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Flat gold + trade/trains | E2 + Mobilize (to be decided) | — | P2 | M | |
 | City (+max troops) | **Housing** I–III | — | 2.5 | M | Planned 2026-10-02 (§3.17) |
 | Defense Post | **Border Defense** I–III: fortified border zones drawn as walls | — | 2.6 | H | Planned (D-022) |
-| Port | **Port** I–II (2.7), III (3B.6) | — | 2.7 / 3B | M | |
+| Port | **Port** I–II (2.7), III (2B.6) | — | 2.7 / 2B | M | |
 | Factory + trains/railroads | **Factory** I–III: plain gold income + Mobilize discount (no trains) | — | 2.5 | M | Trains stay out (opaque) |
 | Structure levels/upgrades | **Exactly 3 named levels**, level = health | — | 2.5 | M | Planned (D-021) |
 | Transport ships | Same + route/ETA preview | — | 2.7 | H | Water pathfinding; builds the beachhead attack |
 | Trade ships | Maybe | — | P3 | M | Depends on economy model |
-| Warships & naval combat | Naval Base patrol (Port III) | — | 3B.6+ | H | Only if transports are fun |
-| Silos, SAMs | **Missile Silo** I–III (conventional missiles, one strategic warhead at III), **SAM** I–III | — | 3B | VH | User's direction 2026-10-02 (D-021) replaces "not planned" |
-| Atom/Hydrogen/MIRV, fallout | Only the Silo III strategic warhead (scorched land, 60 s) | — | 3B.5 | H | No MIRV |
-| *(new)* Airports & aircraft | **Airport** I–III: airlift, airborne assault, air strikes | — | 3B | VH | Not in OpenFront; biggest risk to the feel (§3.17.3) |
+| Warships & naval combat | Naval Base patrol (Port III) | — | 2B.6+ | H | Only if transports are fun |
+| Silos, SAMs | **Missile Silo** I–III (conventional missiles, one strategic warhead at III), **SAM** I–III | — | 2B | VH | User's direction 2026-10-02 (D-021) replaces "not planned" |
+| Atom/Hydrogen/MIRV, fallout | Only the Silo III strategic warhead (scorched land, 60 s) | — | 2B.5 | H | No MIRV |
+| *(new)* Airports & aircraft | **Airport** I–III: airlift, airborne assault, air strikes | — | 2B | VH | Not in OpenFront; biggest risk to the feel (§3.17.3) |
 | Alliances (timed, mutual renewal) | Same (5 min, renew in last 30 s, traitor 30 s) | — | P2 (2.2) | M | D-016 |
 | Traitor debuff | Same | — | P2 | L | |
 | Embargo | Only if we have trade | — | P3 | L | |

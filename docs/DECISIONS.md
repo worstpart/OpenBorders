@@ -26,9 +26,9 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-018 | Alliances: timed and renewable, no shared victory, betrayal costly | **Accepted** 2026-10-02 |
 | D-019 | Teams: fixed sides that win on combined land; alliances unchanged across teams; tribes teamless | **Accepted** 2026-10-02 (user) |
 | D-020 | Economy: land-linked gold, Mobilize, gifts (troops too), full loot | **Accepted** 2026-10-02 |
-| D-021 | Building system: 7 buildings × 3 named levels incl. SAM, Silo, Airport; roadmap placement | **Proposed** 2026-10-02 (awaiting user) |
+| D-021 | Building system: 7 buildings × 3 named levels incl. SAM, Silo, Airport; air phase (2B) before multiplayer, bots first | **Accepted** 2026-10-02 (user's answers) |
 | D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Proposed** 2026-10-02 |
-| D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts need a shared border | **Proposed** 2026-10-02 (awaiting user) |
+| D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts only over a shared border or by airlift | **Accepted** 2026-10-02 (user) |
 
 ---
 
@@ -322,7 +322,7 @@ instant); flat income E1 (less legible); half the loot (my first note; the user 
 
 ---
 
-## D-021 — Building system with three levels, air and missiles; roadmap placement · Proposed 2026-10-02
+## D-021 — Building system with three levels, air and missiles; roadmap placement · Accepted 2026-10-02
 
 **Context.** Before starting milestone 2.5 the user asked for a building system that stays
 recognisably OpenFront but deeper: Housing, Factory, Port, Border Defense, SAM, Missile
@@ -336,8 +336,8 @@ ability where it makes sense; one definitions table in `rules.buildings`; prices
 our economy (first L1 ~1 min, L2 ~3–4 min, L3 ~6–7 min, Airport III/Silo III only for
 leaders in long games) with +25% per level owned of a type. Roadmap: 2.5 framework +
 Housing + Factory, 2.6 Border Defense, 2.7 boats + Port I–II (the beachhead attack),
-then a new **Phase 3B — Air & strategic warfare** (flights, Airport I–III, SAM I–III,
-Silo I–III, Port III), recommended **after** Phase 3 multiplayer. Missile Silos are not
+then a new **Phase 2B — Air & strategic warfare** (flights, Airport I–III, SAM I–III,
+Silo I–III, Port III), placed **before** Phase 3 multiplayer (user). Missile Silos are not
 in 2.5: a silo without missiles, flights and interception would be a fake system.
 
 **Consequences.** Supersedes "no silos/SAMs before Phase 4". Phase 2 gains 2.10 (playtest
@@ -345,9 +345,14 @@ in 2.5: a silo without missiles, flights and interception would be a fake system
 milestone; whether L3 warfare should be common (longer games) is an open question for
 the user.
 
+**User's answers (2026-10-02).** The air & strategic phase comes **before** multiplayer
+(Phase 2B, after Phase 2) and is built **bots-first**: nations place airports and SAMs and
+fly missions in headless and spectated games before the human controls are added. Longer
+games are fine (provisional target ~15–20 min, GAME_DESIGN §3.17.12).
+
 **Alternatives.** Unlimited OpenFront-style stacking (opaque); everything in Phase 2
-(would delay boats, maps and multiplayer for months); air phase before multiplayer (the
-user may still prefer it — then it is "Phase 2B").
+(would delay boats and maps); air phase after multiplayer (my first recommendation —
+multiplayer's risks would be found earlier; the user preferred the full solo game first).
 
 ---
 
@@ -372,7 +377,7 @@ OpenFront's circle without a wall (not readable on the border, which the user as
 
 ---
 
-## D-023 — Air rules; troop gifts need a shared border · Proposed 2026-10-02
+## D-023 — Air rules; troop gifts only over a shared border or by airlift · Accepted 2026-10-02
 
 **Context.** Airports raise questions the user asked us to settle: does the receiver need
 an airport, how SAMs interact with aircraft, how damage works, and — found while reading
@@ -382,9 +387,10 @@ an Airport I airlift pointless.
 **Proposal** (GAME_DESIGN §3.17.7). Only the sender needs an airport. Flights are visible,
 straight-line and take time. SAMs fire a few interceptors (1/2/3) that always destroy one
 plane each and reload — no random hit chances, no stacking multipliers (as OpenFront does
-for nukes). Buildings have no HP: a hit costs one level. **Troop gifts would require a
-shared border** (or an airlift, or later a boat); gold gifts stay instant everywhere.
-This changes D-020's troop gifts and needs the user's yes before 3B.1.
+for nukes). Buildings have no HP: a hit costs one level. **Troop gifts require a shared
+border or an airlift** — the user's answer (2026-10-02): no boat route; gold gifts stay
+instant everywhere. This amends D-020; the border rule ships in milestone 2.5, airlifts in
+2B.1.
 
 **Alternatives.** Percentage interception chances (random, harder to read); keep instant
 troop gifts and make Airport I something else (e.g. faster gifts only — a weak level).
