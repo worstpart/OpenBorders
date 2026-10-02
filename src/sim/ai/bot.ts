@@ -22,11 +22,12 @@
 import { expectedLandShare, tileCostOfAll as tileCostOfAllTiles } from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isLand, tileAt, Terrain } from "../map/gameMap.ts";
-import type { PersonalityRules } from "../rules.ts";
+import { terrainValue, type PersonalityRules } from "../rules.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
   NEUTRAL,
+  nextScratchStamp,
   type Attack,
   type Player,
   type PlayerId,
@@ -100,13 +101,23 @@ function decide(
     }
   }
 
-  // 4. Expand while there is open land next to us.
+  // 4. Expand while there is open land next to us — sending what that land costs, not a
+  //    share of the pool, and calling back an army far bigger than what's left to take.
   if (around.neutralFront >= 0) {
     const expansion = mine.find((a) => a.target === NEUTRAL);
-    const needsArmy = !expansion || expansion.troops < ai.expansionTopUpBelow;
+    const plan = planExpansion(world, bot, style.expandShare * bot.homeTroops);
+    if (
+      expansion &&
+      expansion.troops > ai.expansionRecallAbove * bot.capacity &&
+      expansion.troops > 2 * planExpansion(world, bot, expansion.troops).army
+    ) {
+      return { type: "retreat", attackId: expansion.id };
+    }
+    const topUpBelow = Math.max(ai.expansionTopUpBelow, plan.perTick * ai.expansionTopUpTicks);
+    const needsArmy = !expansion || expansion.troops < topUpBelow;
     if (needsArmy && fill >= style.expandAt) {
       const focus = expansionFocus(world, bot, around);
-      return attackCommand(NEUTRAL, focus, style.expandShare);
+      return attackCommand(NEUTRAL, focus, plan.army / Math.max(1, bot.homeTroops));
     }
     if (!style.attacksWhileExpanding) return null;
   }
@@ -158,6 +169,51 @@ function survey(world: World, bot: Player): Surroundings {
     centerX: count > 0 ? sumX / count : 0,
     centerY: count > 0 ? sumY / count : 0,
   };
+}
+
+/**
+ * How big an expansion should be, up to `budget`. A front takes at most one layer of
+ * tiles per layer delay, so it can only spend so many troops per tick (`perTick`, from
+ * the open land touching the bot's border); the army carries enough for
+ * `expansionHorizonTicks` of that, at least a full-speed army, and no more than the open
+ * land within reach costs (flooded from the border) plus a margin. Sending a share of a
+ * big pool instead would park most of it in a front that can't use it — and field troops
+ * count toward the cap, so the pool at home would stop growing.
+ */
+function planExpansion(
+  world: World,
+  bot: Player,
+  budget: number,
+): { army: number; perTick: number } {
+  const { map } = world;
+  const ai = world.rules.ai;
+  const { costPerTile: costs, layerDelayTicks, fullSpeedArmy } = world.rules.expansion;
+  const marks = world.scratchMarks;
+  const queue = world.scratchQueue;
+  const stamp = nextScratchStamp(world);
+  const limit = budget / ai.expansionMargin;
+  let cost = 0;
+  let head = 0;
+  let tail = 0;
+  const visit = (tile: number): void => {
+    if (marks[tile] === stamp || world.owner[tile] !== NEUTRAL || !isLand(map, tile)) return;
+    marks[tile] = stamp;
+    queue[tail++] = tile;
+    cost += terrainValue(costs, map.terrain[tile]!);
+  };
+  const neighbours = (tile: number): void => {
+    const x = tile % map.width;
+    if (tile >= map.width) visit(tile - map.width);
+    if (tile + map.width < marks.length) visit(tile + map.width);
+    if (x > 0) visit(tile - 1);
+    if (x < map.width - 1) visit(tile + 1);
+  };
+  for (const tile of bot.border) neighbours(tile);
+  const perTick = cost / layerDelayTicks;
+  while (head < tail && cost < limit) neighbours(queue[head++]!);
+  const wanted = Math.min(cost * ai.expansionMargin, perTick * ai.expansionHorizonTicks);
+  const army = Math.min(budget, Math.max(fullSpeedArmy, wanted));
+  return { army, perTick };
 }
 
 /**

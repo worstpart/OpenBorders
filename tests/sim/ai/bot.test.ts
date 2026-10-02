@@ -52,6 +52,36 @@ describe("bots", () => {
     expect(run(world, 10).filter((e) => e.type === "attackStarted")).toEqual([]);
   });
 
+  it("send an expansion sized to the land in reach, not a share of a big pool", () => {
+    // 30 open tiles cost 90 troops: the bot sends a full-speed army (2,000), not 45% of
+    // 100,000 — the rest would sit in the field, blocking growth at home.
+    const world = worldFromAscii("1111" + ".".repeat(30), {
+      rules: RULES,
+      players: ["bot"],
+      personality: "expander",
+      homeTroops: [100_000],
+    });
+    run(world, 3);
+    expect(world.attacks).toHaveLength(1);
+    expect(world.attacks[0]!.troops).toBeCloseTo(DEFAULT_RULES.expansion.fullSpeedArmy, -1);
+    expect(world.players[0]!.fieldTroops).toBeLessThan(2_100);
+  });
+
+  it("call back an expansion far bigger than the land left in reach", () => {
+    const world = worldFromAscii("1111" + ".".repeat(30), {
+      rules: RULES,
+      players: ["bot"],
+      personality: "expander",
+      homeTroops: [100_000],
+    });
+    const events = run(world, 5 + DEFAULT_RULES.attack.retreatTicks, [
+      { playerId: 1, command: { type: "attack", target: 0, focusTile: 33, percentBp: 9_000 } },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "attackEnded", attacker: 1, target: 0, reason: "retreated" }),
+    );
+  });
+
   it("counter an incoming army, so the two armies cancel out", () => {
     // Player 1 (a person) attacks bot 2, which has plenty of troops at home.
     const world = worldFromAscii("11111" + "22222", {

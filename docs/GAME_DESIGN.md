@@ -254,7 +254,13 @@ the one with the longest shared border, or the one actively attacking). Coasts a
 
 - **Victory:** control **≥ 70% of all land**, or be the last player standing.
 - **Defeat:** your territory reaches zero. You may keep watching (spectate) or restart.
-- Anti-stall (Phase 2): after N minutes the land requirement slowly decreases.
+- **Anti-stall** (pulled into Phase 1 at milestone 1.7): after **15 min** the land
+  requirement drops **1% every 30 s**, down to **50%** at 25 min. The HUD shows the
+  current goal next to the clock ("Win 70%", amber once it drops) and a toast announces
+  the start. Why: about 1 bot game in 100 ended as two equal players who kept cancelling
+  each other's attacks (counters cancel armies 1:1, and equal armies stall by design,
+  §3.6) — those games ran 40–60 min. Almost every other game ends by 16 min, so the rule
+  only touches the stalemates (200-game check: longest game 24 min).
 
 ### 3.11 AI opponents (Phase 1)
 
@@ -281,7 +287,14 @@ next tick, exactly like a person's. On each think, in order:
 3. **Wait** until troops regrow to the personality's trigger share of capacity — growth is
    fastest at 50%, and a bot that keeps sending most of its pool barely grows.
 4. **Expand** toward the nearest open land just beyond its territory (sampled; mountains
-   and highlands avoided), topping up an expansion that runs low.
+   and highlands avoided), topping up an expansion that runs low. *Sized to what the
+   front can use* (milestone 1.7): a front takes one layer of tiles per layer delay, so
+   an expansion carries ~15 s of what its front can spend (from the open land touching
+   the bot's border), at least a full-speed army (2,000), and no more than the open land
+   in reach costs (+25%). An expansion more than twice that size is called back (free
+   from neutral land) and resent smaller. Before this, bots sent 30–45% of their pool and
+   parked up to 250k troops in fronts that took ~100 tiles at a time; field troops count
+   toward the cap, so their home pools stayed empty and barely grew.
 5. **Attack** the neighbour where it expects to gain the most land. Using the Lanchester
    law (§3.6) a bot estimates how much of a target's land an army takes before it stalls:
    `share = 1 − √(1 − A²/(k·D²))`. It attacks when that share beats its personality's
@@ -310,6 +323,12 @@ How we got here (headless runs on the reference map, 8 bots):
 - *Size armies to finish targets, prefer depleted ones, reinforce* → games end on their
   own: 10/10 in 10–18 min (median 13) in the first check; see ROADMAP for the 100-game
   result.
+- *Milestone 1.7*: right-sized expansions (above) shortened the land race and the
+  longest games and reduced snowballing. Aggressors win ~18% of games (fair share 25%);
+  four variants (wait longer, no attacking while expanding, smaller attacks, prefer busy
+  targets) all stayed at 12–19%: attacking costs more than defending, so the most
+  aggressive style is a bit weaker by nature. Accepted — no personality dominates
+  (the best wins ~30%), and aggressors are the ones that keep the player under pressure.
 
 ---
 

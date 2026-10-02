@@ -30,7 +30,7 @@ npm install
 | `npm run check` | Type-checks TypeScript and Svelte files |
 | `npm run build` | Production build into `dist/` (`npm run preview` serves it) |
 | `npm run format` | Formats code with Prettier (Markdown is left as written) |
-| `npm run headless -- --games 20` | Plays bots-only games without a browser and reports winners, game length, lead changes and tick times (options: `--bots`, `--seed`, `--map-seed`, `--max-minutes`, `--json file`) |
+| `npm run headless -- --games 20` | Plays bots-only games without a browser and reports winners, game length, lead changes and tick times (options: `--bots`, `--seed`, `--map-seed`, `--max-minutes`, `--json file`, `--rules overrides.json` to try rule changes, `--personality` to give every bot the same one) |
 
 ## Controls (so far)
 

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ui } from "../../app/uiState.svelte.ts";
+  import { DEFAULT_RULES } from "../../../sim/rules.ts";
+  import { winLandShare } from "../../../sim/systems/victory.ts";
   import { formatClock, formatPercent, formatTroops } from "../../format.ts";
 
   interface Props {
@@ -29,11 +31,25 @@
   const clock = $derived(
     ui.phase === "spawn" ? "Spawn" : formatClock((ui.tick - ui.playStartTick) / 10),
   );
+  const victory = DEFAULT_RULES.victory;
+  const goal = $derived(
+    ui.phase === "spawn"
+      ? victory.landShare
+      : winLandShare(DEFAULT_RULES, ui.tick - ui.playStartTick),
+  );
+  const wholePercent = (share: number): string => `${Math.round(share * 100)}%`;
+  const goalTitle =
+    `Land needed to win. Anti-stall: after ${formatClock(victory.declineStartTicks / 10)} ` +
+    `it drops ${wholePercent(victory.declineStep)} every ${victory.declineStepTicks / 10} s, ` +
+    `down to ${wholePercent(victory.minLandShare)}.`;
 </script>
 
 <div class="top-right">
   <div class="bar">
     <span class="clock" title="Match time">{clock}</span>
+    <span class="goal" class:dropping={goal < victory.landShare} title={goalTitle}>
+      Win {wholePercent(goal)}
+    </span>
     {#if ui.speed !== 1}<span class="speed" title="Game speed">{ui.speed}×</span>{/if}
     <button type="button" class="menu" tabindex={-1} title="Pause menu (Esc)" onclick={onMenu}>
       <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -111,6 +127,17 @@
 
   .clock {
     min-width: 40px;
+    font-weight: 600;
+  }
+
+  .goal {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+
+  .goal.dropping {
+    color: var(--color-warning);
     font-weight: 600;
   }
 

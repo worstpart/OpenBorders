@@ -264,6 +264,18 @@ export class GameClient {
         tone: "info",
       });
     }
+    const victory = DEFAULT_RULES.victory;
+    if (
+      frame.phase === "playing" &&
+      frame.tick === frame.playStartTick + victory.declineStartTicks
+    ) {
+      toasts.push({
+        text:
+          `Long game: the land needed to win now drops ${victory.declineStep * 100}% ` +
+          `every ${victory.declineStepTicks / 10} s, down to ${victory.minLandShare * 100}%`,
+        tone: "info",
+      });
+    }
     for (const toast of toasts) this.toast(toast);
     this.publish(frame);
   }

@@ -85,6 +85,26 @@ menu, leaderboard + clock, toasts, pause menu with game speed, contextual hints 
 verified in the browser (mouse and keyboard paths: 1–5, Q/E, Esc, menu arrows/Enter,
 Tab in the pause menu). As built: GAME_DESIGN §5.1, ARCHITECTURE §6. 139 tests.
 
+**Milestone 1.7 progress (2026-10-02)** — headless runner gained `--rules` (try rule
+overrides from a JSON file), `--personality`, a 90%-land metric and a length histogram.
+
+| 200 bot games | Before 1.7 | After |
+|---|---|---|
+| Finished with a winner | 100/100 (one 42 min, one 60-min timeout in other runs) | 200/200 |
+| Median length | 10.1 min | 9.7 min (<8: 30 · 8–12: 134 · 12–16: 32 · 16–20: 1 · 20–30: 3) |
+| Longest | 42–60 min (stalemates) | 24 min |
+| 90% of land owned / all land | 3.1 / 4.8 min | 2.8 / 4.6 min |
+| Leader at minute 3 wins | 37% | 31% |
+| Wins by personality | opp 31 · turtle 28 · exp 25 · agg 16 (per 100) | opp 60 · exp 54 · turtle 51 · agg 35 (per 200) |
+| Tick avg / worst p99 / worst max | 0.95 / 13.8 / 103 ms | 0.72 / 6.7 / 29 ms |
+
+Changes: bots size expansions to what their front can use and call back oversized ones
+(GAME_DESIGN §3.11); anti-stall victory rule (§3.10). Tried and rejected: a growth floor
+that scales with capacity (leader at minute 3 then won 44% instead of 31% — more
+snowballing; the HUD's sweet-spot bar addresses overspending instead); four aggressor
+variants (no change, see §3.11). Tick spikes of 78–103 ms in the baseline came from the
+machine being busy (the same games alone: ≤ 24 ms).
+
 **Notes collected for 1.7 (tuning):**
 - Troop management dominates: a scripted player that only attacks at ≥ 50% of capacity
   won a solo game on the reference map in ~4 min of game time; one that always sent 70%
@@ -115,7 +135,7 @@ implementation.
 3. **Naval transport** — boats from any coast, routes, beachheads, recall
 4. **Diplomacy** — alliance requests, timed alliances, betrayal, donations, pings
 5. **Better AI** — threat/opportunity evaluation, alliances, boats, building
-6. **Anti-stall** — declining win threshold
+6. **Anti-stall** — basic declining win threshold done in 1.7; revisit with more players/maps
 7. **More maps** — real-world maps via our own pipeline (public-domain data) and/or
    CC BY-SA maps if we choose to
 8. **Sound & game events** — first pass
@@ -162,8 +182,8 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Retreat (25% penalty) | Same idea (20%) | ✅ | — | L | |
 | Encirclement / annexation | Same idea | ✅ | — | H | Flood fills; throttled |
 | Elimination below 100 tiles | Below 40 tiles | ✅ | — | M | |
-| Win at 80% land | 70% or last standing | ✅ | P2 anti-stall | L | |
-| Overtime / Doomsday Clock | Declining threshold | — | P2 | L–M | |
+| Win at 80% land | 70% or last standing, anti-stall | ✅ | — | L | |
+| Overtime / Doomsday Clock | Declining threshold (70% → 50% after 15 min) | ✅ | — | L–M | Pulled into 1.7 to end stalemates |
 | Terrain affects cost & speed | Same 3 classes | ✅ | — | L | |
 | Tribes (400 filler bots) | Fewer bots with personalities | ✅ (basic) | — | M | |
 | Nations (smart AI, 4 difficulties, stat bonuses) | No stat bonuses; difficulty = speed + decisions | Basic | P2 smarter | H | |

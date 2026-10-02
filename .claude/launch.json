@@ -14,6 +14,12 @@
       "port": 5174
     },
     {
+      "name": "dev-3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5175", "--strictPort"],
+      "port": 5175
+    },
+    {
       "name": "render-benchmark",
       "runtimeExecutable": "node",
       "runtimeArgs": ["spikes/render-benchmark/serve.mjs"],

@@ -151,8 +151,15 @@ export interface EliminationRules {
 
 /** Victory (GAME_DESIGN.md §3.10). */
 export interface VictoryRules {
-  /** Share of all land that wins the game outright. */
+  /** Share of all land that wins the game outright… */
   readonly landShare: number;
+  /** …until this many ticks of play; then it drops by `declineStep`… */
+  readonly declineStartTicks: number;
+  /** …every this many ticks… */
+  readonly declineStepTicks: number;
+  readonly declineStep: number;
+  /** …down to this share. */
+  readonly minLandShare: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -204,8 +211,25 @@ export interface AiRules {
    * forever (two big, cautious bots used to stare at each other until the time limit).
    */
   readonly boredomThinks: number;
-  /** An expansion with fewer troops than this gets topped up. */
+  /** An expansion with fewer troops than this gets topped up… */
   readonly expansionTopUpBelow: number;
+  /** …or with less than this many ticks of what its front can spend. */
+  readonly expansionTopUpTicks: number;
+  /**
+   * Expansions carry what their front can spend in this many ticks (a front takes one
+   * layer per layer delay, so a bigger army would only sit in the field)…
+   */
+  readonly expansionHorizonTicks: number;
+  /**
+   * …but no more than the open land within reach costs, times this margin (some of it
+   * goes to neighbours first; leftovers come home when the land runs out).
+   */
+  readonly expansionMargin: number;
+  /**
+   * An expansion bigger than this share of capacity and more than twice what the land
+   * left in reach costs is called back (free from neutral land) and resent smaller.
+   */
+  readonly expansionRecallAbove: number;
   /** Distance (tiles) beyond the bot's own radius where it looks for open land to aim at. */
   readonly expansionLookAhead: number;
   readonly personalities: Readonly<Record<Personality, PersonalityRules>>;
@@ -305,6 +329,13 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   },
   victory: {
     landShare: 0.7,
+    // Anti-stall: almost every game ends by 16 min. After 15 min the requirement drops
+    // 1% every 30 s, reaching 50% at 25 min — so two equal players who keep cancelling
+    // each other's attacks (a 1% case in bot games, up to 60 min) can't stall forever.
+    declineStartTicks: 9_000,
+    declineStepTicks: 300,
+    declineStep: 0.01,
+    minLandShare: 0.5,
   },
   ai: {
     thinkMinTicks: 20,
@@ -316,6 +347,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     wastingGainFactor: 0.6,
     boredomThinks: 10,
     expansionTopUpBelow: 300,
+    expansionTopUpTicks: 50,
+    expansionHorizonTicks: 150,
+    expansionMargin: 1.25,
+    expansionRecallAbove: 0.05,
     expansionLookAhead: 40,
     // Every bot waits for its troops to regrow toward the 50% sweet spot before acting:
     // a player who keeps sending most of their pool barely grows.

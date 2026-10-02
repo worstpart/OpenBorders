@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TickFrame } from "../../../src/sim/frame.ts";
 import { tileAt } from "../../../src/sim/map/gameMap.ts";
-import { makeRules } from "../../../src/sim/rules.ts";
+import { DEFAULT_RULES, makeRules } from "../../../src/sim/rules.ts";
+import { winLandShare } from "../../../src/sim/systems/victory.ts";
 import { runTick } from "../../../src/sim/tick.ts";
 import type { World } from "../../../src/sim/world.ts";
 import { worldFromAscii } from "../../helpers/asciiMap.ts";
@@ -79,6 +80,45 @@ describe("victory", () => {
     const last = runUntilOver(world).at(-1)!;
     expect(last.winner).toBe(1);
     expect(last.events).toContainEqual({ type: "gameOver", winner: 1, reason: "lastStanding" });
+  });
+
+  it("anti-stall: the land needed to win drops after 15 minutes, down to 50%", () => {
+    const share = (ticks: number): number => Math.round(winLandShare(DEFAULT_RULES, ticks) * 100);
+    expect(share(0)).toBe(70);
+    expect(share(9_000)).toBe(70); // 15:00
+    expect(share(9_299)).toBe(70);
+    expect(share(9_300)).toBe(69); // 15:30
+    expect(share(12_000)).toBe(60); // 20:00
+    expect(share(15_000)).toBe(50); // 25:00
+    expect(share(60_000)).toBe(50);
+  });
+
+  it("a stalled duel is won by the bigger player once the requirement drops to their share", () => {
+    // 11 of 20 tiles (55%) against 9: no one wins at 70%, nobody attacks.
+    const world = worldFromAscii(
+      `
+      ~~~~~~~~~~~~
+      ~1111112222~
+      ~1111122222~
+      ~~~~~~~~~~~~
+      `,
+      {
+        rules: makeRules({
+          ...RULES,
+          victory: { declineStartTicks: 10, declineStepTicks: 5, declineStep: 0.05 },
+        }),
+        homeTroops: [100, 100],
+      },
+    );
+    world.playStartTick = world.tick;
+    const frames = runUntilOver(world, 100);
+    // 70% → 55% takes 3 steps: 10 + 3 × 5 ticks of play.
+    expect(world.tick).toBe(25);
+    expect(frames.at(-1)!.events).toContainEqual({
+      type: "gameOver",
+      winner: 1,
+      reason: "landShare",
+    });
   });
 
   it("nothing moves once the game is over", () => {
