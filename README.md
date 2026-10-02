@@ -16,7 +16,7 @@ encircle, win or lose, with a full HUD. **Phase 2 — in progress:** big lobbies
 opponents, Normal or Large map) ✅; Tribes & Nations (weak filler tribes, nations with
 Easy/Medium/Hard) ✅; next alliances, then teams (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
 A new working session starts by reading the latest handoff in `docs/handoffs/`
-(currently [PHASE_1_HANDOFF.md](docs/handoffs/PHASE_1_HANDOFF.md)).
+(currently [PHASE_2_AFTER_2.1_HANDOFF.md](docs/handoffs/PHASE_2_AFTER_2.1_HANDOFF.md)).
 
 ## Running it
 
