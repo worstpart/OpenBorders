@@ -59,6 +59,7 @@ export function hashWorld(world: World): number {
       .addInt(a.target)
       .addNumber(a.troops)
       .addInt(a.focusTile)
+      .addInt(a.growthSeed)
       .addInt(a.tilesTaken)
       .addInt(a.retreatTick)
       .addInt(a.front.size)

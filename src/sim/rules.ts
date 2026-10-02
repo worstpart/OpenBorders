@@ -74,11 +74,26 @@ export interface CombatRules {
   readonly lossRatioMax: number;
   /** Ticks per tile of advance at r = 1 on plains. */
   readonly layerDelayTicks: number;
-  /** Bounds on r for speed: overwhelming attacks are a bit faster, outnumbered ones slow. */
+  /**
+   * Bounds on r for speed. Below 1 the front speeds up in proportion: an army with 4× the
+   * defender's home troops (r = 0.25) advances 4× as fast — crushing a much weaker
+   * player feels like a flood. Outnumbered attacks slow down up to 8×.
+   */
   readonly delayRatioMin: number;
   readonly delayRatioMax: number;
   /** Above this r, attacks slow down further in proportion (hopeless attacks barely move). */
   readonly hopelessRatio: number;
+}
+
+export interface GrowthRules {
+  /** Vein spacing: noise frequency in 1/tiles (0.06 ≈ a vein every ~15 tiles). */
+  readonly veinScale: number;
+  /** How thin the veins are (higher = thinner, more stringy). */
+  readonly veinSharpness: number;
+  /** Delay multiplier on a vein (fast)… */
+  readonly onVein: number;
+  /** …and far from any vein (slow). The mix keeps the average speed about the same. */
+  readonly offVein: number;
 }
 
 export interface AttackRules {
@@ -94,13 +109,20 @@ export interface AttackRules {
    */
   readonly focusPull: number;
   /**
-   * Each extra side of a front tile the attacker owns cuts its remaining wait by this
-   * share of a layer delay. 0.29 (= 1 − 1/√2) makes diagonal fronts advance as fast as
-   * straight ones, so fronts grow round instead of diamond-shaped; gaps fill quickly.
+   * How a front tile's wait depends on how many of its sides the attacker already owns.
+   * Positive: each extra side cuts the wait by this share of a layer delay (0.29 makes
+   * fronts perfectly round). Negative: tiles wedged into the attacker's land wait longer,
+   * so the tips of the front grow fastest — organic, lobed, finger-like fronts.
    */
   readonly fillShare: number;
   /** Random extra delay (0..this) per tile, so fronts look organic. */
   readonly noiseTicks: number;
+  /**
+   * Organic, virus-like spread: every attack follows its own random network of thin,
+   * branching veins (ridged noise). On a vein the front races ahead; between veins it
+   * creeps — so territory reaches out in tendrils and fills in behind them.
+   */
+  readonly growth: GrowthRules;
   /** A retreating army comes home after this many ticks. */
   readonly retreatTicks: number;
   /** Share of a retreating army lost when retreating from a player (none from neutral land). */
@@ -250,7 +272,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     lossRatioMax: 2.5,
     // ~2.5 tiles/s at even odds: fights move about as fast as expansion.
     layerDelayTicks: 4,
-    delayRatioMin: 0.8,
+    delayRatioMin: 0.25,
     delayRatioMax: 8,
     hopelessRatio: 20,
   },
@@ -260,8 +282,12 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     focusSpread: 0.35,
     // A step straight away from the click point takes twice as long as one toward it.
     focusPull: 1,
-    fillShare: 0.29,
-    noiseTicks: 1.5,
+    // Tips grow fastest, together with each attack's veins and some jitter: fronts look
+    // like a growing colony rather than a geometric shape. Tuned so that the average
+    // spread speed matches the old round fronts (same balance, different look).
+    fillShare: -0.4,
+    noiseTicks: 2,
+    growth: { veinScale: 0.05, veinSharpness: 3, onVein: 0.45, offVein: 1.5 },
     retreatTicks: 20,
     retreatPenalty: 0.2,
   },

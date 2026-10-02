@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Command } from "../../../src/sim/commands.ts";
 import type { TickFrame } from "../../../src/sim/frame.ts";
 import { tileAt } from "../../../src/sim/map/gameMap.ts";
-import { makeRules, type GameRules } from "../../../src/sim/rules.ts";
+import { DEFAULT_RULES, makeRules, type GameRules } from "../../../src/sim/rules.ts";
 import { runTick } from "../../../src/sim/tick.ts";
 import type { PlayerId, World } from "../../../src/sim/world.ts";
 import { ascii, ownersToAscii, worldFromAscii } from "../../helpers/asciiMap.ts";
@@ -11,8 +11,15 @@ import { ascii, ownersToAscii, worldFromAscii } from "../../helpers/asciiMap.ts"
  * No randomness and no troop growth, so scenarios have exact, readable numbers; no victory,
  * so tiny maps don't end the game the moment someone holds 70% of them.
  */
+/** Plain fronts: no organic shaping (veins, tip growth), so timings are exact. */
+const PLAIN = {
+  noiseTicks: 0,
+  fillShare: 0,
+  growth: { ...DEFAULT_RULES.attack.growth, onVein: 1, offVein: 1 },
+};
+
 const EXACT = makeRules({
-  attack: { noiseTicks: 0 },
+  attack: PLAIN,
   troops: { growthFloor: 0, growthScale: 0 },
   victory: { landShare: 2 },
 });
@@ -133,7 +140,7 @@ describe("expanding into neutral land", () => {
     const ticksToCross = (troops: number) => {
       const world = worldFromAscii(strip, {
         rules: makeRules({
-          attack: { noiseTicks: 0, focusPull: 0 },
+          attack: { ...PLAIN, focusPull: 0 },
           troops: { growthFloor: 0, growthScale: 0 },
           victory: { landShare: 2 },
         }),
@@ -181,30 +188,33 @@ describe("expanding into neutral land", () => {
 });
 
 describe("front shape", () => {
-  it("grows round, not diamond-shaped, on open ground", () => {
+  /** Expands from one tile on open plains; returns the set of owned tiles. */
+  function grow(seed: number, ticks: number): Set<number> {
     const size = 81;
     const center = 40;
     const rows = Array.from({ length: size }, (_, y) =>
       Array.from({ length: size }, (_, x) => (x === center && y === center ? "1" : ".")).join(""),
     ).join("\n");
     const rules = makeRules({
-      attack: { noiseTicks: 0, focusPull: 0, focusSpread: 0 },
       troops: { growthFloor: 0, growthScale: 0 },
+      victory: { landShare: 2 },
     });
-    const world = worldFromAscii(rows, { rules, homeTroops: [1_000_000] });
-    expand(world, 1, 0, 0, 100);
-    for (let k = 0; k < 120; k++) tick(world);
+    const world = worldFromAscii(rows, { rules, seed, homeTroops: [1_000_000] });
+    expand(world, 1, center + 1, center, 50);
+    for (let k = 0; k < ticks; k++) tick(world);
+    return new Set([...world.owner.keys()].filter((t) => world.owner[t] === 1));
+  }
 
-    const owned = (x: number, y: number) => world.owner[tileAt(world.map, x, y)] === 1;
-    let axis = 0;
-    while (owned(center + axis + 1, center)) axis++;
-    let diagonal = 0;
-    while (owned(center + diagonal + 1, center + diagonal + 1)) diagonal++;
-    // A diamond reaches only 71% as far along the diagonal; a circle 100%. With whole-tick
-    // timing we get an octagon at 82–90% (it measured 67% before the fill rule).
-    expect(axis).toBeGreaterThan(15);
-    expect((diagonal * Math.SQRT2) / axis).toBeGreaterThan(0.8);
-    expect((diagonal * Math.SQRT2) / axis).toBeLessThan(1.1);
+  it("grows organically: each attack its own shape, at about the same speed", () => {
+    const a = grow(1, 100);
+    const b = grow(2, 100);
+    // Different veins → noticeably different shapes…
+    const shared = [...a].filter((t) => b.has(t)).length;
+    expect(shared / Math.max(a.size, b.size)).toBeLessThan(0.9);
+    // …but the same pace (the shaping was tuned to keep the average speed).
+    expect(Math.abs(a.size - b.size) / Math.max(a.size, b.size)).toBeLessThan(0.35);
+    expect(a.size).toBeGreaterThan(300);
+    expect(a.size).toBeLessThan(1_500);
   });
 });
 
@@ -229,7 +239,7 @@ describe("directed attacks", () => {
 
   it("with focusing turned off, the whole border starts at once", () => {
     const flat = makeRules({
-      attack: { noiseTicks: 0, focusSpread: 0, focusPull: 0 },
+      attack: { ...PLAIN, focusSpread: 0, focusPull: 0 },
       troops: { growthFloor: 0, growthScale: 0 },
     });
     const world = worldFromAscii(COLUMN, { rules: flat, homeTroops: [100_000] });
@@ -303,6 +313,22 @@ describe("attacking a player", () => {
     expect(even.defenderTiles).toBeGreaterThan(20);
     expect(even.defenderTroops).toBeGreaterThan(2_000);
     expect(fight(13_000).defenderTiles).toBe(0);
+  });
+
+  it("floods a much weaker player: 4× their troops advances ~4× as fast as an even fight", () => {
+    const tilesTakenIn = (ticks: number, army: number) => {
+      // A one-tile-wide front, so tiles taken = how far the front got.
+      const world = worldFromAscii("11" + "2".repeat(200), {
+        rules: EXACT,
+        homeTroops: [army * 2, 10_000],
+      });
+      attack(world, 1, 2, 100, 0, 50);
+      for (let k = 0; k < ticks; k++) tick(world);
+      return world.attacks[0]?.tilesTaken ?? world.players[0]!.tiles - 2;
+    };
+    const even = tilesTakenIn(40, 10_000);
+    const crushing = tilesTakenIn(40, 40_000);
+    expect(crushing).toBeGreaterThanOrEqual(3 * even);
   });
 
   it("is blocked by spawn protection at the start of the match", () => {

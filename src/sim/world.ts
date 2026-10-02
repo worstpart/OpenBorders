@@ -133,6 +133,8 @@ export interface Attack {
   readonly front: TileQueue;
   /** The current ready time of each tile on the front (the entry that counts). */
   readonly scheduled: Map<number, number>;
+  /** Seeds this attack's own vein pattern (organic spread). */
+  readonly growthSeed: number;
 }
 
 export const MAX_PLAYERS = 0xffff; // owner ids are stored in a Uint16Array

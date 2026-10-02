@@ -26,6 +26,7 @@ import {
   type World,
 } from "../world.ts";
 import { isSpawnProtected } from "./spawn.ts";
+import { gradientNoise } from "../map/noise.ts";
 import { TileQueue } from "./tileQueue.ts";
 
 /** Smallest delay between a tile reaching the front and falling (at most 2 layers per tick). */
@@ -76,6 +77,7 @@ export function applyAttackCommand(
       ended: false,
       front: new TileQueue(),
       scheduled: new Map(),
+      growthSeed: world.rng.nextUint32(),
     };
     world.attacks.push(attack);
     world.events.push({ type: "attackStarted", attackId: attack.id, attacker: player.id, target });
@@ -247,6 +249,7 @@ function stepDelay(world: World, attack: Attack, tile: number, from: number): nu
     const away = distance(world, tile, attack.focusTile) - distance(world, from, attack.focusTile);
     delay *= 1 + (rules.focusPull * (clamp(away, -1, 1) + 1)) / 2;
   }
+  delay *= growthResistance(world, attack, tile);
   delay *= 1 - rules.fillShare * (ownNeighbors(world, tile, attack.attacker) - 1);
   delay += world.rng.nextFloat() * rules.noiseTicks;
   return Math.max(MIN_DELAY_TICKS, delay);
@@ -270,6 +273,22 @@ function layerDelay(world: World, attack: Attack, tile: number): number {
     delay = combat.layerDelayTicks * terrainValue(combat.terrainDelay, terrain) * ratio;
   }
   return delay;
+}
+
+/**
+ * Virus-like spread: the attack's own network of thin, branching veins. Ridged noise
+ * (two octaves) is near zero along thin lines; there the front races ahead, elsewhere it
+ * creeps, so the territory grows in tendrils and fills in behind them.
+ */
+function growthResistance(world: World, attack: Attack, tile: number): number {
+  const g = world.rules.attack.growth;
+  const x = tile % world.map.width;
+  const y = (tile - x) / world.map.width;
+  const n =
+    gradientNoise(attack.growthSeed, x * g.veinScale, y * g.veinScale) +
+    0.5 * gradientNoise(attack.growthSeed + 1, x * g.veinScale * 2.3, y * g.veinScale * 2.3);
+  const offVein = Math.min(1, Math.abs(n) * g.veinSharpness); // 0 on a vein, 1 between
+  return g.onVein + (g.offVein - g.onVein) * offVein;
 }
 
 /** Troops the attacker pays to take `tile`. */

@@ -1,5 +1,5 @@
 #version 300 es
-// Map pass: terrain + territory fill + borders + fronts + capture flash + hover, per pixel.
+// Map pass: terrain + territory fill + borders + fronts + growth + hover, per pixel.
 precision highp float;
 precision highp int;
 precision highp usampler2D;
@@ -23,11 +23,13 @@ uniform vec3 uOcean;
 out vec4 outColor;
 
 const uint WATER = 65535u;
-const float FILL = 0.56;          // territory color over terrain
-const float HOVER_FILL = 0.14;    // extra fill on the hovered player's land
-const float FLASH_TICKS = 4.0;    // capture flash duration (0.4 s)
+const float FILL = 0.56;            // territory color over terrain
+const float HOVER_FILL = 0.14;      // extra fill on the hovered player's land
+const float GROW_TICKS = 8.0;       // freshly taken land grows in over 0.8 s
+const float VEIN_SCALE = 0.3;       // growth veins: about one every 3 tiles (two octaves)
 const float FRONT_MIN_WIDTH = 6.0;  // front glow width when zoomed out, in border widths
 const float FRONT_TILES = 0.85;     // ...and at least this share of a tile when zoomed in
+const vec3 ATTACK_RED = vec3(1.0, 0.16, 0.12);
 const float SHADE_DECODE = 255.0 / 128.0;
 
 uint ownerAt(ivec2 tile) {
@@ -52,6 +54,30 @@ void consider(uint neighbor, float dist, uint owner, inout float nearest, inout 
   }
 }
 
+// Integer hash → [0, 1] (no sin(), so it looks the same on every GPU).
+float hash(ivec2 p) {
+  uint h = uint(p.x) * 374761393u + uint(p.y) * 668265263u;
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  return float(h ^ (h >> 16u)) * (1.0 / 4294967295.0);
+}
+
+float valueNoise(vec2 p) {
+  ivec2 i = ivec2(floor(p));
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + ivec2(1, 0));
+  float c = hash(i + ivec2(0, 1));
+  float d = hash(i + ivec2(1, 1));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// 0 on thin, branching vein lines (where the noise crosses its middle), up to 1 between.
+float veins(vec2 p) {
+  float n = valueNoise(p) * 0.6 + valueNoise(p * 2.7 + 17.0) * 0.4;
+  return min(1.0, abs(n * 2.0 - 1.0) * 3.0);
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y);
   vec2 world = uCenter + (screen - uViewport * 0.5) / uZoom;
@@ -69,14 +95,21 @@ void main() {
   uint owner = cell.r;
   if (owner != 0u && owner != WATER) {
     vec3 own = playerColor(owner);
-    color = mix(color, own, FILL + (owner == uHoverOwner ? HOVER_FILL : 0.0));
 
-    // Newly captured tiles flash toward a light tint of the owner's color, then settle.
+    // Freshly taken land grows in like a living thing: the new color first runs along
+    // thin branching veins, which glow, thicken and merge until the tile is filled.
     float age = mod(uTick - float(cell.g) + 65536.0, 65536.0);
-    if (age < FLASH_TICKS) {
-      float flash = 1.0 - age / FLASH_TICKS;
-      color = mix(color, mix(own, vec3(1.0), 0.5), flash * flash * 0.75);
+    float grown = 1.0;
+    float glowing = 0.0;
+    if (age < GROW_TICKS) {
+      float progress = age / GROW_TICKS;
+      float v = veins(world * VEIN_SCALE);
+      // Veins appear almost at once; the space between fills over the rest of the time.
+      grown = smoothstep(v - 0.1, v + 0.1, progress * progress * 1.3 + 0.05);
+      glowing = grown * (1.0 - progress);
     }
+    color = mix(color, own, (FILL + (owner == uHoverOwner ? HOVER_FILL : 0.0)) * grown);
+    color = mix(color, mix(own, vec3(1.0), 0.55), glowing * 0.8);
 
     // Distance (in tiles) from this pixel to the nearest edge or corner shared with a
     // tile of a different owner; converted to pixels, so borders have the same on-screen
@@ -94,20 +127,25 @@ void main() {
     consider(ownerAt(tile + ivec2(1, 1)), length(1.0 - f), owner, d, other);
     float dPx = d * uZoom;
 
-    // Fronts: where this owner and the neighbor are fighting (or this owner is expanding
-    // into neutral land), a pulsing glow in the attacker's color.
-    bool attacked = isAttacking(other, owner);
-    bool attacking = isAttacking(owner, other);
-    if (attacked || attacking) {
-      vec3 attackerColor = attacked ? playerColor(other) : own;
+    // Fronts. Land under attack by another player glows red — brightest where you are
+    // involved (your attacks, or attacks on you); an expansion into neutral land glows
+    // softly in the expanding player's own color.
+    bool underAttack = other != 0u && other != WATER && isAttacking(other, owner);
+    bool expanding = other == 0u && isAttacking(owner, 0u);
+    if (underAttack || expanding) {
       float pulse = 0.7 + 0.3 * sin(uSeconds * 6.0);
       float width = max(uBorderPx * FRONT_MIN_WIDTH, uZoom * FRONT_TILES);
       float glow = 1.0 - smoothstep(0.0, width, dPx);
-      color = mix(color, mix(attackerColor, vec3(1.0), 0.3), glow * pulse * 0.75);
+      if (underAttack) {
+        float strength = owner == uLocalOwner || other == uLocalOwner ? 0.85 : 0.5;
+        color = mix(color, ATTACK_RED, glow * pulse * strength);
+      } else {
+        color = mix(color, mix(own, vec3(1.0), 0.3), glow * pulse * 0.45);
+      }
     }
 
     float width = uBorderPx * (owner == uLocalOwner ? 1.35 : 1.0);
-    float edge = 1.0 - smoothstep(width - 0.75, width + 0.75, dPx);
+    float edge = (1.0 - smoothstep(width - 0.75, width + 0.75, dPx)) * grown;
     vec3 border = owner == uLocalOwner ? mix(own, vec3(1.0), 0.55) : own * 0.5;
     color = mix(color, border, edge);
   }
