@@ -144,8 +144,8 @@ function fullDiscSize(radius: number): number {
 
 /**
  * Picks a random spawn tile: neutral land whose disc is mostly claimable, as far as
- * possible from other spawns. The distance requirement is relaxed step by step on
- * crowded maps. Returns -1 if no neutral land is left.
+ * possible from other spawns. The distance requirement starts from the spacing the
+ * lobby size allows and is relaxed step by step when no spot is found. Returns -1 if no neutral land is left.
  */
 function findRandomSpawnTile(world: World): number {
   const { map, rng, rules } = world;
@@ -154,7 +154,11 @@ function findRandomSpawnTile(world: World): number {
   const minClaimable = Math.ceil(rules.spawn.randomMinLandShare * fullDiscSize(rules.spawn.radius));
   const ATTEMPTS_PER_ROUND = 400;
 
-  let minDistance = rules.spawn.randomMinDistance;
+  const evenSpacing = Math.sqrt(map.landTiles / Math.max(1, world.players.length));
+  let minDistance = Math.min(
+    rules.spawn.randomMinDistance,
+    Math.floor(rules.spawn.randomSpacingShare * evenSpacing),
+  );
   for (let round = 0; round < 8; round++) {
     const minDistanceSquared = minDistance * minDistance;
     for (let attempt = 0; attempt < ATTEMPTS_PER_ROUND; attempt++) {

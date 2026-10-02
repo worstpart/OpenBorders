@@ -1,9 +1,13 @@
 <script lang="ts" module>
   /** What the UI may ask the game to do (it never changes game state itself). */
   import type { HintId } from "../app/hints.ts";
+  import type { MapSize } from "../app/setup.ts";
 
   export interface AppActions {
-    play: (opponents: number) => void;
+    /** Start a game with the start screen's choices (ui.opponents, ui.mapSize). */
+    play: () => void;
+    /** Generate the map of this size (shows the loading screen meanwhile). */
+    selectMap: (size: MapSize) => void;
     confirmSpawn: () => void;
     retreat: (attackId: number) => void;
     /** Retreat every attack on this player (0 = stop expanding). */
@@ -55,7 +59,7 @@
   </main>
 {:else if ui.screen === "start"}
   <main class="center">
-    <StartScreen onPlay={actions.play} />
+    <StartScreen onPlay={actions.play} onSelectMap={actions.selectMap} />
   </main>
 {:else}
   <YouChip />

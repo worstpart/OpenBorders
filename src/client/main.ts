@@ -35,7 +35,12 @@ mount(App, {
   target: requireElement("#ui", HTMLDivElement),
   props: {
     actions: {
-      play: (opponents) => client?.startGame(opponents).catch(reportFatal),
+      play: () => client?.startGame(ui.opponents).catch(reportFatal),
+      selectMap: (size) => {
+        if (size === ui.mapSize) return;
+        ui.mapSize = size;
+        loadMap();
+      },
       confirmSpawn: () => client?.confirmSpawn(),
       retreat: (attackId) => client?.retreat(attackId),
       retreatFrom: (target) => client?.retreatFrom(target),
@@ -50,13 +55,18 @@ mount(App, {
   },
 });
 
-// Generating the map blocks for about half a second, so let the loading screen paint first.
-requestAnimationFrame(() =>
-  setTimeout(() => {
-    try {
-      client?.loadMap();
-    } catch (error) {
-      reportFatal(error);
-    }
-  }, 0),
-);
+/** Generating a map blocks for 0.5–1 s, so the loading screen paints first. */
+function loadMap(): void {
+  ui.screen = "loading";
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      try {
+        client?.loadMap(ui.mapSize);
+      } catch (error) {
+        reportFatal(error);
+      }
+    }, 0),
+  );
+}
+
+loadMap();

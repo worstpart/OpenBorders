@@ -9,6 +9,7 @@ import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
+import { DEFAULT_OPPONENTS, type MapSize } from "./setup.ts";
 import type { Toast } from "./toasts.ts";
 
 export type Screen = "loading" | "start" | "game";
@@ -41,6 +42,9 @@ export interface HoverInfo {
 class UiState {
   screen = $state<Screen>("loading");
   fatalError = $state<string | null>(null);
+  /** Start-screen choices (kept across games; pure UI choices like the attack %). */
+  opponents = $state(DEFAULT_OPPONENTS);
+  mapSize = $state<MapSize>("normal");
   phase = $state<Phase>("spawn");
   tick = $state(0);
   playStartTick = $state(-1);

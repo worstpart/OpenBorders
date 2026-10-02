@@ -234,6 +234,12 @@ interface World {
 AI runs **inside** the deterministic simulation (like OpenFront), so bots cost no
 network traffic and behave identically on every machine.
 
+**Timing probe (milestone 2.0).** `runTick(world, turn, probe?)` calls `probe(step)` after
+each step (`TICK_STEPS`: commands, collisions, attacks, encircle, eliminate, troops, bots,
+victory, frame). The simulation still never reads a clock; the headless runner times the
+gaps between calls and reports `systemsMs` (average and worst per step) and the steps of
+each game's slowest tick.
+
 ### 5.4 Determinism rules (enforced by tests)
 
 - No `Math.random`, `Date`, `performance.now`, or timers in `src/sim`.
@@ -470,5 +476,12 @@ pass everything.
 | Memory | < 150 MB |
 
 Later stress target: 4096×2048 map, 100 players, tick < 20 ms (in a worker).
+
+**Milestone 2.0 (126 players), measured with the headless runner, game alone:** reference
+map tick 0.8–1.1 ms avg, p99 ≤ 4.2 ms — within budget. Large map (1560×990): 1.4–1.7 ms avg,
+p99 10.2–10.7 ms, max ~20 ms, the spikes from encirclement floods of 500k-tile territories.
+Browser: 0.5–1.3 ms CPU per frame. `WorkerHost` stays deferred to 2.7 (bigger maps), together
+with cheaper encirclement for huge territories (e.g. flood only when a player *lost* land
+or a neighbour changed, or track pieces incrementally).
 Profile with the built-in overlay, browser performance profiles, and the headless
 runner — never by guessing.

@@ -1,18 +1,31 @@
 <script lang="ts">
-  import { MAX_OPPONENTS } from "../../app/players.ts";
+  import {
+    landPerPlayer,
+    MAP_SIZES,
+    MAX_OPPONENTS,
+    OPPONENT_PRESETS,
+    type MapSize,
+  } from "../../app/setup.ts";
+  import { ui } from "../../app/uiState.svelte.ts";
 
   interface Props {
-    onPlay: (opponents: number) => void;
+    onPlay: () => void;
+    onSelectMap: (size: MapSize) => void;
   }
 
-  let { onPlay }: Props = $props();
-  let opponents = $state(7);
+  let { onPlay, onSelectMap }: Props = $props();
   let starting = $state(false);
+  const perPlayer = $derived(landPerPlayer(ui.landTiles, ui.opponents));
+  const crowded = $derived(ui.mapSize === "normal" && ui.opponents >= 50);
+
+  function setOpponents(value: number): void {
+    ui.opponents = Math.max(1, Math.min(MAX_OPPONENTS, value));
+  }
 
   function play(): void {
     if (starting) return;
     starting = true;
-    onPlay(opponents);
+    onPlay();
   }
 </script>
 
@@ -20,29 +33,55 @@
   <h1 id="title">Borderline</h1>
   <p class="tagline">Start small. Expand. Outlast everyone.</p>
 
-  <div class="opponents">
+  <div class="row">
     <span id="opponents-label">Opponents</span>
     <div class="stepper" role="group" aria-labelledby="opponents-label">
       <button
         type="button"
         aria-label="Fewer opponents"
-        disabled={opponents <= 1}
-        onclick={() => (opponents = Math.max(1, opponents - 1))}>−</button
+        disabled={ui.opponents <= 1}
+        onclick={() => setOpponents(ui.opponents - 1)}>−</button
       >
-      <output aria-live="polite">{opponents}</output>
+      <output aria-live="polite">{ui.opponents}</output>
       <button
         type="button"
         aria-label="More opponents"
-        disabled={opponents >= MAX_OPPONENTS}
-        onclick={() => (opponents = Math.min(MAX_OPPONENTS, opponents + 1))}>+</button
+        disabled={ui.opponents >= MAX_OPPONENTS}
+        onclick={() => setOpponents(ui.opponents + 1)}>+</button
       >
     </div>
   </div>
+  <div class="segmented presets" role="group" aria-label="Quick pick">
+    {#each OPPONENT_PRESETS as preset (preset)}
+      <button
+        type="button"
+        aria-pressed={ui.opponents === preset}
+        onclick={() => setOpponents(preset)}>{preset}</button
+      >
+    {/each}
+  </div>
+
+  <div class="row">
+    <span id="map-label">Map</span>
+    <div class="segmented" role="group" aria-labelledby="map-label">
+      {#each Object.entries(MAP_SIZES) as [size, info] (size)}
+        <button
+          type="button"
+          aria-pressed={ui.mapSize === size}
+          onclick={() => onSelectMap(size as MapSize)}>{info.label}</button
+        >
+      {/each}
+    </div>
+  </div>
+  <p class="info" class:warn={crowded}>
+    ≈ {perPlayer.toLocaleString("en-US")} tiles of land per player{#if crowded}
+      · a Large map gives big lobbies more room{/if}
+  </p>
 
   <button type="button" class="play" onclick={play} disabled={starting}>
     {starting ? "Starting…" : "Play"}
   </button>
-  <p class="note">Working title · Phase 1 prototype</p>
+  <p class="note">Working title · Phase 2 prototype</p>
 </section>
 
 <style>
@@ -70,12 +109,60 @@
     color: var(--text-secondary);
   }
 
-  .opponents {
+  .row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-2);
     color: var(--text-secondary);
+  }
+
+  .segmented {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-control);
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .segmented button {
+    flex: 1;
+    min-width: 56px;
+    height: 28px;
+    border: none;
+    border-radius: calc(var(--radius-control) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  .segmented button:hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .segmented button[aria-pressed="true"] {
+    background: rgb(255 255 255 / 0.16);
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .presets {
+    margin-bottom: var(--space-4);
+  }
+
+  .info {
+    margin: 0 0 var(--space-4);
+    min-height: 2.6em;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  .info.warn {
+    color: var(--color-warning);
   }
 
   .stepper {

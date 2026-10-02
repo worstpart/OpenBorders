@@ -20,10 +20,17 @@ import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, playerColors } from "./players.ts";
 import { protectionSecondsLeft } from "./preview.ts";
-import { addToast, TOAST_MS, toastsForEvents, type ToastInput } from "./toasts.ts";
+import { MAP_SIZES, type MapSize } from "./setup.ts";
+import {
+  addToast,
+  BIG_LOBBY_PLAYERS,
+  TOAST_MS,
+  toastsForEvents,
+  type ToastInput,
+} from "./toasts.ts";
 import { ui } from "./uiState.svelte.ts";
 
-/** Phase 1 plays on one fixed procedural continent (ROADMAP Phase 1). */
+/** One fixed procedural continent, in two sizes (setup.ts). */
 export const MAP_SEED = 2;
 const LOCAL_PLAYER_ID = 1;
 /** Label positions are recomputed at most this often while territory changes. */
@@ -77,9 +84,13 @@ export class GameClient {
     requestAnimationFrame((time) => this.animationFrame(time));
   }
 
-  /** Generates the Phase 1 map and shows it behind the start screen. */
-  loadMap(): void {
-    const map = generateContinent({ seed: MAP_SEED });
+  /** Generates the map of the chosen size and shows it behind the start screen. */
+  loadMap(size: MapSize): void {
+    const { width, height } = MAP_SIZES[size];
+    const map =
+      this.map?.width === width && this.map.height === height
+        ? this.map
+        : generateContinent({ seed: MAP_SEED, width, height });
     this.map = map;
     this.owner = new Uint16Array(map.width * map.height);
     this.renderer.setMap(map, this.owner);
@@ -256,7 +267,15 @@ export class GameClient {
         ui.gameOverReason = event.reason;
       }
     }
-    const toasts = toastsForEvents(frame.events, me, (id) => ui.playerName(id));
+    // ui.me still holds last tick's snapshot here: who bordered us before this tick.
+    const bordered = ui.me?.neighbors ?? [];
+    const bigLobby = frame.players.length > BIG_LOBBY_PLAYERS;
+    const toasts = toastsForEvents(
+      frame.events,
+      me,
+      (id) => ui.playerName(id),
+      (id) => !bigLobby || bordered.includes(id),
+    );
     const protectionEnd = frame.playStartTick + DEFAULT_RULES.spawn.protectionTicks;
     if (frame.phase === "playing" && frame.tick === protectionEnd) {
       toasts.push({

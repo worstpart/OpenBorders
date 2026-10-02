@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, then economy, buildings, naval, more maps | ⬜ next |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, then economy, buildings, naval, more maps | 🟡 2.0 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -143,7 +143,7 @@ machine being busy (the same games alone: ≤ 24 ms).
 
 ---
 
-## Phase 2 — Gameplay depth (after Phase 1 is fun)
+## Phase 2 — Gameplay depth 🟡
 
 Each item gets a design note in `GAME_DESIGN.md` before implementation. Order set with
 the user after the Phase 1 playtest (D-016): **scale, AI tiers, alliances and teams
@@ -152,7 +152,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 
 | # | Milestone | Done when |
 |---|---|---|
-| 2.0 | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
+| 2.0 ✅ | **Big lobbies — up to 125 opponents.** Start screen allows 1–125; spawn placement for many players; 125 distinct player colours and readable labels when zoomed out; leaderboard copes; bot thinking stays cheap (staggered, budgeted per tick); simulation moved to a worker if needed (`WorkerHost`); headless runner with 125 bots | 125-player games run within the tick and frame budgets; no exceptions in 100 headless games |
 | 2.1 | **Tribes & Nations** — two AI tiers. *Tribes*: many small, simple filler bots that expand, accept alliances and fight nearby weak or traitorous neighbours (cheap to run, "food" that fills the map). *Nations*: few, smarter opponents (today's personality bots, improved), with names and difficulty levels (reaction time + decision quality). To decide in the design note: whether tribes get handicaps (OpenFront's are weaker by stats) — touches D-012 | Mixed lobbies (e.g. 100 tribes + 10 nations) feel right in play; tribes don't win; nations do |
 | 2.2 | **Alliances** — request/accept (requests expire after 20 s, 30 s before asking the same player again), alliances last 5 min and both sides are asked to renew in the last 30 s, allies can't attack each other (running attacks pull back free), breaking one makes you a *traitor* for 30 s (attackers lose less and move faster against you); right-click menu + keys, request toasts with accept/decline, ally markers on map and leaderboard; tribes accept all, nations decide by threat/relations/strength | Every flow verified in the browser; bots ally, renew, betray believably |
 | 2.3 | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
@@ -164,6 +164,39 @@ each ends with headless metrics + a browser check, like Phase 1.
 
 Anti-stall: a basic declining win threshold was done in 1.7; revisit for teams and big
 lobbies.
+
+**Milestone 2.0 result (2026-10-02)** — design note and decisions: GAME_DESIGN §3.12.
+Start screen: 1–125 opponents (quick picks 7 · 25 · 50 · 125), map Normal or **Large**
+(1560×990, ~2× the land), land-per-player line. Spawn spacing scales with the lobby;
+126 generated colours (OKLab, closest pair 0.056); 136 names; other players'
+eliminations toast only if they bordered you (lobbies > 16). The headless runner reports
+time per tick step (`systemsMs`, slowest tick's steps).
+
+| 100 games each | 8 bots, Normal (regression) | 126 bots, Normal | 126 bots, Large |
+|---|---|---|---|
+| Finished with a winner / errors | 100 / 0 | **100 / 0** | **100 / 0** |
+| Median length (longest) | 7.1 min (15.5) — same as Phase 1 | 10.6 min (24.5) | 13.0 min (25) |
+| 90% of land owned | 2.1 min | 0.6 min | 0.9 min |
+| Leader at minute 3 wins | 33% | 12% | 4% |
+| Wins: turtle / expander / opportunist / aggressor | 34 / 24 / 30 / 12 | **80** / 13 / 6 / 1 | **71** / 19 / 7 / 3 |
+| Tick avg / worst p99 (7 games in parallel) | 0.73 / 6.9 ms | 1.2 / 8.2 ms | 2.1 / 18.1 ms |
+| Tick avg / p99 / max, game alone | — | 0.8–1.1 / 3.4–4.2 / 10–12 ms | 1.4–1.7 / 10.2–10.7 / 19–20 ms |
+
+- Where the time goes (126 bots, Normal): attacks 0.55 ms and encirclement 0.48 ms per
+  tick on average; bots 0.07 ms — no per-tick thinking budget needed. The slowest tick of
+  a game run alone is now the one-time placement of 126 spawns (~9 ms; ~30 ms before the
+  spacing change). Spikes of 30–75 ms in the batch runs came from the machine being busy
+  (the same seeds alone: ≤ 12 ms).
+- **Large map is at the edge of the budget:** p99 ~10.5 ms and single ticks of ~20 ms,
+  all from encirclement flood-fills of 500k-tile empires late in the game. Browser (Large,
+  126 players): 165 fps, 0.5–1.3 ms CPU per frame, tick 1.0–3.1 ms avg as shown by the
+  overlay; no visible hitches. **Decision:** no `WorkerHost` yet — the reference map meets
+  every budget and the Large map's spikes are rare; moving the simulation to a worker and
+  making encirclement incremental belong with the bigger maps of 2.7 (ARCHITECTURE §11).
+- **Balance finding for 2.1:** in big lobbies turtles win 70–80% of games (8-bot games:
+  34%). With 125 small neighbours, waiting for big edges and defending on mountains beats
+  attacking; aggressors almost never win. Tribes & Nations (2.1) replace most of these bots
+  anyway — the Nation AI must be checked against this.
 
 ## Phase 3 — Multiplayer
 

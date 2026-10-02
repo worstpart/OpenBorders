@@ -76,15 +76,15 @@ All numbers live in one rules config (`GameRules`) — none are hard-coded in sy
 
 ### 3.3 Players & spawning
 
-- 1 human + **7 AI opponents** by default (configurable 1–15).
+- 1 human + **7 AI opponents** by default (configurable 1–125 since milestone 2.0, §3.12).
 - **Spawn phase:** the human clicks any valid land to choose a start (can re-pick until
   confirming / the phase ends). AI spawns randomly, keeping a minimum distance from
   everyone else. Single-player starts the moment the human confirms.
 - A spawn claims a small disc (radius 4 = 49 tiles): only **neutral land connected to the
   chosen tile** (a disc never jumps across water or takes someone else's land).
 - Random spawns (bots, or players who didn't pick) need ≥ 80% of a full disc, and keep
-  ≥ 70 tiles from other spawns when the map allows it (relaxed step by step on crowded
-  maps).
+  ≥ 70 tiles from other spawns when the map allows it — less in big lobbies (§3.12) —
+  relaxed step by step on crowded maps.
 - The human locks in their pick with *confirm*; in single-player the match starts at that
   moment. Troops don't grow during the spawn phase.
 - **Spawn protection:** no player-vs-player attacks for the first **5 s**.
@@ -346,6 +346,29 @@ How we got here (headless runs on the reference map, 8 bots):
   targets) all stayed at 12–19%: attacking costs more than defending, so the most
   aggressive style is a bit weaker by nature. Accepted — no personality dominates
   (the best wins ~30%), and aggressors are the ones that keep the player under pressure.
+
+### 3.12 Big lobbies (milestone 2.0)
+
+Up to **125 opponents** (126 players), like OpenFront's crowded solo games (§3.21 of the
+research: 400 filler bots). Design note written before building; results below.
+
+| Question | Decision | Why |
+|---|---|---|
+| Room per player | Reference map: 420k land ÷ 126 ≈ **3,300 tiles** each (radius ~32) — small but playable. New **Large** map (1560×990, same seed and generator): ~850k land, **~6,700** each | Each start still has a land race; Large gives a 125-bot game the room of a 63-bot one. Real "big lobby" maps come with 2.7 |
+| Spawn spacing | Preferred distance = min(70, **0.7 × √(land ÷ players)**): 70 for 8 players (unchanged), 40 for 126 on Normal, 57 on Large; relaxed step by step as before | With a fixed 70 the first ~50 bots took the room and the rest were squeezed in at 34 or less (and placing them took ~30 ms); random disc packing fills ≤ 55% of the area, so 0.7 of the even spacing fits |
+| Which bots | Today's four personalities, unchanged | Tribes and Nations are milestone 2.1; 2.0 is about scale only |
+| Bot thinking | Unchanged: every 2–5 s, randomly staggered (126 bots ≈ 3.6 thinks per tick) | Measured: bots cost 0.06 ms per tick on average — no budget needed |
+| Colours | 15 hand-picked colours, then generated ones: each the candidate farthest (OKLab) from every colour in use, the terrain colours and the local player's blue | Closest pair of 126 colours ≈ 0.056 OKLab (~2.5× a just-noticeable difference) |
+| Names | 136 invented names | One per opponent, no repeats |
+| Start screen | Stepper 1–125 plus quick picks **7 · 25 · 50 · 125**; map **Normal / Large**; "≈ N tiles of land per player" (amber hint to pick Large at 50+ opponents on Normal) | Clicking + 118 times is no fun; the land line makes the map choice concrete |
+| Toasts | In lobbies over 16 players, another player's elimination is a toast only if they bordered you | ~120 eliminations per game would flood the toast stack |
+| Labels, leaderboard | Unchanged: labels already fade out when a territory is too small to read; leaderboard shows top 5 + you and "N of 126 left" | Checked in the browser: no clutter at any zoom |
+
+**Results** (100 headless games each, ROADMAP 2.0): every game ends with a winner;
+126 bots on Normal: median 10.6 min, 90% of the land owned after 37 s; on Large: median
+13 min, 54 s. The leader at minute 3 rarely wins (4–12%) — big lobbies are less
+snowbally. But **turtles win 70–80%** (34% in 8-bot games): with many small neighbours,
+patience and mountain lines beat attacking. Left for 2.1 (Tribes & Nations).
 
 ---
 

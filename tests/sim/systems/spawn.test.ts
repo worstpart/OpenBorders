@@ -241,6 +241,27 @@ describe("the spawn phase", () => {
     }
   });
 
+  it("spreads a big lobby evenly: the spacing shrinks with the number of players", () => {
+    const rows = Array.from({ length: 120 }, () => ".".repeat(120)).join("\n");
+    const world = worldFromAscii(rows, {
+      players: Array.from({ length: 36 }, () => "bot" as const),
+      phase: "spawn",
+    });
+    step(world);
+    // Even spacing √(14,400 / 36) = 20 → preferred distance 0.7 × 20 = 14 (not 70).
+    const spawns = world.players.map((p) => p.spawnTile);
+    let closest = Infinity;
+    for (let a = 0; a < spawns.length; a++) {
+      for (let b = a + 1; b < spawns.length; b++) {
+        const dx = (spawns[a]! % 120) - (spawns[b]! % 120);
+        const dy = Math.floor(spawns[a]! / 120) - Math.floor(spawns[b]! / 120);
+        closest = Math.min(closest, Math.sqrt(dx * dx + dy * dy));
+      }
+    }
+    expect(world.players.every((p) => p.tiles >= 40)).toBe(true);
+    expect(closest).toBeGreaterThanOrEqual(14);
+  });
+
   it("never overlaps spawns, and eliminates players who find no land at all", () => {
     const world = worldFromAscii(
       `

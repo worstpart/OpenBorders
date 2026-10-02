@@ -15,6 +15,9 @@
  * --rules takes a JSON file of rule overrides, deep-merged into DEFAULT_RULES (e.g.
  * {"troops": {"growthFloor": 20}}), to try a balance change before editing rules.ts.
  * --personality gives every bot the same personality.
+ *
+ * Tick times are also broken down per system (`systemsMs`: average and worst per step,
+ * plus the steps of each game's slowest tick) to show where the time goes.
  */
 import { writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
@@ -23,7 +26,7 @@ import { isMainThread, parentPort, Worker, workerData } from "node:worker_thread
 import type { GameMap } from "../src/sim/map/gameMap.ts";
 import { generateContinent } from "../src/sim/map/generate.ts";
 import { PERSONALITIES, type GameRules, type Personality } from "../src/sim/rules.ts";
-import { runTick } from "../src/sim/tick.ts";
+import { runTick, TICK_STEPS, type TickStep } from "../src/sim/tick.ts";
 import { createWorld, type World } from "../src/sim/world.ts";
 import { loadRules } from "./rulesFile.ts";
 
@@ -56,6 +59,10 @@ export interface GameReport {
   attacks: number;
   rejected: number;
   tickMs: { avg: number; p99: number; max: number };
+  /** Per tick step: average and worst milliseconds. */
+  systemsMs: Record<TickStep, { avg: number; max: number }>;
+  /** The slowest tick: when it happened and what each step took. */
+  worstTick: { tick: number; ms: number; steps: Partial<Record<TickStep, number>> };
   error: string | null;
 }
 
@@ -144,6 +151,19 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     })),
   });
   const times: number[] = [];
+  const stepTotal = new Map<TickStep, number>(TICK_STEPS.map((step) => [step, 0]));
+  const stepMax = new Map<TickStep, number>(TICK_STEPS.map((step) => [step, 0]));
+  let tickSteps: Partial<Record<TickStep, number>> = {};
+  let worstTick: GameReport["worstTick"] = { tick: 0, ms: 0, steps: {} };
+  let stepStartedAt = 0;
+  const probe = (step: TickStep): void => {
+    const now = performance.now();
+    const ms = now - stepStartedAt;
+    stepStartedAt = now;
+    tickSteps[step] = ms;
+    stepTotal.set(step, stepTotal.get(step)! + ms);
+    if (ms > stepMax.get(step)!) stepMax.set(step, ms);
+  };
   let leader = 0;
   let leadChanges = -1;
   let leaderAt3 = 0;
@@ -158,8 +178,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   try {
     while (world.phase !== "ended" && world.tick < options.maxTicks) {
       const startedAt = performance.now();
-      const frame = runTick(world, { tick: world.tick + 1, commands: [] });
-      times.push(performance.now() - startedAt);
+      stepStartedAt = startedAt;
+      tickSteps = {};
+      const frame = runTick(world, { tick: world.tick + 1, commands: [] }, probe);
+      const ms = performance.now() - startedAt;
+      times.push(ms);
+      if (ms > worstTick.ms) worstTick = { tick: world.tick, ms, steps: tickSteps };
       for (const event of frame.events) {
         if (event.type === "eliminated") eliminations++;
         else if (event.type === "attackStarted") attacks++;
@@ -207,6 +231,22 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
       max: round(sorted.at(-1) ?? 0, 3),
+    },
+    systemsMs: Object.fromEntries(
+      TICK_STEPS.map((step) => [
+        step,
+        {
+          avg: round(stepTotal.get(step)! / Math.max(1, times.length), 4),
+          max: round(stepMax.get(step)!, 2),
+        },
+      ]),
+    ) as GameReport["systemsMs"],
+    worstTick: {
+      tick: worstTick.tick,
+      ms: round(worstTick.ms, 2),
+      steps: Object.fromEntries(
+        Object.entries(worstTick.steps).map(([step, ms]) => [step, round(ms, 2)]),
+      ),
     },
     error,
   };
@@ -264,6 +304,22 @@ function summarize(
       worstP99: Math.max(...reports.map((r) => r.tickMs.p99)),
       worstMax: Math.max(...reports.map((r) => r.tickMs.max)),
     },
+    systemsMs: Object.fromEntries(
+      TICK_STEPS.map((step) => [
+        step,
+        {
+          avg: round(
+            reports.reduce((s, r) => s + r.systemsMs[step].avg, 0) / Math.max(1, reports.length),
+            4,
+          ),
+          worstMax: Math.max(...reports.map((r) => r.systemsMs[step].max)),
+        },
+      ]),
+    ),
+    worstTicks: [...reports]
+      .sort((a, b) => b.worstTick.ms - a.worstTick.ms)
+      .slice(0, 3)
+      .map((r) => ({ seed: r.seed, ...r.worstTick })),
     workers,
     wallClockSeconds: round(seconds),
   };

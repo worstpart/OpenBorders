@@ -23,17 +23,26 @@ export const MAX_TOASTS = 3;
 /** Smaller encirclements (slivers cut off along a front) happen all the time: not news. */
 export const ENCIRCLE_TOAST_MIN_TILES = 25;
 export const TOAST_MS = 4_500;
+/**
+ * Above this many players (milestone 2.0 big lobbies) other players' eliminations are only
+ * news when they bordered you — with 125 bots, a toast per elimination would be a flood.
+ */
+export const BIG_LOBBY_PLAYERS = 16;
 
 /** Adds a toast, dropping the oldest beyond `max`. */
 export function addToast(list: readonly Toast[], toast: Toast, max = MAX_TOASTS): Toast[] {
   return [...list, toast].slice(-max);
 }
 
-/** The toasts a tick's events produce for the local player. */
+/**
+ * The toasts a tick's events produce for the local player. `isNews` decides whether
+ * another player's elimination (not by us) is worth a toast.
+ */
 export function toastsForEvents(
   events: readonly SimEvent[],
   me: PlayerId,
   nameOf: (id: PlayerId) => string,
+  isNews: (eliminated: PlayerId) => boolean = () => true,
 ): ToastInput[] {
   const toasts: ToastInput[] = [];
   for (const event of events) {
@@ -82,6 +91,7 @@ export function toastsForEvents(
         break;
       case "eliminated":
         if (event.playerId === me) break; // the defeat card says it
+        if (event.by !== me && !isNews(event.playerId)) break;
         toasts.push(
           event.by === me
             ? {

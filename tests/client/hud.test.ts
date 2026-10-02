@@ -113,6 +113,16 @@ describe("toasts", () => {
     ]);
   });
 
+  it("in big lobbies, reports other eliminations only when they bordered us", () => {
+    const events = [
+      { type: "eliminated", playerId: 4, by: 3 },
+      { type: "eliminated", playerId: 5, by: 3 },
+      { type: "eliminated", playerId: 6, by: 1 },
+    ] as const;
+    const toasts = toastsForEvents(events, 1, names, (id) => id === 5);
+    expect(toasts.map((t) => t.text)).toEqual(["P3 eliminated P5", "You eliminated P6"]);
+  });
+
   it("keeps at most three, dropping the oldest", () => {
     let list: Toast[] = [];
     for (let id = 1; id <= 5; id++) list = addToast(list, { id, text: `${id}`, tone: "info" });

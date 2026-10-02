@@ -29,6 +29,12 @@ export interface SpawnRules {
   readonly protectionTicks: number;
   /** Preferred minimum distance (tiles) between random spawns; relaxed if the map is crowded. */
   readonly randomMinDistance: number;
+  /**
+   * In crowded lobbies the preferred distance shrinks to this share of the spacing an
+   * even spread would give (√(land tiles ÷ players)), so random spawns are spread evenly
+   * from the first to the last instead of the first ones taking the room.
+   */
+  readonly randomSpacingShare: number;
   /** A random spawn needs at least this share of its disc to be claimable land (no slivers). */
   readonly randomMinLandShare: number;
 }
@@ -274,6 +280,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // On the ~1100×700 reference map each of 8 players has ~50k land tiles (radius ~125),
     // so 70 keeps random spawns apart without failing on crowded maps.
     randomMinDistance: 70,
+    // Random disc packing fills at most ~55% of the area, so centres at 0.7 × the even
+    // spacing still fit. 8 players: min(70, 160) = 70 (unchanged); 126 players on the
+    // reference map: 40 (milestone 2.0).
+    randomSpacingShare: 0.7,
     randomMinLandShare: 0.8,
   },
   expansion: {
