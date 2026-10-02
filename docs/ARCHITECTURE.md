@@ -378,6 +378,109 @@ touch them.
 
 ---
 
+### 5.7 Buildings, ranges and flights — *PLANNED (proposed 2026-10-02, not built)*
+
+Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 3B. The goal of 2.5 is that
+nothing built then has to be rewritten for airports, SAMs and missiles later.
+
+**Definitions in one place.** `rules.buildings[type]` holds, per type: placement
+(`land` / `coast` / `plains`), what happens on capture (`downgrade` / `destroy`), price
+escalation, and `levels[0..2]` with `cost`, `buildTicks`, `radius`, `capacityShare`,
+`charges`, `reloadTicks`, `cooldownTicks` and the effect numbers (capacity, growth,
+income, loss/speed multipliers…). Changing "Airport II range" is one line. A
+`rules.buildings.enabled = false` switch (headless `--no-buildings`) must reproduce 2.4
+games exactly — the same regression rule as alliances and the economy.
+
+**Data model** (all integers, hashed):
+
+```ts
+interface Building {
+  id: number;              // world.nextBuildingId++, never reused
+  type: BuildingType;      // "housing" | "factory" | "port" | "borderDefense" | "sam" | "silo" | "airport"
+  owner: PlayerId;
+  tile: number;
+  level: 0 | 1 | 2 | 3;    // the level that works now (0 while first being built)
+  targetLevel: 1 | 2 | 3;  // > level while constructing / upgrading
+  readyTick: number;       // when the construction or upgrade completes (-1 = none)
+  disabledUntilTick: number;
+  charges: number[];       // reload queue (SAM interceptors, silo slots) — 3B
+  cooldownUntilTick: number; // airport missions, strikes — 3B
+}
+```
+
+There is **no health field**: level is health (`damageBuilding(world, b, levels, by)`
+lowers the level and destroys at 0). Every place that changes a building goes through a
+few choke points (`placeBuilding`, `finishConstruction`, `damageBuilding`,
+`transferBuilding`), like `setOwner` for tiles, so the hash, the frame deltas, the
+spatial grid and the cached per-player effects can't drift apart.
+
+- `world.buildings: Building[]` (ordered by id) + `world.buildingAt: Int32Array` (tile →
+  building id, −1) for O(1) capture checks inside `setOwner`.
+- A coarse **spatial grid** (e.g. 32×32-tile cells → building ids) for every range query:
+  spacing, zones, SAM coverage, Factory supply, strikes, missile blasts.
+- **Per-player effects** (capacity bonus, growth bonus, income bonus, Mobilize discount)
+  are recomputed only when a building of that player changes, and read by `troops.ts` and
+  `economy.ts` — those systems don't know building types.
+
+**Unified range module** (`sim/geometry.ts`, built in 2.5): `distanceSq(map, a, b)` (exact
+integer), `withinRange(map, a, b, r)` (`distanceSq ≤ r²` — no square root), `distance`
+(`Math.sqrt`, exactly rounded by IEEE 754), `travelTicks(distance, tilesPerTick)` and
+`pointAlong(map, a, b, t)` (+ − × ÷ only). Everything that measures map distance uses it:
+spacing, zones, SAM radius, airport/silo range, flight positions, the HUD's rings and
+ETAs. Boats feed their water-path length into the same `travelTicks`.
+
+**Fortification field (2.6).** `world.fortLevel: Uint8Array` per tile = the best Border
+Defense level covering the tile *whose owner owns the tile* (0 = none). Derived, not
+hashed (like border sets): rebuilt for a post's disc when the post is built, upgraded,
+damaged or destroyed, and updated per tile inside `setOwner` (a captured tile drops to
+the best covering post of its new owner via the grid). `tileCost` / `layerDelay` in
+`attacks.ts` and `attackLossFactor` in `battle.ts` read one **zone-modifier** function
+(`zoneLossFactor(world, tile, attacker)`, `zoneSpeedFactor`) that also handles
+suppression zones (3B) — one hook, not one per feature. The client gets the field as an R8
+texture with dirty uploads; the map shader draws a level pattern on border edges of
+fortified tiles that face a non-friendly owner.
+
+**Tick order additions** (ARCHITECTURE §5.3):
+
+```
+1.  applyCommands      + build, upgrade, cancelBuild; (3B) airlift, airAssault, airStrike, launchMissile
+1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
+3.  advanceAttacks     reads the zone modifiers (fortification, suppression)
+3b. advanceFlights     (3B) move flights, SAM/flak interceptions, arrivals:
+                       airlift → friend's home troops; assault → beachhead attack (2.7);
+                       strike/missile → damageBuilding + suppression zones
+    (setOwner)         captured tiles transfer or destroy their building; fortLevel updates
+6.  growTroops / 6b earnGold   read the cached per-player building effects
+7.  thinkAI            + ai/build.ts (what/where/when to build and upgrade) — a separate module
+```
+
+**Flights (3B.0).** `world.flights`: origin, target, owner, kind, planes, payload,
+launchTick, arriveTick. Positions are a pure function of the tick (straight line), so a
+flight stores no per-tick movement state and the client animates it from the launch event
+alone. Interception: each tick, a flight's current cell in the spatial grid is checked for
+hostile SAMs with a ready interceptor whose radius contains it; a plane is targeted by one
+interceptor only, in id order (deterministic).
+
+**Beachhead attacks (2.7).** Today `world.attacks` holds one army per (attacker, target)
+pair and fronts start from the attacker's border. Boats (2.7) and airborne assaults (3B.3)
+need an attack whose front starts at a **landing tile**; it must not merge with the land
+attack on the same target (as in OpenFront). This changes the "one army per pair"
+invariant and is the main structural change of the plan — it is done once, in 2.7, and
+reused by 3B. Landing pockets are protected from encirclement while their attack advances.
+
+**Frames and rendering.** Frames carry building deltas (added/changed/removed: id, type,
+owner, tile, level, targetLevel, readyTick, disabled) and flight launch/interception/
+arrival events — never per-tick positions. The renderer draws building icons (level
+drawings + pips) as instanced quads in WebGL (hundreds of icons in 126-player lobbies;
+the Canvas2D label layer would be the fallback for a first version), range rings and
+routes as an overlay pass, fortified borders in the map shader.
+
+**Multiplayer (Phase 3).** Nothing new is needed in the protocol: these are commands, and
+under D-006 the server runs the same simulation, so construction, upgrades, damage,
+interception, transported troops and captures are computed server-side and checked by the
+state hash. Snapshots must include buildings and flights; the fortification field is
+rebuilt from them.
+
 ## 6. Client architecture
 
 | Module | Responsibility | Must not |

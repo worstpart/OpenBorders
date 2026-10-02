@@ -679,6 +679,32 @@ converter; defense posts create real chokepoints.
 **Improve / change.** Keep a small, sharp roster; make each building's effect visible on
 the map (e.g., defense radius overlay on hover).
 
+**Re-checked 2026-10-02** (source as of 2026-10-01, for the building design in
+GAME_DESIGN §3.17; our summary, no code copied):
+- **Levels are stacked copies.** Upgrading = paying the price of one more building of that
+  type and raising the level by one; there is no maximum (bulk upgrades of up to 50
+  levels). The price doubling counts levels, so a level-4 city prices the next city like
+  owning four. Effects per level: City +250k capacity (internal units, ÷10 on screen);
+  Port one more trade-ship spawn roll; Factory one more factory for train spawning;
+  Missile Silo one more missile slot (each reloads in 90 ticks); SAM one more interceptor
+  and more range (70, ~81, 90, … approaching 150).
+- **Build times:** City and Factory 2 s, Port and Defense Post 5 s, Silo 10 s, SAM 30 s.
+  Costs as in the table above; Warship min(1M, (n+1)·250k).
+- **Defense Post** is *not* upgradable; within 30 tiles enemy attacks pay 5× losses and 3×
+  time; destroyed (not captured) when its tile falls. Its old ship-shelling code is
+  disabled.
+- **Capture:** every other structure on a captured tile changes owner with its level.
+  Nukes delete structures in the blast.
+- **SAM:** predicts where a nuke will be and fires one interceptor that always hits; one
+  SAM missile per nuke; limited only by interceptors and reload (no random chance). MIRV
+  carriers can't be intercepted, their warheads can.
+- **Gold** is still flat (100/tick humans, 50 bots); nations' capacity and growth now
+  depend on difficulty (Easy 0.5× … Impossible 1.25× capacity).
+- **Nation AI building:** cities first and preferred; ports and factories ~0.75 per city,
+  SAMs 0.15–0.3 per city by difficulty, at most 3 silos; prefers upgrading over new
+  buildings once dense; defense posts only near a front where incoming troops are a
+  large share of its own.
+
 ---
 
 ### 3.15 Transport ships (naval invasion)

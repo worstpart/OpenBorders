@@ -590,6 +590,308 @@ up) 11.6–12.1 min.
 - **Headless:** `--no-economy`; per game gold earned, mobilized, donated and looted, and
   the median gold income at minutes 1, 3 and 6.
 
+### 3.17 Buildings & strategic warfare — design (PLANNED · proposed 2026-10-02, awaiting approval)
+
+> **Status: PLANNED.** Nothing in this section exists in the game yet. It is the design
+> the user asked for on 2026-10-02 (seven buildings with three levels each, Border
+> Defense, SAMs, Missile Silos and Airports) — written *before* any code, for approval.
+> Every number is a starting point for headless tuning. Where each part is built:
+> ROADMAP (2.5–2.7 and Phase 3B). Decisions: D-021 – D-023.
+
+**The test for every rule below: would this still feel like OpenFront?** The player
+should still spend most of the game looking at the map, expanding, watching borders,
+managing troops and attacking. Buildings support territory; they never replace it.
+
+#### 3.17.1 How OpenFront's buildings work today (source re-checked 2026-10-02)
+
+Studied in OpenFront's current source (commit of 2026-10-01) — details in
+`OPENFRONT_RESEARCH.md` §3.14 and §3.18. Summary in our words:
+
+| | OpenFront today |
+|---|---|
+| Roster | City, Port, Factory, Defense Post, Missile Silo, SAM Launcher (+ Warships, nukes) |
+| Gold | flat **1,000 gold/s** per player (not tied to land) + trade ships and trains |
+| Costs | City/Port/Factory start at 125k and **double with each one you own** (cap 1M); Defense Post 50k more per post (cap 250k); SAM 1.5M more per SAM (cap 3M); Silo 1M |
+| Build time | 2 s (City, Factory) · 5 s (Port, Defense Post) · 10 s (Silo) · 30 s (SAM) |
+| **Levels** | Unlimited. "Upgrading" = buying the same building again on top of it; each level counts as one more building for the price doubling. Bulk upgrades up to 50 levels at once |
+| What a level does | City: +capacity per level (the gold→troops converter). Port: one more trade-ship roll per level. Factory: counts as one more factory for trains. Silo: one more missile slot (each reloads in 9 s). SAM: more range (70 → 81 → 90 …, toward 150) and one more interceptor per level |
+| Defense Post | not upgradable; enemy attacks on the owner's tiles within 30 tiles lose **5×** troops and move **3×** slower; **destroyed** when its tile is captured |
+| Capture | other buildings are **captured** with their levels when their tile falls; nukes delete buildings |
+| SAM | pre-computes where a nuke will pass and fires one interceptor that **always hits**; limited by interceptors and reload — no dice rolls |
+| Spacing | buildings at least 15 tiles apart |
+| AI | nations build cities first, then ports/factories (~0.75 per city), SAMs (0.15–0.3 per city by difficulty), up to 3 silos; defense posts only near a front under attack |
+
+What makes it work: every building has **one sharp job**, effects are **global and
+simple** (a City is just "+troops"), and the one local building (Defense Post) creates
+real chokepoints. What is weak: unlimited levels are opaque (a "level 23 city"), the
+economy behind ports and factories (trade/train curves) is invisible to players, and
+levels are not readable on the map.
+
+#### 3.17.2 Proposal vs OpenFront — what changes and why
+
+| Topic | OpenFront | Proposal | Why |
+|---|---|---|---|
+| Levels | unlimited, each = one more copy | **exactly 3**, each with a name and a visible look | Readable at a glance; a level-3 building is an *event*, not a stack |
+| Upgrade benefit | +1 copy of the same effect | **better effect + one new ability** at levels 2 and 3 where it makes sense | The user's brief; creates "upgrade vs build another" decisions |
+| Cost growth | each copy doubles the price | upgrades ≈ 2.5× and 6× the base price; every level you already own of that type adds **+25%** to the next one (max ×3) | Same anti-spam idea, gentler and shown on the card |
+| Defense | a point with a circular zone | **Border Defense**: a post that fortifies *the border line* inside its zone, drawn as a wall | The user's brief; the zone model is kept underneath (§3.17.6) |
+| Damage | none (nukes delete) | **level is the health**: hits knock a building down one level | No HP bars, no repairs; the tier you see is the state |
+| Air | none | **Airport** I–III: airlift to friends, airborne assault, air strikes | New strategic layer — the biggest risk to the feel (§3.17.3) |
+| Missiles | atom/hydrogen bombs, MIRV; fallout | Silo I–III: conventional missiles first, one strategic warhead at level 3 | Late-game counter to runaway leaders without an early nuke meta |
+| Gold | flat + trade/trains | ours (E2, §3.16): land-linked, √tiles; Factory and Metropolis add to it | Keeps the economy legible |
+
+#### 3.17.3 Mechanics that could break the OpenFront feel — and the guard against each
+
+| Risk | What could go wrong | Guard in this design |
+|---|---|---|
+| **Teleporting armies** | Airborne assaults make geography meaningless | Range rings, a cap per flight (share of your capacity), cooldowns, SAM losses, a 1.25× loss penalty for light airborne troops, landings must be on hostile land, and a landing pocket can be encircled once its attack stops. And our troops are one pool: a small airdrop against a full home pool is *Hopeless* — airborne works against busy or depleted enemies, exactly like a second ground front |
+| **Turtle meta** | Walls + SAMs + Housing make defending stronger than attacking. Turtles already win ~half of tribe games (ROADMAP 2.4) | Border Defense zones are finite and destroyed when their post's tile falls; airborne, missiles and strikes bypass them; multipliers below OpenFront's 5×; headless check on turtle wins is a "done when" of milestone 2.6 |
+| **Base-building game** | Players stare at menus instead of the map | 7 buildings, 3 levels, no tech tree, no new resources (gold + troops only), one small card per building, no repairs, no production queues |
+| **Flight-sim micro** | Players steer planes | Every air/missile action = origin, target, commitment, go. The simulation flies, fights and returns |
+| **SAM bubbles** | Overlapping SAMs make the sky impenetrable | No stacking bonuses: each SAM fires its own few interceptors, each kills one plane; saturation (several flights, or strike the SAM first) beats it; SAMs are expensive and their radius small next to a territory |
+| **Snowball** | Rich players build L3 everything | Price grows +25% per level you own of a type; L3 totals are 8–10× the L1 price; gold income is √land; gold also buys troops (Mobilize), so every building is a troop you didn't buy |
+| **Short games** | Our games last 7–13 min (median); L3 airports/silos would never appear | Costs are sized to *our* economy (§3.17.8) and we measure game length every milestone. **Open question for the user:** do we accept games getting longer (OpenFront's run 20–40 min)? |
+| **Instant gifts vs airlift** | Troops can already be gifted instantly to any ally anywhere (D-020) — an airlift would be pointless | **Proposed (D-023):** troop gifts need a shared border; distant friends need an airlift (Airport I) — or a boat later. Gold gifts stay instant everywhere |
+
+#### 3.17.4 Shared rules for all buildings
+
+| Rule | Proposal |
+|---|---|
+| Where | on your own land; at least **8 tiles** from your other buildings (OpenFront: 15 on maps ~3× bigger). Port: coastal tile. Airport: plains. Allowed from the first tick of play (not during the spawn phase) |
+| Pay | gold up front (the HUD shows the price including the +25% per level owned) |
+| Construction | L1 5–15 s, upgrades 10–30 s (table). A building under construction does nothing; one being **upgraded keeps its old level working** until the upgrade finishes |
+| Level = health | an air strike or missile knocks a building down **one level** (L1 → destroyed). No HP, no repair: re-upgrade if you want the level back |
+| Captured tile | the building is **captured one level lower** (L1 → destroyed) — taking a Metropolis is a prize, losing one hurts twice. **Border Defense and Missile Silo are destroyed** instead (a wall doesn't change sides; a captured silo would be too swingy) |
+| Eliminated owner | their buildings go to whoever takes the land (same rule) |
+| Cancel / sell | no selling (OpenFront has delete; it adds little). Cancelling a construction refunds 50% |
+| Disabled | struck buildings are **disabled for 20 s** (no effect, no actions), shown greyed |
+| Escalation | every level you already own of the same type makes the next build or upgrade **+25%** dearer, at most **×3** |
+| Same for bots | nations use the same commands and prices (D-012); tribes never build (filler) |
+
+#### 3.17.5 Unified range system
+
+One module answers every "how far / in range / how long" question (ARCHITECTURE §5.7):
+`distance(a, b)` (straight line, in tiles), `withinRange(a, b, r)` (exact: compares squared
+distances, no square root), `travelTicks(a, b, speed)`. Air units, missiles, SAM coverage,
+Border Defense zones, Factory supply, building spacing and the HUD's range rings all use
+it. Boats use their water-path length through the same `travelTicks`. **Display:** 1 tile
+= 1 km ("Range 300 km"); the reference map is ~1,100 km wide. Ranges are fixed in tiles
+and will be re-checked when bigger maps arrive (2.8).
+
+#### 3.17.6 Border Defense (redesign of the Defense Post)
+
+**Model: a post that fortifies the border inside its zone.** The player builds a
+*Border Defense post* anywhere on their land (usually a few tiles behind a border). It
+covers a circle (its zone). **Every tile of the owner's land inside the zone is
+fortified** at the post's level; enemy attacks into fortified tiles cost more and move
+slower. On the map the **owner's border segments inside the zone are drawn as a
+fortified line** — thicker, patterned by level — so a player sees *where* a border is
+walled without opening anything. The post itself is a small icon behind the line.
+
+Why a zone owned by a post, rather than painted border segments or per-cell walls:
+our borders move every second. A painted segment would be wrong after the first
+capture; a per-cell wall would need a rule for every border change. A zone is defined
+by (post position, radius, level) and **today's ownership**, so the line simply follows
+the border wherever it currently runs inside the circle — no special cases to keep in
+sync. It also keeps a real counterplay: the post can be reached, struck or bypassed.
+
+| Situation | What happens |
+|---|---|
+| The border moves (you gain land) | the wall is drawn wherever your border now runs inside the zone |
+| The attacker pushes into the zone | every tile they take inside it costs the fortified price; the wall moves back with your border |
+| The post's tile is captured | the post is **destroyed**; the whole zone stops at once (the line "collapses") |
+| You lose land behind the line | land you no longer own is not fortified; the post works as long as you hold its tile |
+| Two fortified players meet | each wall protects only its own side: A attacking B pays B's fortification, B attacking A pays A's |
+| An ally or teammate borders it | no effect — friends can't attack each other. The wall is drawn only on borders with non-friendly players |
+| A new enemy reaches the zone | fortified at once (nothing to set up) |
+| Several posts overlap | a tile uses the **best** level covering it — no stacking |
+| Neutral land | expansion is never slowed; fortification is only against players |
+| Encirclement | unchanged (a fortified pocket can still be surrounded — the classic way to beat a line) |
+| Air and missiles | an air strike or missile on the post knocks it down a level; a strike on the zone **suppresses** it for 30 s (§3.17.11) |
+
+| Level | Name | Zone radius | Attacker losses | Front speed | New |
+|---|---|---|---|---|---|
+| I | Border Fortifications | 12 km | ×1.5 | ×0.67 (1.5× slower) | — |
+| II | Fortified Border | 16 km | ×2 | ×0.5 | — (wider, stronger) |
+| III | Defense Line | 20 km | ×2.5 | ×0.4 | **Flak**: one anti-air shot every 10 s at enemy aircraft over the zone (local, aircraft only) |
+
+Lanchester (§3.6) makes ×2.5 losses mean the attacker needs about √2.5 ≈ 1.6× the troops to
+break through head-on — expensive, never impossible. OpenFront's post is ×5 / 3× slower in a
+30-tile circle; ours is gentler because our attacks are *directed* (a click can aim at the
+post itself) and because turtles already do well. The odds on the HUD include the
+fortification (`battle.ts`), like the tribe and traitor discounts.
+
+#### 3.17.7 Airports, SAMs and air warfare
+
+**Who needs an airport:** only the **sender**. Destinations need nothing (an ally without
+an airport can still be reinforced; a target can't refuse). Receiving airports add
+nothing — one less rule to learn.
+
+**Flights.** Every air action is a *flight*: a group of planes flying in a straight line
+from the airport to the target at a fixed speed, visible to everyone on the map, with an
+ETA. Nothing is instant.
+
+| Flight | Planes | Speed | Carries |
+|---|---|---|---|
+| Airlift / airborne transport | 4 transports (+2 escort fighters from an Air Base) | 2 tiles/tick (20 km/s) | up to the airport's capacity, split evenly over the transports |
+| Air strike | 4 fighters | 3 tiles/tick | — |
+| Missile (Silo) | 1 missile | 3 tiles/tick | warhead |
+
+**SAMs vs aircraft — the one rule.** A SAM has a few **interceptors** (1 / 2 / 3 by level)
+that reload one at a time. When a hostile plane is inside its radius, it fires one
+interceptor, which **always destroys one plane** (no dice — like OpenFront's SAMs). Each
+plane is targeted by one interceptor only, so overlapping SAMs add interceptors, not
+multipliers. A transport plane shot down loses its share of the troops. Escort fighters
+are targeted first. "Hostile" = a SAM owned by someone who isn't the flight owner's
+friend; flights crossing a third player's SAM coverage are shot at too (airspace matters).
+Counters to SAMs: send more planes than they have interceptors, wait for the reload, strike
+the SAM first, fly around its ring.
+
+| Level | Airport name | Range | Lift capacity | Cooldown | New ability |
+|---|---|---|---|---|---|
+| I | Airport | 250 km | 10% of your troop capacity | 30 s | **Airlift**: send troops (current send %, capped) to any land of an ally or teammate in range. On arrival they join the friend's home troops; what doesn't fit under their capacity flies back |
+| II | Military Airport | 300 km | 15% | 25 s | **Airborne assault**: land troops on hostile land in range; the landing tile is taken and a normal directed attack starts from it (the same beachhead attack as boats, 2.7). Airborne troops lose ×1.25 per tile (light infantry). The landing pocket can't be encircled while its attack advances; once it stops, it can |
+| III | Air Base | 350 km | 20% | 20 s | **Air strike** (fighter wing, own 30 s cooldown) on a building (−1 level, disabled 20 s, if at least 2 fighters arrive; 1 fighter: disabled only) or on a point (**suppression** for 30 s in 10 km: fortification off, attackers lose ×0.8 there). Transports get **2 escort fighters** that absorb the first interceptors |
+
+Why the airlift/assault capacity is a share of *your* capacity (shown as a number on the
+card, e.g. "Capacity 84K troops"): fixed numbers would be huge for a 126-player lobby and
+tiny for a late 8-player empire. Why airborne troops are weaker: an airdrop must stay a
+surprise or a second front, not a better ground attack.
+
+| Level | SAM name | Radius | Interceptors | Reload (each) | New ability |
+|---|---|---|---|---|---|
+| I | SAM Site | 25 km | 1 | 10 s | shoots aircraft |
+| II | Advanced SAM Site | 35 km | 2 | 8 s | also intercepts **conventional missiles** |
+| III | Integrated Air Defense | 45 km | 3 | 6 s | also intercepts the **strategic warhead**; **early warning**: flights launched within 2× its radius are announced at once |
+
+Selecting a SAM (or hovering one in build mode) shows its radius; a "air defense" view
+toggle shows all your coverage (and enemies' known SAM rings) at once.
+
+#### 3.17.8 Missile Silo
+
+| Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
+|---|---|---|---|---|---|---|
+| I | Missile Silo | 1 | 30 s | 250 km | 75k | **Strike missile**: at the target, every building within 8 km loses a level and fortification there is suppressed for 30 s (no land destroyed, no troops killed) |
+| II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target loses **two** levels; slots let you fire two at once (saturates SAMs) |
+| III | Strategic Missile Complex | 3 | 20 s | whole map | 75k / **500k** | **Strategic warhead** (own 90 s cooldown): 20 km radius — land becomes neutral *scorched* land (3× expansion cost for 60 s), buildings destroyed, owner loses home troops in proportion to land lost. Breaks an alliance if it hits the ally (like OpenFront). Only SAM III can intercept it |
+
+#### 3.17.9 Housing, Factory, Port
+
+- **Housing** — troop capacity (the gold → army engine, OpenFront's City). A fixed bonus,
+  so a small player gains proportionally more (anti-snowball, like OpenFront).
+- **Factory** — gold income and cheaper Mobilize (OpenFront's trains are replaced by a
+  plain income number; the user's "military production" is the Mobilize discount and, at
+  level III, faster reloads for nearby airports and silos once they exist).
+- **Port** — builds on the naval plan (§6.3: boats launch from *any* coast; a port makes
+  them better). Level III's warship patrol waits for the naval follow-up (only if boats
+  prove fun); its coastal fortification works through the Border Defense zone system.
+
+#### 3.17.10 The 21-tier matrix (proposed starting numbers)
+
+Costs are before the +25%-per-level-owned escalation. "Total" = build + upgrades.
+Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
+
+| Building | Lvl | Build / upgrade cost (total) | Time | Benefit | New ability | Range | Capacity | Cooldown | Countered by | Looks like |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Housing | I | 40k (40k) | 5 s | +30k troop capacity | — | — | — | — | capture (−1 lvl), strike, missile | 3 small roofs, 1 pip |
+| Housing | II Developed Housing | +100k (140k) | 10 s | +80k capacity | +5% troop growth (all Housing together max +20%) | — | — | — | same | town block with a square, 2 pips |
+| Housing | III Metropolis | +250k (390k) | 20 s | +180k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | skyline with a tower, soft night glow, 3 pips |
+| Factory | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | shed + chimney |
+| Factory | II Industrial Complex | +150k (210k) | 10 s | +80 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | two halls, smoke puffs |
+| Factory | III Mega Industrial Complex | +350k (560k) | 20 s | +160 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 3B) | 60 | — | — | same — a prime target | large plant, 3 chimneys |
+| Port | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
+| Port | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
+| Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (Border Defense II zone along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
+| Border Defense | I Border Fortifications | 30k (30k) | 5 s | own land in zone: attackers ×1.5 losses, ×0.67 speed | — | 12 | — | — | attack elsewhere, capture the post, airborne, strike, missile, encirclement | dashed barricade line on the border; small post |
+| Border Defense | II Fortified Border | +80k (110k) | 10 s | ×2 losses, ×0.5 speed | wider zone | 16 | — | — | same | solid double line with bunkers |
+| Border Defense | III Defense Line | +200k (310k) | 20 s | ×2.5 losses, ×0.4 speed | **Flak**: 1 shot / 10 s at aircraft over the zone | 20 | — | 10 (flak) | same; strike suppresses for 30 s | thick line with emplacements |
+| SAM | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
+| SAM | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles | 35 | 2 | 8 | same | twin launcher + radar |
+| SAM | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
+| Missile Silo | I | 250k (250k) | 15 s | strike missile (75k per launch) | — | 250 | 1 slot | 30 | SAM II+, capture (destroyed) | hatch in the ground |
+| Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
+| Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
+| Airport | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
+| Airport | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Defense Line flak, encirclement of the landing once it stalls | longer runway, hangars |
+| Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
+
+**Visual progression.** Every building is one original icon with three drawings of growing
+detail and **1–3 level pips** under it; the tier reads without clicking. Construction:
+the icon fills in from the bottom with a thin progress ring; upgrade: a brief scaffold
+outline, then a soft pulse as the new icon and (if any) the larger range ring appear.
+Icons fade out when zoomed far out, except your own and level-III buildings.
+
+#### 3.17.11 Counters at a glance
+
+```
+Border Defense ──strong vs──▶ ground attacks
+      ▲                             │
+  bypassed by                  bypassed by
+Airborne (Airport II) ◀──shot by── SAM ◀──struck by── Air strike (Airport III)
+      │                             ▲                      │
+      └──── Port (boats) ── bypasses land borders          │
+Missile (Silo) ──hits──▶ any building, suppresses lines; SAM II+ intercepts (III: warheads)
+Housing / Factory / Airport / Silo ──are── prime targets for strikes, missiles, capture
+```
+
+No rock-paper-scissors table to memorise: every counter is "go around it, overwhelm it,
+or hit the building that makes it".
+
+#### 3.17.12 Economy fit — when can a player afford what?
+
+Our income (§3.16): 10 + 0.8·√tiles gold per tick. Measured median nation income (8-nation
+games, ROADMAP 2.4): ~1.0k gold/s at minute 1, ~2.0k at minute 3, ~3.1k at minute 6; tribe
+lobbies ~20–30% less. Rough gold earned so far (if nothing is spent): **~40k by 1:00,
+~200k by 3:00, ~650k by 6:00, ~1.4M by 10:00** — and every coin can instead buy a troop.
+
+| Milestone in a game | Proposed price | Affordable around | Notes |
+|---|---|---|---|
+| First L1 (Border Defense / Housing) | 30–40k | **1:00–1:30** | common, early |
+| First L2 upgrade | +80–150k | **3:00–4:00** | a real choice against Mobilize/war chest |
+| First L3 upgrade (Metropolis) | 390k total | **6:00–7:00** | a major asset |
+| Airport III | 1.12M total | **9:00–10:00**, leaders only | only in longer games |
+| Missile Silo III | 1.45M total | **10:00–12:00**, top 1–2 players | late-game strategic asset |
+
+Compared with OpenFront (flat 1,000 gold/s; first city 125k ≈ 2 min of income; games
+20–40 min), our prices are about a third, because our games are about a third as long.
+**The tension:** today's median game (7–13 min) ends before most players reach L3 airports
+or silos. Buildings will make defending stronger and probably lengthen games; each
+milestone measures it. If the user wants L3 warfare to be common, games must get longer
+(e.g. a slower crush curve or a higher win share) — a direction question, not tuning.
+
+#### 3.17.13 UI/UX
+
+- **Build:** right-click your own land → the context menu lists the 7 buildings (icon,
+  name, price, greyed with the reason when not possible); **B** opens the same list at the
+  cursor. Choosing one shows a ghost icon that follows the mouse with its zone/range ring
+  and the 8-tile spacing; click to place. No permanent build bar.
+- **Building card** (click a building — small glass card next to it, closes with Esc or a
+  click on the map):
+
+```
+╭─────────────────────────────────────╮
+│ ✈  AIRPORT              ▮▮▯  Level 2 │
+│ Military Airport                     │
+│ Range 300 km · Capacity 84K troops   │
+│ Ready ✓            (or "Ready in 0:12")
+│ [ Airlift ]  [ Airborne assault ]    │
+│─────────────────────────────────────│
+│ Upgrade to Air Base      $1.05M  ▶  │
+│ + Air strikes · Escorts · 350 km     │
+╰─────────────────────────────────────╯
+```
+
+- **Actions** (airlift, assault, strike, missile): click the action → the range ring
+  shows, valid targets brighten, the hover card previews the outcome (troops sent with the
+  current send %, ETA, SAM interceptors on the route) → click a target. One click to
+  confirm; Esc cancels. Commitment always uses the existing send % control.
+- **On the map:** flights as small aircraft/missile glyphs on a faint dotted route with
+  an ETA; incoming hostile flights also get a coral chip like incoming attacks ("Airborne
+  assault from X · 0:09"); SAM shots as a short streak and a puff; fortified borders drawn
+  as level-patterned lines; suppressed zones briefly hatched.
+- **Upgrade feedback:** the icon changes, pips fill, a soft pulse, the range ring grows
+  once, a toast "Air Base ready — air strikes unlocked". No big animations.
+
 ---
 
 ## 4. Interaction model
@@ -764,15 +1066,17 @@ first because it's the most legible.
 
 ### 6.2 Buildings (Phase 2) — each with one job
 
+*Superseded on 2026-10-02 by the three-level building design in **§3.17** (PLANNED):
+City → **Housing**, Fort → **Border Defense**, Market → **Factory**, Port unchanged, plus
+**SAM**, **Missile Silo** and **Airport** (the user's direction, D-021 — this reverses the
+earlier "no silos/SAMs before Phase 4"). The original idea, kept for history:*
+
 | Building | Job |
 |---|---|
 | **City** | +troop capacity (the gold → army engine) |
 | **Fort** | Defensive zone: attacks inside its radius cost more and move slower |
 | **Port** | Naval access (faster boats, later warships) and trade income |
 | **Market** *(maybe)* | Gold income; trade with neighbors/allies (stopped by embargo) |
-
-Nukes/missile silos/SAMs: **not planned** before Phase 4; the core game must be fun
-without them.
 
 ### 6.3 Naval (Phase 2)
 
