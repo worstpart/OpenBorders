@@ -3,9 +3,11 @@
  * SVG path data in a 24 × 24 box, filled with the even-odd rule (windows and doors are
  * holes). The same paths are drawn on the map (Canvas2D Path2D) and in the HUD (inline
  * SVG), so a building looks the same everywhere. Each level adds detail: a house → a street
- * → a skyline; a workshop → a plant → a smoking industrial complex.
+ * → a skyline; a workshop → a plant → a smoking industrial complex; a palisade → a
+ * crenellated wall → a fortress tower between walls (the wall tool, D-024).
  */
 import type { BuildingType } from "../sim/rules.ts";
+import type { Placeable } from "./app/buildings.ts";
 
 const rect = (x: number, y: number, w: number, h: number) => `M${x} ${y}h${w}v${h}h${-w}Z`;
 const puff = (x: number, y: number, r: number) =>
@@ -92,12 +94,43 @@ const FACTORY_3 = factory(
   true,
 );
 
+/** Wall I (Palisade): pointed stakes. */
+const POST_1 = [
+  ...[2.5, 6.3, 10.1, 13.9, 17.7].map((x) => `M${x} 19.5V10.5L${x + 1.9} 7L${x + 3.8} 10.5V19.5Z`),
+  rect(2, 20, 20, 1.5), // ground
+].join("");
+
+/** Wall II (Stone Wall): a crenellated wall with firing slits and a gate. */
+const POST_2 = [
+  "M2 20.5V9H5V11.5H8V9H11V11.5H13V9H16V11.5H19V9H22V20.5Z",
+  rect(4.5, 14.5, 3.5, 1.6), // slits (holes)
+  rect(16, 14.5, 3.5, 1.6),
+  "M10.5 20.5V17.5A1.5 1.5 0 0 1 13.5 17.5V20.5Z", // gate
+].join("");
+
+/** Wall III (Fortress Wall): a fortress tower with a flag between two walls. */
+const POST_3 = [
+  "M8 20.5V4H10V6H11V4H13V6H14V4H16V20.5Z", // tower
+  rect(11.7, 0.6, 0.6, 3.4), // flag pole
+  "M12.3 0.6L15.6 1.7L12.3 2.8Z", // flag
+  rect(11.2, 8.5, 1.6, 3.5), // tower slit (hole)
+  "M10.5 20.5V17.5A1.5 1.5 0 0 1 13.5 17.5V20.5Z", // gate
+  "M1.5 20.5V11H3V12.5H4.5V11H6V12.5H7.5V20.5Z", // left wall
+  "M16.5 20.5V12.5H18V11H19.5V12.5H21V11H22.5V20.5Z", // right wall
+  rect(3, 15, 3, 1.4), // wall slits (holes)
+  rect(18, 15, 3, 1.4),
+].join("");
+
 export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, string, string]>> = {
   housing: [HOUSE_1, HOUSE_2, HOUSE_3],
   factory: [FACTORY_1, FACTORY_2, FACTORY_3],
 };
 
+/** The wall tool and wall cards (GAME_DESIGN.md §3.17.6). */
+export const WALL_ICONS: readonly [string, string, string] = [POST_1, POST_2, POST_3];
+
 /** The icon path for a building at `level` (a building under construction shows level 1). */
-export function iconPath(type: BuildingType, level: number): string {
-  return BUILDING_ICONS[type][Math.min(3, Math.max(1, level)) - 1]!;
+export function iconPath(type: Placeable, level: number): string {
+  const set = type === "wall" ? WALL_ICONS : BUILDING_ICONS[type];
+  return set[Math.min(3, Math.max(1, level)) - 1]!;
 }

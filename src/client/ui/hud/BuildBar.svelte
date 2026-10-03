@@ -4,26 +4,41 @@
    * building with its price. Clicking one picks it up — it follows the mouse until a click
    * on your land places it; right-click or Esc puts it back.
    */
-  import { buildBarItems } from "../../app/buildings.ts";
+  import { buildBarItems, wallPreview, type Placeable } from "../../app/buildings.ts";
   import { ui } from "../../app/uiState.svelte.ts";
-  import type { BuildingType } from "../../../sim/rules.ts";
   import { formatTroops } from "../../format.ts";
   import BuildingIcon from "./BuildingIcon.svelte";
 
   interface Props {
-    onPick: (type: BuildingType) => void;
+    onPick: (type: Placeable) => void;
   }
 
   let { onPick }: Props = $props();
 
   const items = $derived(ui.screen === "game" ? buildBarItems(ui.buildContext) : []);
   const placing = $derived(items.find((i) => i.type === ui.placing) ?? null);
+  // Drawing a wall (GAME_DESIGN.md §3.17.6): the points so far, their length and price.
+  const draft = $derived(
+    ui.placing === "wall" && ui.wallPoints.length >= 2
+      ? wallPreview(ui.buildContext, ui.wallPoints, null)
+      : null,
+  );
 </script>
 
 {#if items.length > 0}
   <div class="build">
     <span class="label">
-      {#if placing}
+      {#if placing?.type === "wall"}
+        {#if ui.wallPoints.length === 0}
+          Click your land to start a wall (point A)
+        {:else if !draft}
+          Click point B
+        {:else}
+          {draft.newTiles} tiles · {formatTroops(draft.price)} — click more points, or right-click to
+          build
+        {/if}
+        <span class="muted">· Esc to cancel</span>
+      {:else if placing}
         Click your land to place the {placing.name}
         <span class="muted">· Esc or right-click to cancel</span>
       {:else}
@@ -45,7 +60,7 @@
           <BuildingIcon type={item.type} size={22} />
           <span class="text">
             <span class="name">{item.name}</span>
-            <span class="price">{formatTroops(item.price)}</span>
+            <span class="price">{formatTroops(item.price)}{item.unit}</span>
           </span>
         </button>
       {/each}

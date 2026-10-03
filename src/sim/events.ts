@@ -143,6 +143,44 @@ export type SimEvent =
       readonly reason: "captured" | "cancelled";
     }
   | {
+      /** A wall's construction (level 1) or upgrade began (GAME_DESIGN.md §3.17.6). */
+      readonly type: "wallStarted";
+      readonly wallId: number;
+      readonly playerId: PlayerId;
+      readonly level: number;
+      readonly tiles: number;
+      readonly gold: number;
+    }
+  | {
+      /** A wall's construction or upgrade finished: it works at `level` now. */
+      readonly type: "wallCompleted";
+      readonly wallId: number;
+      readonly playerId: PlayerId;
+      readonly level: number;
+    }
+  | {
+      readonly type: "wallCancelled";
+      readonly wallId: number;
+      readonly playerId: PlayerId;
+      readonly refund: number;
+    }
+  | {
+      /** One of the wall's tiles changed hands (taken by `by`, 0 = neutral): a gap. */
+      readonly type: "wallBreached";
+      readonly wallId: number;
+      readonly playerId: PlayerId;
+      readonly tile: number;
+      readonly by: PlayerId;
+    }
+  | {
+      /** The wall is gone: its last tile broke, or its construction was cancelled. */
+      readonly type: "wallDestroyed";
+      readonly wallId: number;
+      readonly playerId: PlayerId;
+      readonly by: PlayerId | null;
+      readonly reason: "breached" | "cancelled";
+    }
+  | {
       readonly type: "commandRejected";
       readonly playerId: PlayerId;
       readonly command: Command["type"];

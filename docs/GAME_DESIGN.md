@@ -636,7 +636,7 @@ levels are not readable on the map.
 | Levels | unlimited, each = one more copy | **exactly 3**, each with a name and a visible look | Readable at a glance; a level-3 building is an *event*, not a stack |
 | Upgrade benefit | +1 copy of the same effect | **better effect + one new ability** at levels 2 and 3 where it makes sense | The user's brief; creates "upgrade vs build another" decisions |
 | Cost growth | each copy doubles the price | upgrades ≈ 2.5× and 6× the base price; every level you already own of that type adds **+25%** to the next one (max ×3) | Same anti-spam idea, gentler and shown on the card |
-| Defense | a point with a circular zone | **Border Defense**: a post that fortifies *the border line* inside its zone, drawn as a wall | The user's brief; the zone model is kept underneath (§3.17.6) |
+| Defense | a point with a circular zone | **Walls** drawn point by point on your land (D-024, user — first built as a post fortifying the border, D-022) | The user's brief: Clash of Clans-style walls that enemies push through (§3.17.6) |
 | Damage | none (nukes delete) | **level is the health**: hits knock a building down one level | No HP bars, no repairs; the tier you see is the state |
 | Air | none | **Airport** I–III: airlift to friends, airborne assault, air strikes | New strategic layer — the biggest risk to the feel (§3.17.3) |
 | Missiles | atom/hydrogen bombs, MIRV; fallout | Silo I–III: conventional missiles first, one strategic warhead at level 3 | Late-game counter to runaway leaders without an early nuke meta |
@@ -647,7 +647,7 @@ levels are not readable on the map.
 | Risk | What could go wrong | Guard in this design |
 |---|---|---|
 | **Teleporting armies** | Airborne assaults make geography meaningless | Range rings, a cap per flight (share of your capacity), cooldowns, SAM losses, a 1.25× loss penalty for light airborne troops, landings must be on hostile land, and a landing pocket can be encircled once its attack stops. And our troops are one pool: a small airdrop against a full home pool is *Hopeless* — airborne works against busy or depleted enemies, exactly like a second ground front |
-| **Turtle meta** | Walls + SAMs + Housing make defending stronger than attacking. Turtles already win ~half of tribe games (ROADMAP 2.4) | Border Defense zones are finite and destroyed when their post's tile falls; airborne, missiles and strikes bypass them; multipliers below OpenFront's 5×; headless check on turtle wins is a "done when" of milestone 2.6 |
+| **Turtle meta** | Walls + SAMs + Housing make defending stronger than attacking. Turtles already win ~half of tribe games (ROADMAP 2.4) | Walls are lines that break tile by tile and can be gone around (as built: turtles won 13/50 tribe lobbies in 2.6, 2.5: 25); airborne, missiles and strikes bypass them; multipliers below OpenFront's 5×; headless check on turtle wins is a "done when" of milestone 2.6 |
 | **Base-building game** | Players stare at menus instead of the map | 7 buildings, 3 levels, no tech tree, no new resources (gold + troops only), one small card per building, no repairs, no production queues |
 | **Flight-sim micro** | Players steer planes | Every air/missile action = origin, target, commitment, go. The simulation flies, fights and returns |
 | **SAM bubbles** | Overlapping SAMs make the sky impenetrable | No stacking bonuses: each SAM fires its own few interceptors, each kills one plane; saturation (several flights, or strike the SAM first) beats it; SAMs are expensive and their radius small next to a territory |
@@ -671,7 +671,7 @@ boat attacks are.
 | Pay | gold up front (the HUD shows the price including the +25% per level owned) |
 | Construction | L1 5–15 s, upgrades 10–30 s (table). A building under construction does nothing; one being **upgraded keeps its old level working** until the upgrade finishes |
 | Level = health | an air strike or missile knocks a building down **one level** (L1 → destroyed). No HP, no repair: re-upgrade if you want the level back |
-| Captured tile | **the taker adopts the building at its level** (user, 2.5 playtest — like OpenFront): taking a Metropolis is a prize, losing one hurts. An unfinished building is lost, an upgrade in progress is cancelled, tribes destroy what they take. **Border Defense and Missile Silo are destroyed** instead (a wall doesn't change sides; a captured silo would be too swingy) |
+| Captured tile | **the taker adopts the building at its level** (user, 2.5 playtest — like OpenFront): taking a Metropolis is a prize, losing one hurts. An unfinished building is lost, an upgrade in progress is cancelled, tribes destroy what they take. **Missile Silos are destroyed** instead (too swingy); a **wall** tile that changes hands breaks (§3.17.6) |
 | Eliminated owner | their buildings go to whoever takes the land (same rule) |
 | Cancel / sell | no selling (OpenFront has delete; it adds little). Cancelling a construction refunds 50% |
 | Disabled | struck buildings are **disabled for 20 s** (no effect, no actions), shown greyed |
@@ -683,53 +683,70 @@ boat attacks are.
 One module answers every "how far / in range / how long" question (ARCHITECTURE §5.7):
 `distance(a, b)` (straight line, in tiles), `withinRange(a, b, r)` (exact: compares squared
 distances, no square root), `travelTicks(a, b, speed)`. Air units, missiles, SAM coverage,
-Border Defense zones, Factory supply, building spacing and the HUD's range rings all use
+Factory supply, building spacing and the HUD's range rings all use
 it. Boats use their water-path length through the same `travelTicks`. **Display:** 1 tile
 = 1 km ("Range 300 km"); the reference map is ~1,100 km wide. Ranges are fixed in tiles
 and will be re-checked when bigger maps arrive (2.8).
 
-#### 3.17.6 Border Defense (redesign of the Defense Post)
+#### 3.17.6 Border Defense — walls drawn point by point (✅ milestone 2.6, D-024)
 
-**Model: a post that fortifies the border inside its zone.** The player builds a
-*Border Defense post* anywhere on their land (usually a few tiles behind a border). It
-covers a circle (its zone). **Every tile of the owner's land inside the zone is
-fortified** at the post's level; enemy attacks into fortified tiles cost more and move
-slower. On the map the **owner's border segments inside the zone are drawn as a
-fortified line** — thicker, patterned by level — so a player sees *where* a border is
-walled without opening anything. The post itself is a small icon behind the line.
+**User (2026-10-02, while 2.6 was in the browser check):** walls placed with points A, B,
+C … until the shape is built — a buff that enemies push through, like Clash of Clans walls.
+This **replaced** the first 2.6 design (D-022: a post whose circle fortified the owner's
+border, drawn as a wall line). The user's answers: walls **replace** posts; wall tiles are
+**hard** (go around or break through); walls go **anywhere on your land**.
 
-Why a zone owned by a post, rather than painted border segments or per-cell walls:
-our borders move every second. A painted segment would be wrong after the first
-capture; a per-cell wall would need a rule for every border change. A zone is defined
-by (post position, radius, level) and **today's ownership**, so the line simply follows
-the border wherever it currently runs inside the circle — no special cases to keep in
-sync. It also keeps a real counterplay: the post can be reached, struck or bypassed.
+**Drawing.** Pick *Wall* in the build bar (priced per tile). Click your land for point A,
+then B, C …: each piece is a straight line between two points, 8-connected (fronts spread
+to the four neighbours of a tile, so they can't slip between two diagonal wall tiles). The
+line follows the mouse in green (allowed) or red, with its length and price. Right-click,
+Enter or a second click on the last point builds it; Esc cancels. Up to 12 points and 80
+tiles per wall; every tile must be your land, not water, not a building. Crossing or
+touching an existing wall joins it (its tiles aren't built or paid again).
+
+**What a wall does.** A finished wall tile is hard to take. An attack must **hold** there
+(3 / 6 / 10 s at even odds; a bigger army is faster by the square root of its speed-up, but
+never below half) and pays **×loss + break troops** for it (×3 + 150, ×5 + 500, ×8 + 1,500).
+So fronts flow around the ends and through gaps, and a wall closed against the coast,
+mountains or another wall forces a break-through. Neutral land never has walls (expansion
+is never slowed). Measured (3× the defender's troops): an open border falls after 0.6 s,
+a Palisade after 2 s, a Fortress Wall after 5 s.
 
 | Situation | What happens |
 |---|---|
-| The border moves (you gain land) | the wall is drawn wherever your border now runs inside the zone |
-| The attacker pushes into the zone | every tile they take inside it costs the fortified price; the wall moves back with your border |
-| The post's tile is captured | the post is **destroyed**; the whole zone stops at once (the line "collapses") |
-| You lose land behind the line | land you no longer own is not fortified; the post works as long as you hold its tile |
-| Two fortified players meet | each wall protects only its own side: A attacking B pays B's fortification, B attacking A pays A's |
-| An ally or teammate borders it | no effect — friends can't attack each other. The wall is drawn only on borders with non-friendly players |
-| A new enemy reaches the zone | fortified at once (nothing to set up) |
-| Several posts overlap | a tile uses the **best** level covering it — no stacking |
-| Neutral land | expansion is never slowed; fortification is only against players |
-| Encirclement | unchanged (a fortified pocket can still be surrounded — the classic way to beat a line) |
-| Air and missiles | an air strike or missile on the post knocks it down a level; a strike on the zone **suppresses** it for 30 s (§3.17.11) |
+| An enemy takes a wall tile | that tile **breaks** (a gap); the rest stands. Retaking the tile doesn't rebuild it |
+| The last tile breaks | the wall is gone ("X broke through your wall") |
+| Your border moves past the wall | it stays where it was built: a second line inside your land |
+| You lose the land the wall stands on | those tiles break (taken, encircled or absorbed — any change of hands) |
+| Two walled players meet | each wall only matters to whoever attacks through it |
+| Allies, teammates | can't attack each other, so walls don't matter between them |
+| Under construction / upgrading | no effect until finished; an upgrade keeps the old level working |
+| Buildings | can't stand on a wall; a wall can't go through a building |
 
-| Level | Name | Zone radius | Attacker losses | Front speed | New |
-|---|---|---|---|---|---|
-| I | Border Fortifications | 12 km | ×1.5 | ×0.67 (1.5× slower) | — |
-| II | Fortified Border | 16 km | ×2 | ×0.5 | — (wider, stronger) |
-| III | Defense Line | 20 km | ×2.5 | ×0.4 | **Flak**: one anti-air shot every 10 s at enemy aircraft over the zone (local, aircraft only) |
+| Level | Name | Gold per tile | Build time | Hold (even odds) | Attacker loss per tile | Look |
+|---|---|---|---|---|---|---|
+| I | Palisade | 600 | 4 s + 0.1 s/tile | 3 s | ×3 + 150 | brown stakes |
+| II | Stone Wall | +1,500 | 8 s + 0.1 s/tile | 6 s | ×5 + 500 | grey blocks, towers at the ends |
+| III | Fortress Wall | +4,000 | 15 s + 0.2 s/tile | 10 s | ×8 + 1,500 | thick light stone with merlons, big towers |
 
-Lanchester (§3.6) makes ×2.5 losses mean the attacker needs about √2.5 ≈ 1.6× the troops to
-break through head-on — expensive, never impossible. OpenFront's post is ×5 / 3× slower in a
-30-tile circle; ours is gentler because our attacks are *directed* (a click can aim at the
-post itself) and because turtles already do well. The odds on the HUD include the
-fortification (`battle.ts`), like the tribe and traitor discounts.
+A whole wall upgrades at once (the price counts the tiles still standing). Prices escalate
+like buildings: +25% per 60 wall tile-levels you own (at most ×3). Cancelling refunds 50%.
+A 40-tile Palisade costs ~24k (about a Housing); upgrading it to a Fortress Wall ~250k more.
+The HUD odds include a wall where you point (the same loss factor as the simulation); the
+hover card names the wall and its effect. Level III's flak (aircraft) waits for Phase 2B.
+
+**Why it still feels like OpenFront:** walls are lines on the map you react to, not a
+base-building screen; there are no HP bars — a wall tile simply falls later and costs more;
+a big army still pushes through, just slower and dearer. **The trade-off:** a wall right on
+your border breaks at the first push — built a few tiles inside, it is a real second line.
+
+**Nations** (`ai/build.ts`): a neighbouring nation or human that isn't a friend and attacks
+them, or has at least 60% of their troops, is a threat. A nation draws one straight wall
+5 tiles behind a threatened stretch of its border that no wall guards yet, across the way
+in, up to 40 tiles, clipped to its own clear land (turtles up to 3 walls, expanders and
+opportunists 2, aggressors 1), valued per gold against Housing/Factory; it upgrades walls
+that still face a threat. Attacking, nations count walls on the shared front in their
+estimates and aim at an open stretch of it.
 
 #### 3.17.7 Airports, SAMs and air warfare
 
@@ -794,7 +811,7 @@ toggle shows all your coverage (and enemies' known SAM rings) at once.
   level III, faster reloads for nearby airports and silos once they exist).
 - **Port** — builds on the naval plan (§6.3: boats launch from *any* coast; a port makes
   them better). Level III's warship patrol waits for the naval follow-up (only if boats
-  prove fun); its coastal fortification works through the Border Defense zone system.
+  prove fun); its coastal fortification will be a coastal wall (§3.17.6).
 
 #### 3.17.10 The 21-tier matrix (proposed starting numbers)
 
@@ -811,10 +828,10 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B — not built yet) | 60 | — | — | same — a prime target | hall + three chimneys |
 | Port | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
-| Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (Border Defense II zone along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
-| Border Defense | I Border Fortifications | 30k (30k) | 5 s | own land in zone: attackers ×1.5 losses, ×0.67 speed | — | 12 | — | — | attack elsewhere, capture the post, airborne, strike, missile, encirclement | dashed barricade line on the border; small post |
-| Border Defense | II Fortified Border | +80k (110k) | 10 s | ×2 losses, ×0.5 speed | wider zone | 16 | — | — | same | solid double line with bunkers |
-| Border Defense | III Defense Line | +200k (310k) | 20 s | ×2.5 losses, ×0.4 speed | **Flak**: 1 shot / 10 s at aircraft over the zone | 20 | — | 10 (flak) | same; strike suppresses for 30 s | thick line with emplacements |
+| Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (a Stone Wall along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
+| Wall ✅ (D-024) | I Palisade | 600/tile | 4 s + 0.1 s/tile | wall tiles hold 3 s, ×3 + 150 losses | drawn A, B, C … anywhere on your land | — | ≤ 80 tiles | — | go around, break through (a gap), airborne, strike, missile | brown stakes |
+| Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
+| Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** (Phase 2B) | — | — | — | same | thick stone, merlons, big towers |
 | SAM | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
 | SAM | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles | 35 | 2 | 8 | same | twin launcher + radar |
 | SAM | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
@@ -822,7 +839,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
 | Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
 | Airport | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
-| Airport | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Defense Line flak, encirclement of the landing once it stalls | longer runway, hangars |
+| Airport | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
 | Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
 
 **Visual progression.** Every building is one original icon with three drawings of growing
@@ -856,7 +873,7 @@ land. Results: ROADMAP milestone 2.5.
 #### 3.17.11 Counters at a glance
 
 ```
-Border Defense ──strong vs──▶ ground attacks
+Walls ──────────strong vs──▶ ground attacks
       ▲                             │
   bypassed by                  bypassed by
 Airborne (Airport II) ◀──shot by── SAM ◀──struck by── Air strike (Airport III)
@@ -878,7 +895,7 @@ lobbies ~20–30% less. Rough gold earned so far (if nothing is spent): **~40k b
 
 | Milestone in a game | Proposed price | Affordable around | Notes |
 |---|---|---|---|
-| First L1 (Border Defense / Housing) | 30–40k | **1:00–1:30** | common, early |
+| First L1 (a wall / Housing) | 20–40k | **1:00–1:30** | common, early |
 | First L2 upgrade | +80–150k | **3:00–4:00** | a real choice against Mobilize/war chest |
 | First L3 upgrade (Metropolis) | 390k total | **6:00–7:00** | a major asset |
 | Airport III | 1.12M total | **9:00–10:00**, leaders only | only in longer games |
@@ -901,6 +918,10 @@ tune the game's pace (crush curve, win share) rather than make L3 cheaper.
   spacing ring green or red, plus zone/range rings later); click your land to place it,
   right-click or Esc to put it back (OpenFront's way). The first version (a *Build here*
   list in the right-click menu, key B) was dropped: the user didn't like it.
+- **Walls (2.6):** the bar's last tile is *Wall* (price per tile). Click points A, B, C …
+  on your land; the line follows the mouse, green or red, with length and price; right-click,
+  Enter or clicking the last point again builds it, Esc cancels. Click one of your walls for
+  its card (length, effect, Upgrade / Cancel).
 - **Building card** (click a building — small glass card next to it, closes with Esc or a
   click on the map):
 
@@ -923,8 +944,8 @@ tune the game's pace (crush curve, win share) rather than make L3 cheaper.
   confirm; Esc cancels. Commitment always uses the existing send % control.
 - **On the map:** flights as small aircraft/missile glyphs on a faint dotted route with
   an ETA; incoming hostile flights also get a coral chip like incoming attacks ("Airborne
-  assault from X · 0:09"); SAM shots as a short streak and a puff; fortified borders drawn
-  as level-patterned lines; suppressed zones briefly hatched.
+  assault from X · 0:09"); SAM shots as a short streak and a puff; walls drawn as thick lines
+  by level (stakes, blocks, merlons and towers); suppressed zones briefly hatched.
 - **Upgrade feedback:** the icon changes, pips fill, a soft pulse, the range ring grows
   once, a toast "Air Base ready — air strikes unlocked". No big animations.
 

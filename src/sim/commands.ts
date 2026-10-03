@@ -53,7 +53,16 @@ export type Command =
   /** Upgrade one of your buildings to its next level. */
   | { readonly type: "upgrade"; readonly buildingId: number }
   /** Stop a construction or upgrade; part of the price comes back. */
-  | { readonly type: "cancelBuild"; readonly buildingId: number };
+  | { readonly type: "cancelBuild"; readonly buildingId: number }
+  /**
+   * Build a level-I wall on your land through corner points A, B, C … (tiles; straight
+   * pieces between them — GAME_DESIGN.md §3.17.6, D-024).
+   */
+  | { readonly type: "buildWall"; readonly points: readonly number[] }
+  /** Upgrade one of your walls (all of it that still stands) to its next level. */
+  | { readonly type: "upgradeWall"; readonly wallId: number }
+  /** Stop a wall's construction or upgrade; part of the price comes back. */
+  | { readonly type: "cancelWall"; readonly wallId: number };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

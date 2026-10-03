@@ -1,22 +1,31 @@
 /**
- * How nations build (GAME_DESIGN.md §3.17): with the same `build` / `upgrade` commands and
- * prices as a player. Tribes never build.
+ * How nations build (GAME_DESIGN.md §3.17): with the same `build` / `upgrade` / `buildWall`
+ * / `upgradeWall` commands and prices as a player. Tribes never build.
  *
  * A nation weighs every option — a new Housing or Factory (while it has room: one
- * building per `tilesPerBuilding` tiles) and the next level of each building it owns — by
- * **value per gold**, and picks as its goal the best one it can reach within
- * `goalHorizonTicks` of income:
+ * building per `tilesPerBuilding` tiles), the next level of each building it owns, a new
+ * wall and the next level of each wall — by **value per gold**, and picks as its goal the
+ * best one it can reach within `goalHorizonTicks` of income:
  *  - capacity counts one per troop;
  *  - a growth bonus counts as that share of its peak growth for `growthHorizonTicks`;
  *  - gold per tick counts for `incomeHorizonTicks`, and a Mobilize discount as that share
- *    of the gold it earns over the same time.
+ *    of the gold it earns over the same time;
+ *  - a wall level counts as `wallWorth` × capacity × the personality's `fortifyWeight`,
+ *    in proportion to its length (a rough "defenders it is worth"), and only while it
+ *    faces a threat.
  * Escalating prices make the next new building dearer, so upgrades win in time. Gold is
  * also its war chest (§3.16, Mobilize right before attacking a player); while saving, it
  * keeps part of the goal's price out of the chest (`saving`, by personality), and builds
- * once it can pay — in peacetime, one construction at a time, never while losing a war at
- * home. New buildings go deep inside
- * its land (sampled tiles, scored by how far they are from the nearest tile it doesn't
- * own), where they are hardest to capture.
+ * once it can pay — one construction at a time, never while losing a war at home (except
+ * a wall on the threatened front). New buildings go deep inside its land (sampled tiles,
+ * scored by how far they are from the nearest tile it doesn't own), where they are
+ * hardest to capture.
+ *
+ * Walls (§3.17.6, D-024): a neighbouring nation or human that isn't a friend and is
+ * attacking the bot, or has at least `threatStrength` of its troops, is a threat. A new
+ * wall (up to `maxWalls`) is one straight line `wallDepth` tiles behind a threatened border
+ * tile that no wall guards yet, across the front (perpendicular to the way in), up to
+ * `wallLength` tiles and clipped to the bot's own clear land.
  */
 import type { Command } from "../commands.ts";
 import { isLand, tileAt, type GameMap } from "../map/gameMap.ts";
@@ -35,7 +44,18 @@ import {
   MAX_LEVEL,
   placementProblem,
 } from "../systems/buildings.ts";
-import type { Building, Player, World } from "../world.ts";
+import { distanceSq } from "../geometry.ts";
+import { areFriendly } from "../systems/diplomacy.ts";
+import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
+import {
+  isTribe,
+  NEUTRAL,
+  type Building,
+  type Player,
+  type PlayerId,
+  type Wall,
+  type World,
+} from "../world.ts";
 
 /** Max distance (tiles) the depth score looks for the edge of the bot's land. */
 const DEPTH_REACH = 24;
@@ -49,6 +69,12 @@ const DIRECTIONS: readonly (readonly [number, number])[] = [
   [-1, 1],
   [-1, -1],
 ];
+/** A wall guards front tiles within this many tiles beyond its depth. */
+const GUARD_SLACK = 3;
+/** Shorter walls aren't worth drawing. */
+const MIN_WALL_TILES = 8;
+/** Front tiles checked for a gap in the walls, at most (every few, nearest the threat first). */
+const FRONT_SAMPLES = 60;
 
 /** The building option a nation aims for: the best value per gold it can reach soon. */
 interface Goal {
@@ -56,6 +82,9 @@ interface Goal {
   /** An upgrade, or a new building (its site is chosen when it is actually built). */
   readonly upgrade: number | null;
   readonly newType: BuildingType | null;
+  /** A wall upgrade, or a new wall's corner points. */
+  readonly wallUpgrade: number | null;
+  readonly wallPoints: readonly number[] | null;
 }
 
 function buildingGoal(world: World, bot: Player): Goal | null {
@@ -65,22 +94,21 @@ function buildingGoal(world: World, bot: Player): Goal | null {
   const reach = bot.lastIncome * ai.goalHorizonTicks;
   const mine: Building[] = [];
   for (const b of world.buildings) if (b.owner === bot.id) mine.push(b);
-  if (mine.some((b) => b.readyTick >= 0)) return null; // one construction at a time
+  const walls: Wall[] = [];
+  for (const w of world.walls) if (w.owner === bot.id) walls.push(w);
+  // One construction at a time.
+  if (mine.some((b) => b.readyTick >= 0) || walls.some((w) => w.readyTick >= 0)) return null;
 
   let goal: Goal | null = null;
   let bestScore = 0;
-  const consider = (
-    price: number,
-    value: number,
-    upgrade: number | null,
-    newType: BuildingType | null,
-  ) => {
+  const consider = (price: number, value: number, option: Omit<Goal, "price">) => {
     const score = value / price;
     if (price <= reach && score > bestScore) {
-      goal = { price, upgrade, newType };
+      goal = { price, ...option };
       bestScore = score;
     }
   };
+  const none = { upgrade: null, newType: null, wallUpgrade: null, wallPoints: null };
   for (const b of mine) {
     if (b.level >= MAX_LEVEL) continue;
     const level = b.level + 1;
@@ -88,12 +116,32 @@ function buildingGoal(world: World, bot: Player): Goal | null {
     const value =
       worth(world, bot, levelRules(rules, b.type, level)) -
       worth(world, bot, levelRules(rules, b.type, b.level));
-    consider(price, value, b.id, null);
+    consider(price, value, { ...none, upgrade: b.id });
   }
   if (mine.length < Math.floor(bot.tiles / ai.tilesPerBuilding)) {
     for (const type of BUILDING_TYPES) {
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
-      consider(price, worth(world, bot, levelRules(rules, type, 1)), null, type);
+      consider(price, worth(world, bot, levelRules(rules, type, 1)), { ...none, newType: type });
+    }
+  }
+
+  const front = threatenedFront(world, bot);
+  if (front.length === 0) return goal;
+  const frontSet = new Set(front);
+  const owned = wallLevelsOwned(world.walls, bot.id);
+  for (const w of walls) {
+    if (w.level >= rules.walls.levels.length || !guards(world, w, frontSet)) continue;
+    const price = wallPrice(rules, w.level + 1, w.intact, owned);
+    const value =
+      wallWorth(world, bot, w.level + 1, w.intact) - wallWorth(world, bot, w.level, w.intact);
+    consider(price, value, { ...none, wallUpgrade: w.id });
+  }
+  if (walls.length < ai.maxWalls[bot.brain?.personality ?? "expander"]) {
+    const points = planWall(world, bot, front);
+    if (points) {
+      const tiles = points.tiles;
+      const price = wallPrice(rules, 1, tiles, owned);
+      consider(price, wallWorth(world, bot, 1, tiles), { ...none, wallPoints: points.points });
     }
   }
   return goal;
@@ -101,9 +149,12 @@ function buildingGoal(world: World, bot: Player): Goal | null {
 
 /** A nation's building decision for this think, or null: its goal, once it can pay for it. */
 export function decideBuild(world: World, bot: Player, incoming: number): Command | null {
-  if (incoming > bot.homeTroops * 0.5) return null; // losing a war at home: no investments
-  const goal = buildingGoal(world, bot);
+  const goal: Goal | null = buildingGoal(world, bot);
   if (!goal || bot.gold < goal.price) return null;
+  if (goal.wallPoints) return { type: "buildWall", points: goal.wallPoints };
+  // Losing a war at home: no investments — except a wall on the threatened front.
+  if (incoming > bot.homeTroops * 0.5) return null;
+  if (goal.wallUpgrade !== null) return { type: "upgradeWall", wallId: goal.wallUpgrade };
   if (goal.upgrade !== null) return { type: "upgrade", buildingId: goal.upgrade };
   const tile = buildSite(world, bot);
   return tile < 0 ? null : { type: "build", buildingType: goal.newType!, tile };
@@ -114,6 +165,175 @@ export function buildingReserve(world: World, bot: Player, personality: Personal
   const goal = buildingGoal(world, bot);
   if (!goal) return 0;
   return Math.min(bot.gold, goal.price * world.rules.ai.build.saving[personality]);
+}
+
+/**
+ * The bot's border tiles facing a threat (GAME_DESIGN.md §3.17.6), nearest first to the
+ * strongest threat's start; empty when nobody threatens it.
+ */
+function threatenedFront(world: World, bot: Player): number[] {
+  const { map } = world;
+  const width = map.width;
+  const o = world.owner;
+  const strength = (p: Player) => p.homeTroops + p.fieldTroops;
+  const minStrength = world.rules.ai.build.threatStrength * strength(bot);
+  const verdict = new Map<PlayerId, boolean>();
+  let main: Player | null = null;
+  const isThreat = (id: PlayerId): boolean => {
+    if (id === bot.id || id === NEUTRAL) return false;
+    const known = verdict.get(id);
+    if (known !== undefined) return known;
+    const p = world.players[id - 1]!;
+    const threat =
+      p.alive &&
+      !isTribe(p) &&
+      !areFriendly(world, bot.id, id) &&
+      (strength(p) >= minStrength ||
+        world.attacks.some((a) => a.attacker === id && a.target === bot.id));
+    verdict.set(id, threat);
+    if (threat && (!main || strength(p) > strength(main))) main = p;
+    return threat;
+  };
+  const front: number[] = [];
+  for (const tile of bot.border) {
+    const x = tile % width;
+    if (
+      (tile >= width && isThreat(o[tile - width]!)) ||
+      (tile + width < o.length && isThreat(o[tile + width]!)) ||
+      (x > 0 && isThreat(o[tile - 1]!)) ||
+      (x < width - 1 && isThreat(o[tile + 1]!))
+    ) {
+      front.push(tile);
+    }
+  }
+  const target = main as Player | null;
+  if (target && target.spawnTile >= 0 && o[target.spawnTile] === target.id) {
+    const spawn = target.spawnTile;
+    front.sort((a, b) => distanceSq(map, a, spawn) - distanceSq(map, b, spawn) || a - b);
+  }
+  return front;
+}
+
+/** True when one of the bot's walls stands within reach of `tile` (it is guarded). */
+function guarded(world: World, bot: Player, tile: number): boolean {
+  const { map } = world;
+  const reach = world.rules.ai.build.wallDepth + GUARD_SLACK;
+  const x0 = tile % map.width;
+  const y0 = Math.floor(tile / map.width);
+  for (let y = Math.max(0, y0 - reach); y <= Math.min(map.height - 1, y0 + reach); y++) {
+    for (let x = Math.max(0, x0 - reach); x <= Math.min(map.width - 1, x0 + reach); x++) {
+      const id = world.wallAt[y * map.width + x]!;
+      if (id >= 0 && world.walls.some((w) => w.id === id && w.owner === bot.id)) return true;
+    }
+  }
+  return false;
+}
+
+/** True when the wall stands near a threatened front tile (checks every few wall tiles). */
+function guards(world: World, wall: Wall, front: ReadonlySet<number>): boolean {
+  const { map } = world;
+  const reach = world.rules.ai.build.wallDepth + GUARD_SLACK;
+  for (let k = 0; k < wall.tiles.length; k += 4) {
+    const tile = wall.tiles[k]!;
+    if (world.wallAt[tile] !== wall.id) continue;
+    const x0 = tile % map.width;
+    const y0 = Math.floor(tile / map.width);
+    for (let y = Math.max(0, y0 - reach); y <= Math.min(map.height - 1, y0 + reach); y++) {
+      for (let x = Math.max(0, x0 - reach); x <= Math.min(map.width - 1, x0 + reach); x++) {
+        if (front.has(y * map.width + x)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** What a wall level of `tiles` tiles is worth to this bot, in troops (see the header). */
+function wallWorth(world: World, bot: Player, level: number, tiles: number): number {
+  if (level < 1) return 0;
+  const ai = world.rules.ai.build;
+  const weight = ai.fortifyWeight[bot.brain?.personality ?? "expander"];
+  return ai.wallWorth[level - 1]! * bot.capacity * weight * Math.min(1, tiles / ai.wallLength);
+}
+
+/**
+ * A straight wall across the first unguarded threatened front tile: `wallDepth` tiles
+ * inside, perpendicular to the way in, as long as the bot's clear land allows (up to
+ * `wallLength`). Null if none fits.
+ */
+function planWall(
+  world: World,
+  bot: Player,
+  front: readonly number[],
+): { points: number[]; tiles: number } | null {
+  const { map } = world;
+  const ai = world.rules.ai.build;
+  const step = Math.max(1, Math.floor(front.length / FRONT_SAMPLES));
+  let target = -1;
+  for (let k = 0; k < front.length && target < 0; k += step) {
+    if (!guarded(world, bot, front[k]!)) target = front[k]!;
+  }
+  if (target < 0) return null;
+
+  let sumX = 0;
+  let sumY = 0;
+  for (const tile of bot.border) {
+    sumX += tile % map.width;
+    sumY += Math.floor(tile / map.width);
+  }
+  const count = Math.max(1, bot.border.size);
+  const fx = target % map.width;
+  const fy = Math.floor(target / map.width);
+  let nx = sumX / count - fx;
+  let ny = sumY / count - fy;
+  const length = Math.sqrt(nx * nx + ny * ny);
+  if (length < 1) return null;
+  nx /= length;
+  ny /= length;
+  const cx = fx + nx * ai.wallDepth;
+  const cy = fy + ny * ai.wallDepth;
+  const clear = (x: number, y: number): boolean => {
+    if (!inBounds(map, x, y)) return false;
+    const tile = tileAt(map, x, y);
+    return (
+      world.owner[tile] === bot.id &&
+      isLand(map, tile) &&
+      world.buildingAt[tile]! < 0 &&
+      world.wallAt[tile]! < 0
+    );
+  };
+  if (!clear(Math.round(cx), Math.round(cy))) return null;
+  // Walk both ways along the wall line (perpendicular to n) while the land is clear.
+  const half = Math.floor(ai.wallLength / 2);
+  const end = (sign: number): [number, number] => {
+    let last: [number, number] = [Math.round(cx), Math.round(cy)];
+    for (let s = 1; s <= half; s++) {
+      const x = Math.round(cx - ny * s * sign);
+      const y = Math.round(cy + nx * s * sign);
+      if (!clear(x, y)) break;
+      last = [x, y];
+    }
+    return last;
+  };
+  let a = end(-1);
+  let b = end(1);
+  // The straight line between the ends may still clip something: pull them in until it fits.
+  for (let tries = 0; tries < 8; tries++) {
+    const points = [tileAt(map, a[0], a[1]), tileAt(map, b[0], b[1])];
+    const plan = wallPlan(
+      world.rules,
+      map,
+      world.owner,
+      (t) => world.buildingAt[t]! >= 0,
+      (t) => world.wallAt[t]! >= 0,
+      bot.id,
+      points,
+    );
+    if (plan.tiles.length < MIN_WALL_TILES) return null;
+    if (!plan.problem) return { points, tiles: plan.tiles.length };
+    a = [Math.round((a[0] * 3 + cx) / 4), Math.round((a[1] * 3 + cy) / 4)];
+    b = [Math.round((b[0] * 3 + cx) / 4), Math.round((b[1] * 3 + cy) / 4)];
+  }
+  return null;
 }
 
 /** What a level's effects are worth to this bot, in troop-equivalents. */
@@ -161,6 +381,7 @@ function buildSite(world: World, bot: Player): number {
     if (!inBounds(map, x, y)) continue;
     const tile = tileAt(map, x, y);
     if (world.owner[tile] !== bot.id || !isLand(map, tile)) continue;
+    if (world.wallAt[tile]! >= 0) continue;
     if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile)) continue;
     const depth = depthOf(world, bot, x, y);
     if (depth > bestDepth) {

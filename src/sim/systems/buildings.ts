@@ -125,6 +125,7 @@ export function applyBuild(
   if (!isBuildingType(type)) return "unknown building";
   const problem = placementProblem(rules, world.map, world.owner, world.buildings, player.id, tile);
   if (problem) return PLACEMENT_REASON[problem];
+  if (world.wallAt[tile]! >= 0) return "there is a wall there";
   const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, player.id, type));
   if (player.gold < price) return "not enough gold";
 

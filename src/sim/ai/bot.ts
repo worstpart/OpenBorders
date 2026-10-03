@@ -32,6 +32,10 @@
  * Gold (GAME_DESIGN.md §3.16): nations save gold as a war chest and mobilize it right
  * before attacking a player; they help teammates and human allies in need (troops to one
  * losing a war, spare gold to one who can use it). Tribes only earn.
+ *
+ * Border Defense (GAME_DESIGN.md §3.17.6): nations count a walled front's extra losses in
+ * their estimates and aim around walls — at an open stretch of the shared border. Building
+ * walls is in build.ts.
  */
 import {
   attackLossFactor,
@@ -51,6 +55,7 @@ import {
   isTraitor,
 } from "../systems/diplomacy.ts";
 import { bordersTarget } from "../systems/attacks.ts";
+import { wallLevel } from "../systems/walls.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
@@ -221,6 +226,17 @@ interface Surroundings {
   /** Average position of the bot's border tiles (≈ the middle of its territory). */
   centerX: number;
   centerY: number;
+  /** Only when some wall stands: each neighbour's walls along the front. */
+  fortFront: Map<PlayerId, FortFront> | null;
+}
+
+/** A neighbour's side of the shared border, as Border Defense fortifies it. */
+interface FortFront {
+  /** Front tiles seen (with repeats) and the sum of their loss multipliers. */
+  total: number;
+  lossSum: number;
+  /** An unfortified front tile, or -1. */
+  open: number;
 }
 
 function decide(
@@ -310,6 +326,7 @@ function survey(world: World, bot: Player): Surroundings {
   const o = world.owner;
   let neutralFront = -1;
   const neighborFront = new Map<PlayerId, number>();
+  const fortFront = world.walls.length > 0 ? new Map<PlayerId, FortFront>() : null;
   let sumX = 0;
   let sumY = 0;
   let count = 0;
@@ -318,8 +335,16 @@ function survey(world: World, bot: Player): Surroundings {
     if (owner === bot.id) return;
     if (owner === NEUTRAL) {
       if (neutralFront < 0 && isLand(world.map, tile)) neutralFront = tile;
-    } else if (!neighborFront.has(owner)) {
-      neighborFront.set(owner, tile);
+    } else {
+      if (!neighborFront.has(owner)) neighborFront.set(owner, tile);
+      if (fortFront) {
+        let front = fortFront.get(owner);
+        if (!front) fortFront.set(owner, (front = { total: 0, lossSum: 0, open: -1 }));
+        const level = world.fortLevel[tile]!;
+        front.total++;
+        front.lossSum += level === 0 ? 1 : wallLevel(world.rules, level).loss;
+        if (level === 0 && front.open < 0) front.open = tile;
+      }
     }
   };
   for (const tile of bot.border) {
@@ -337,7 +362,14 @@ function survey(world: World, bot: Player): Surroundings {
     neighborFront,
     centerX: count > 0 ? sumX / count : 0,
     centerY: count > 0 ? sumY / count : 0,
+    fortFront,
   };
+}
+
+/** Average loss multiplier along a neighbour's fortified front (1 = no walls). */
+function frontLoss(around: Surroundings, id: PlayerId): number {
+  const front = around.fortFront?.get(id);
+  return front && front.total > 0 ? front.lossSum / front.total : 1;
 }
 
 /**
@@ -433,7 +465,8 @@ function reinforce(
 ): Command | null {
   const target = getPlayer(world, war.target)!;
   if (!target.alive) return null;
-  const missing = armyToTakeAll(world, bot, target, style) - war.troops;
+  const missing =
+    armyToTakeAll(world, bot, target, style, frontLoss(around, target.id)) - war.troops;
   if (missing <= 0 || missing > style.attackMaxShare * bot.homeTroops) return null;
   const focus =
     world.owner[war.focusTile] === target.id ? war.focusTile : around.neighborFront.get(target.id);
@@ -447,25 +480,31 @@ function reinforce(
  * costs at least half the base loss, a bit more on rough terrain), with a margin for
  * their regrowth during the attack.
  */
-function armyToTakeAll(world: World, bot: Player, target: Player, style: PersonalityRules): number {
+function armyToTakeAll(
+  world: World,
+  bot: Player,
+  target: Player,
+  style: PersonalityRules,
+  fortLoss = 1,
+): number {
   return Math.max(
     style.attackEdge * Math.max(1, target.homeTroops),
-    tileCostOfAll(world, bot, target),
+    tileCostOfAll(world, bot, target, fortLoss),
   );
 }
 
-function tileCostOfAll(world: World, bot: Player, target: Player): number {
+function tileCostOfAll(world: World, bot: Player, target: Player, fortLoss = 1): number {
   return tileCostOfAllTiles(
     world.rules,
     target.tiles,
     target.homeTroops,
-    lossFactor(world, bot, target),
+    lossFactor(world, bot, target, fortLoss),
   );
 }
 
-/** Tribes' land is cheaper to take for everyone else (D-017). */
-function lossFactor(world: World, bot: Player, target: Player): number {
-  return attackLossFactor(world.rules, isTribe(bot), isTribe(target));
+/** Tribes' land is cheaper to take for everyone else (D-017); walls make it dearer (§3.17.6). */
+function lossFactor(world: World, bot: Player, target: Player, fortLoss = 1): number {
+  return attackLossFactor(world.rules, isTribe(bot), isTribe(target), false, fortLoss);
 }
 
 function chooseTarget(
@@ -493,14 +532,15 @@ function chooseTarget(
     const alliance = getAlliance(world, bot.id, id);
     if (alliance && !willBetray(bot, alliance, id, style, skill)) continue;
     const defenders = Math.max(1, target.homeTroops);
+    const walls = frontLoss(around, id);
     // Send enough to take everything if we can afford it, otherwise all we're willing to.
     const army = Math.min(
-      armyToTakeAll(world, bot, target, style),
+      armyToTakeAll(world, bot, target, style, walls),
       style.attackMaxShare * bot.homeTroops,
     );
     const gain = Math.min(
-      expectedLandShare(world.rules, army, defenders, lossFactor(world, bot, target)),
-      army / tileCostOfAll(world, bot, target),
+      expectedLandShare(world.rules, army, defenders, lossFactor(world, bot, target, walls)),
+      army / tileCostOfAll(world, bot, target, walls),
     );
     if (gain < minGain) continue;
     if (alliance && gain < skill.betrayMinGain) continue;
@@ -526,13 +566,27 @@ function chooseTarget(
       const heart = target.spawnTile >= 0 && world.owner[target.spawnTile] === id;
       best = {
         target,
-        focus: heart ? target.spawnTile : frontTile,
+        focus:
+          walls > 1
+            ? aroundWalls(world, around, id, frontTile)
+            : heart
+              ? target.spawnTile
+              : frontTile,
         share: army / bot.homeTroops,
         betray: alliance !== undefined,
       };
     }
   }
   return best;
+}
+
+/**
+ * Where to aim at a neighbour whose front is (partly) walled (GAME_DESIGN.md §3.17.6): an
+ * open stretch of the shared border if there is one (else straight at the wall).
+ */
+function aroundWalls(world: World, around: Surroundings, id: PlayerId, frontTile: number): number {
+  const open = around.fortFront?.get(id)?.open ?? -1;
+  return open >= 0 ? open : frontTile;
 }
 
 /**

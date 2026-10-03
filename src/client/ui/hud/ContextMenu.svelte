@@ -42,7 +42,7 @@
     menu
       ? ATTACK_PRESETS.map((percent) => ({
           percent,
-          preview: previewClick(ui.previewContext, menu.owner, percent),
+          preview: previewClick(ui.previewContext, menu.owner, percent, menu.tile),
         }))
       : [],
   );

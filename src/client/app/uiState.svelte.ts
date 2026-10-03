@@ -8,10 +8,11 @@ import type {
   AllianceSnapshot,
   AttackSnapshot,
   BuildingSnapshot,
+  WallSnapshot,
   PlayerSnapshot,
 } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
-import type { BuildContext } from "./buildings.ts";
+import type { BuildContext, Placeable } from "./buildings.ts";
 import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
 import type { DonationContext } from "./economy.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
@@ -19,7 +20,7 @@ import type { Phase, PlayerId } from "../../sim/world.ts";
 import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
-import type { BuildingType, Difficulty } from "../../sim/rules.ts";
+import type { Difficulty } from "../../sim/rules.ts";
 import { DEFAULT_DIFFICULTY, DEFAULT_NATIONS, DEFAULT_TRIBES, type MapSize } from "./setup.ts";
 import { DEFAULT_TEAMS, type GameMode } from "./teams.ts";
 import type { Toast } from "./toasts.ts";
@@ -41,8 +42,8 @@ export type Menu =
       readonly owner: PlayerId;
     }
   | {
-      /** A building's card (GAME_DESIGN.md §3.17): opened by clicking its icon. */
-      readonly kind: "building";
+      /** A building's card (GAME_DESIGN.md §3.17), or a wall's: opened by clicking it. */
+      readonly kind: "building" | "wall";
       readonly x: number;
       readonly y: number;
       readonly id: number;
@@ -82,14 +83,19 @@ class UiState {
   alliances = $state.raw<readonly AllianceSnapshot[]>([]);
   allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
   buildings = $state.raw<readonly BuildingSnapshot[]>([]);
+  walls = $state.raw<readonly WallSnapshot[]>([]);
   /** The building picked up from the build bar, following the mouse until placed. */
-  placing = $state<BuildingType | null>(null);
+  placing = $state<Placeable | null>(null);
+  /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */
+  wallPoints = $state.raw<readonly number[]>([]);
   /**
    * The map and the client's copy of tile ownership (not reactive: the HUD reads them when
    * something reactive — the tick, the menu — changes).
    */
   map: GameMap | null = null;
   owner: Uint16Array = new Uint16Array(0);
+  /** The client's copy of the Border Defense level per tile (GAME_DESIGN.md §3.17.6). */
+  fort: Uint8Array = new Uint8Array(0);
   /** Tick of the local player's last alliance request to each player (for the cooldown). */
   myRequests = $state.raw<ReadonlyMap<PlayerId, number>>(new Map());
   /** Tick of the local player's last donation to each friend, by donationKeyOf(to, resource). */
@@ -126,7 +132,9 @@ class UiState {
     this.alliances = [];
     this.allianceRequests = [];
     this.buildings = [];
+    this.walls = [];
     this.placing = null;
+    this.wallPoints = [];
     this.myRequests = new Map();
     this.myDonations = new Map();
     this.dismissedRenewals = new Set();
@@ -159,6 +167,7 @@ class UiState {
       players: this.players,
       allies: this.allies,
       teammates: this.teammates,
+      fort: this.fort,
     };
   }
 
@@ -188,6 +197,7 @@ class UiState {
       map: this.map,
       owner: this.owner,
       buildings: this.buildings,
+      walls: this.walls,
       me: this.me,
       tick: this.tick,
       playing: this.phase === "playing",

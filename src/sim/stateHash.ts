@@ -96,6 +96,17 @@ export function hashWorld(world: World): number {
       .addInt(b.readyTick)
       .addInt(b.paid);
   }
+  h.addInt(world.nextWallId).addInt(world.walls.length).addInt(world.wallHash);
+  for (const w of world.walls) {
+    h.addInt(w.id)
+      .addInt(w.owner)
+      .addInt(w.intact)
+      .addInt(w.level)
+      .addInt(w.targetLevel)
+      .addInt(w.startTick)
+      .addInt(w.readyTick)
+      .addInt(w.paid);
+  }
   for (const word of world.rng.getState()) h.addInt(word);
   return h.digest();
 }

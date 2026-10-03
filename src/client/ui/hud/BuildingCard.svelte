@@ -5,15 +5,16 @@
    * level's price and gains (Upgrade). Small, next to the building, closes with Esc or a
    * click elsewhere.
    */
-  import { buildingCard } from "../../app/buildings.ts";
+  import { buildingCard, wallCard } from "../../app/buildings.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { formatTroops } from "../../format.ts";
   import BuildingIcon from "./BuildingIcon.svelte";
 
   interface Props {
-    onUpgrade: (buildingId: number) => void;
-    onCancel: (buildingId: number) => void;
+    /** `wall`: the card is a wall's (GAME_DESIGN.md §3.17.6). */
+    onUpgrade: (id: number, wall: boolean) => void;
+    onCancel: (id: number, wall: boolean) => void;
     onClose: () => void;
   }
 
@@ -21,15 +22,27 @@
 
   const WIDTH = 270;
   const REFUND = Math.round(DEFAULT_RULES.buildings.cancelRefund * 100);
-  const TYPE_LABEL = { housing: "Housing", factory: "Factory" } as const;
+  const TYPE_LABEL = {
+    housing: "Housing",
+    factory: "Factory",
+    wall: "Wall",
+  } as const;
   let cardElement = $state<HTMLElement | null>(null);
   let height = $state(0);
   let viewportWidth = $state(1280);
   let viewportHeight = $state(800);
 
-  const menu = $derived(ui.menu?.kind === "building" ? ui.menu : null);
-  const snapshot = $derived(menu ? ui.buildings.find((b) => b.id === menu.id) : undefined);
-  const card = $derived(snapshot ? buildingCard(ui.buildContext, snapshot) : null);
+  const menu = $derived(ui.menu?.kind === "building" || ui.menu?.kind === "wall" ? ui.menu : null);
+  const isWall = $derived(menu?.kind === "wall");
+  const card = $derived.by(() => {
+    if (!menu) return null;
+    if (menu.kind === "wall") {
+      const wall = ui.walls.find((w) => w.id === menu.id);
+      return wall ? wallCard(ui.buildContext, wall) : null;
+    }
+    const building = ui.buildings.find((b) => b.id === menu.id);
+    return building ? buildingCard(ui.buildContext, building) : null;
+  });
   const left = $derived(menu ? Math.max(8, Math.min(menu.x + 16, viewportWidth - WIDTH - 8)) : 0);
   const top = $derived(menu ? Math.max(8, Math.min(menu.y - 24, viewportHeight - height - 8)) : 0);
 
@@ -100,7 +113,7 @@
         </div>
         <div class="bar"><div class="fill" style:width="{card.work.progress * 100}%"></div></div>
         {#if card.mine}
-          <button type="button" class="quiet" onclick={() => onCancel(card.id)}>
+          <button type="button" class="quiet" onclick={() => onCancel(card.id, isWall)}>
             Cancel <span class="muted">refunds {REFUND}%</span>
           </button>
         {/if}
@@ -113,7 +126,7 @@
         type="button"
         class="upgrade"
         disabled={!card.upgrade.affordable}
-        onclick={() => onUpgrade(card.id)}
+        onclick={() => onUpgrade(card.id, isWall)}
       >
         <span>Upgrade to {card.upgrade.name}</span>
         <span class="price" class:short={!card.upgrade.affordable}

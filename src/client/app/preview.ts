@@ -12,12 +12,19 @@ import {
 } from "../../sim/battle.ts";
 import type { PlayerSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
+import { wallLevel } from "../../sim/systems/walls.ts";
 import type { Phase, PlayerId } from "../../sim/world.ts";
 import { troopsToSend } from "./attackPercent.ts";
 
 export type ClickPreview =
   | { readonly kind: "expand"; readonly army: number; readonly tiles: number }
-  | { readonly kind: "attack"; readonly army: number; readonly outlook: BattleOutlook }
+  | {
+      readonly kind: "attack";
+      readonly army: number;
+      readonly outlook: BattleOutlook;
+      /** Wall level on the land clicked (0 = none, GAME_DESIGN.md §3.17.6). */
+      readonly fortLevel: number;
+    }
   | { readonly kind: "own" }
   | { readonly kind: "notReachable" }
   /** Allies can't attack each other (GAME_DESIGN.md §3.14). */
@@ -39,6 +46,8 @@ export interface PreviewContext {
   readonly allies?: ReadonlySet<PlayerId>;
   /** The local player's teammates (empty when left out). */
   readonly teammates?: ReadonlySet<PlayerId>;
+  /** Border Defense level per tile (no walls when left out). */
+  readonly fort?: Uint8Array;
 }
 
 /** Seconds of spawn protection left (0 once attacks on players are allowed). */
@@ -48,8 +57,17 @@ export function protectionSecondsLeft(ctx: PreviewContext): number {
   return Math.max(0, ((end - ctx.tick) * ctx.rules.tickMs) / 1000);
 }
 
-/** The preview of clicking land owned by `target` (0 = neutral) with `percent`% of home troops. */
-export function previewClick(ctx: PreviewContext, target: PlayerId, percent: number): ClickPreview {
+/**
+ * The preview of clicking land owned by `target` (0 = neutral) with `percent`% of home
+ * troops. The attack aims at the clicked `tile`, so a wall there counts in the odds — the
+ * same loss factor the simulation charges for that tile (GAME_DESIGN.md §3.17.6).
+ */
+export function previewClick(
+  ctx: PreviewContext,
+  target: PlayerId,
+  percent: number,
+  tile = -1,
+): ClickPreview {
   const me = ctx.me;
   if (ctx.phase !== "playing" || !me?.alive) return { kind: "inactive" };
   if (target === me.id) return { kind: "own" };
@@ -70,6 +88,7 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
       tiles: Math.floor(army / ctx.rules.expansion.costPerTile.plains),
     };
   }
+  const fortLevel = tile >= 0 ? (ctx.fort?.[tile] ?? 0) : 0;
   return {
     kind: "attack",
     army,
@@ -78,26 +97,29 @@ export function previewClick(ctx: PreviewContext, target: PlayerId, percent: num
       army,
       defender.homeTroops,
       defender.tiles,
-      lossFactorOf(ctx.rules, me, defender, ctx.tick),
+      lossFactorOf(ctx.rules, me, defender, ctx.tick, fortLevel),
     ),
+    fortLevel,
   };
 }
 
 /**
- * Taking a tribe's land is cheaper for anyone but a tribe (D-017), and a traitor's for
- * everyone (GAME_DESIGN.md §3.14).
+ * Taking a tribe's land is cheaper for anyone but a tribe (D-017), a traitor's for
+ * everyone (GAME_DESIGN.md §3.14), and a wall dearer (`fortLevel`, §3.17.6).
  */
 export function lossFactorOf(
   rules: GameRules,
   attacker: PlayerSnapshot | undefined,
   defender: PlayerSnapshot | undefined,
   tick: number,
+  fortLevel = 0,
 ): number {
   return attackLossFactor(
     rules,
     attacker?.tier === "tribe",
     defender?.tier === "tribe",
     (defender?.traitorUntilTick ?? -1) > tick,
+    fortLevel > 0 ? wallLevel(rules, fortLevel).loss : 1,
   );
 }
 

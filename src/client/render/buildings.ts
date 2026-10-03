@@ -9,11 +9,19 @@
  * snapped to the tile under it, with a ring showing the spacing: green where it may go,
  * red where it may not.
  *
+ * Walls (GAME_DESIGN.md §3.17.6, D-024) are drawn here too, under the icons: each run of
+ * standing tiles as a thick line through the tile centres — a palisade of stakes (I), a
+ * stone wall with blocks (II), a fortress wall with merlons (III) — with towers at the
+ * corner points. A wall being built is a dashed outline; the wall being drawn shows its
+ * points A, B, C …, the line to the mouse, its length and price, green or red.
+ *
  * Drawn with Canvas2D on the label overlay (ARCHITECTURE.md §5.7 — instanced WebGL icons
  * can replace this if lobbies ever show thousands of buildings).
  */
-import type { BuildingSnapshot } from "../../sim/frame.ts";
+import type { BuildingSnapshot, WallSnapshot } from "../../sim/frame.ts";
 import type { BuildingType } from "../../sim/rules.ts";
+import type { WallPreview } from "../app/buildings.ts";
+import { formatTroops } from "../format.ts";
 import { iconPath } from "../icons.ts";
 import type { MapView } from "./renderer.ts";
 
@@ -35,6 +43,10 @@ export interface BuildingDrawInput {
   readonly colorOf: (id: number) => string;
   /** The building whose card is open (highlighted). */
   readonly selectedId: number | null;
+  /** Every wall, the one whose card is open, and the wall being drawn (if any). */
+  readonly walls: readonly WallSnapshot[];
+  readonly selectedWall: number | null;
+  readonly wallPreview: WallPreview | null;
   /** The building being placed, if any. */
   readonly ghost: BuildGhost | null;
 }
@@ -77,6 +89,13 @@ export class BuildingLayer {
     });
     const size = iconSize(view.zoom);
     const small = view.zoom * ICON_PX_PER_ZOOM < ICON_MIN_PX;
+
+    const width = halfW * 2;
+    const height = halfH * 2;
+    for (const wall of input.walls) {
+      this.wall(wall, toScreen, view.zoom, input, width, height);
+    }
+    if (input.wallPreview) this.wallDraft(input.wallPreview, toScreen, view.zoom);
 
     for (const b of input.buildings) {
       const mine = b.owner === input.localPlayerId;
@@ -124,6 +143,179 @@ export class BuildingLayer {
       });
       ctx.restore();
     }
+  }
+
+  /** One wall: its runs of standing tiles, by level (see the header). */
+  private wall(
+    wall: WallSnapshot,
+    toScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+    input: BuildingDrawInput,
+    width: number,
+    height: number,
+  ): void {
+    const runs = wallRuns(wall.tiles, input.width);
+    if (runs.length === 0) return;
+    const points = runs.map((run) => run.map(toScreen));
+    // Skip walls entirely off screen.
+    let visible = false;
+    for (const run of points) {
+      for (const p of run) {
+        if (p.x > -40 && p.y > -40 && p.x < width + 40 && p.y < height + 40) visible = true;
+      }
+    }
+    if (!visible) return;
+    const ctx = this.context;
+    const level = wall.level;
+    const owner = input.colorOf(wall.owner);
+    const selected = wall.id === input.selectedWall;
+    const w = Math.min(Math.max(zoom * 0.7, 3 + level * 1.5), 6 + level * 6);
+    const trace = (run: { x: number; y: number }[]) => {
+      ctx.beginPath();
+      ctx.moveTo(run[0]!.x, run[0]!.y);
+      for (const p of run.slice(1)) ctx.lineTo(p.x, p.y);
+      if (run.length === 1) ctx.lineTo(run[0]!.x + 0.01, run[0]!.y);
+    };
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const run of points) {
+      if (level === 0) {
+        // Under construction: a dashed outline in the owner's colour.
+        trace(run);
+        ctx.setLineDash([w * 0.9, w * 0.7]);
+        ctx.lineWidth = Math.max(2, w * 0.6);
+        ctx.strokeStyle = "rgba(15, 18, 24, 0.55)";
+        ctx.stroke();
+        ctx.lineWidth = Math.max(1, w * 0.3);
+        ctx.strokeStyle = owner;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      // Shadow/outline, then the owner's colour as a thin base, then the stone/wood.
+      trace(run);
+      ctx.lineWidth = w + 3 + (selected ? 3 : 0);
+      ctx.strokeStyle = selected ? "#ffffff" : "rgba(12, 14, 20, 0.85)";
+      ctx.stroke();
+      ctx.lineWidth = w + 1;
+      ctx.strokeStyle = owner;
+      ctx.stroke();
+      ctx.lineWidth = w - 1;
+      ctx.strokeStyle = level === 1 ? "#8a5a2b" : level === 2 ? "#a9a49a" : "#d9d3c4";
+      ctx.stroke();
+      // Texture: stakes (I), block joints (II), merlons (III).
+      ctx.lineCap = "butt";
+      if (level === 1) {
+        ctx.setLineDash([Math.max(2, w * 0.35), Math.max(1.5, w * 0.25)]);
+        ctx.lineWidth = Math.max(1, w * 0.45);
+        ctx.strokeStyle = "#c8945a";
+      } else if (level === 2) {
+        ctx.setLineDash([Math.max(3, w * 0.9), Math.max(1, w * 0.18)]);
+        ctx.lineWidth = Math.max(1, w * 0.55);
+        ctx.strokeStyle = "#cfcabd";
+      } else {
+        ctx.setLineDash([Math.max(2.5, w * 0.55), Math.max(2.5, w * 0.55)]);
+        ctx.lineWidth = w + 1;
+        ctx.strokeStyle = "#f2ede0";
+      }
+      trace(run);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineCap = "round";
+    }
+    // Towers at the ends of each run (II and III).
+    if (level >= 2) {
+      for (const run of points) {
+        for (const p of [run[0]!, run.at(-1)!]) {
+          const r = w * (level === 3 ? 0.95 : 0.75);
+          ctx.fillStyle = "rgba(12, 14, 20, 0.85)";
+          ctx.fillRect(p.x - r - 1.5, p.y - r - 1.5, 2 * r + 3, 2 * r + 3);
+          ctx.fillStyle = level === 3 ? "#f2ede0" : "#cfcabd";
+          ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
+          ctx.fillStyle = owner;
+          ctx.fillRect(p.x - r * 0.45, p.y - r * 0.45, r * 0.9, r * 0.9);
+        }
+      }
+    }
+    // Construction / upgrade progress next to the wall's middle.
+    if (wall.readyTick >= 0) {
+      const progress = Math.min(
+        1,
+        Math.max(0, (input.tick - wall.startTick) / Math.max(1, wall.readyTick - wall.startTick)),
+      );
+      const longest = points.reduce((a, b) => (b.length > a.length ? b : a));
+      const mid = longest[Math.floor(longest.length / 2)]!;
+      ctx.beginPath();
+      ctx.arc(mid.x, mid.y - w - 8, 6, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(14, 18, 26, 0.85)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(mid.x, mid.y - w - 8, 6, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = GOLD;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** The wall being drawn: the line through its points and the mouse, labelled A, B, C … */
+  private wallDraft(
+    draft: WallPreview,
+    toScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+  ): void {
+    const ctx = this.context;
+    const ok = draft.problem === null;
+    const color = ok ? "rgba(140, 240, 190, 0.95)" : "rgba(255, 120, 100, 0.95)";
+    const w = Math.max(4, Math.min(zoom * 0.7, 14));
+    ctx.save();
+    // The tiles it would cover, then the straight pieces between the points.
+    ctx.fillStyle = ok ? "rgba(140, 240, 190, 0.35)" : "rgba(255, 120, 100, 0.35)";
+    for (const t of draft.tiles) {
+      const p = toScreen(t);
+      const s = Math.max(2, zoom);
+      ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+    }
+    const pts = draft.points.map(toScreen);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.setLineDash([w, w * 0.6]);
+    ctx.lineWidth = w * 0.5;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(pts[0]!.x, pts[0]!.y);
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Corner points with their letters (the last one follows the mouse).
+    ctx.font = "600 11px Inter, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    pts.forEach((p, k) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(14, 18, 26, 0.9)";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String.fromCharCode(65 + k), p.x, p.y + 0.5);
+    });
+    // Length and price by the mouse.
+    if (draft.newTiles > 0 && pts.length >= 2) {
+      const last = pts.at(-1)!;
+      const text = `${draft.newTiles} tiles · ${formatTroops(draft.price)}`;
+      ctx.font = "600 12px Inter, system-ui, sans-serif";
+      const tw = ctx.measureText(text).width;
+      ctx.fillStyle = "rgba(14, 18, 26, 0.85)";
+      ctx.fillRect(last.x + 12, last.y + 10, tw + 12, 20);
+      ctx.fillStyle = ok ? "#ffffff" : "#ff9a8a";
+      ctx.textAlign = "left";
+      ctx.fillText(text, last.x + 18, last.y + 20.5);
+    }
+    ctx.restore();
   }
 
   private path(type: BuildingType, level: number): Path2D {
@@ -220,4 +412,24 @@ export class BuildingLayer {
       ctx.restore();
     }
   }
+}
+
+/** Splits a wall's standing tiles (in build order) into runs of 8-connected neighbours. */
+export function wallRuns(tiles: readonly number[], width: number): number[][] {
+  const runs: number[][] = [];
+  let run: number[] = [];
+  for (const t of tiles) {
+    const prev = run.at(-1);
+    if (
+      prev !== undefined &&
+      (Math.abs((t % width) - (prev % width)) > 1 ||
+        Math.abs(Math.floor(t / width) - Math.floor(prev / width)) > 1)
+    ) {
+      runs.push(run);
+      run = [];
+    }
+    run.push(t);
+  }
+  if (run.length > 0) runs.push(run);
+  return runs;
 }

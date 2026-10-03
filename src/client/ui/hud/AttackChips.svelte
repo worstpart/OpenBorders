@@ -20,15 +20,20 @@
   );
 
   /** Odds of an army against a player's current home troops. */
-  function outlook(army: number, defender: number) {
+  function outlook(army: number, defender: number, focus: number) {
     const p = ui.players[defender - 1];
     return battleOutlook(
       DEFAULT_RULES,
       army,
       p?.homeTroops ?? 0,
       p?.tiles ?? 0,
-      lossFactorOf(DEFAULT_RULES, ui.me, p, ui.tick),
+      lossFactorOf(DEFAULT_RULES, ui.me, p, ui.tick, wallAt(focus, defender)),
     );
+  }
+
+  /** Border Defense level where an attack is aimed, if that land still belongs to the defender. */
+  function wallAt(tile: number, defender: number): number {
+    return ui.owner[tile] === defender ? (ui.fort[tile] ?? 0) : 0;
   }
 
   function remaining(id: number, troops: number): string {
@@ -48,7 +53,13 @@
             attack.troops,
             me.homeTroops,
             me.tiles,
-            lossFactorOf(DEFAULT_RULES, ui.players[attack.attacker - 1], me, ui.tick),
+            lossFactorOf(
+              DEFAULT_RULES,
+              ui.players[attack.attacker - 1],
+              me,
+              ui.tick,
+              wallAt(attack.focusTile, me.id),
+            ),
           )
         : null}
       <li class="chip incoming" style:--player-color={ui.colorOf(attack.attacker)}>
@@ -78,7 +89,8 @@
       </li>
     {/each}
     {#each outgoing as attack (attack.id)}
-      {@const odds = attack.target === 0 ? null : outlook(attack.troops, attack.target)}
+      {@const odds =
+        attack.target === 0 ? null : outlook(attack.troops, attack.target, attack.focusTile)}
       <li
         class="chip"
         class:retreating={attack.retreating}

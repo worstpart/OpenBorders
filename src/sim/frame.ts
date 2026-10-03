@@ -76,6 +76,20 @@ export interface BuildingSnapshot {
   readonly readyTick: number;
 }
 
+/** A wall (GAME_DESIGN.md §3.17.6). Snapshots are shared between frames until it changes. */
+export interface WallSnapshot {
+  readonly id: number;
+  readonly owner: PlayerId;
+  /** Corner points (tiles) it was drawn through. */
+  readonly points: readonly number[];
+  /** Tiles still standing. */
+  readonly tiles: readonly number[];
+  readonly level: number;
+  readonly targetLevel: number;
+  readonly startTick: number;
+  readonly readyTick: number;
+}
+
 export interface AllianceSnapshot {
   /** The lower player id and the higher one. */
   readonly a: PlayerId;
@@ -99,12 +113,20 @@ export interface TickFrame {
   /** Tiles whose owner changed this tick, and each one's owner after the tick. */
   readonly changedTiles: Int32Array;
   readonly changedOwners: Uint16Array;
+  /**
+   * Tiles whose working wall level changed this tick, and each one's level after the tick
+   * (0–3, GAME_DESIGN.md §3.17.6).
+   */
+  readonly fortTiles: Int32Array;
+  readonly fortLevels: Uint8Array;
   readonly players: readonly PlayerSnapshot[];
   readonly attacks: readonly AttackSnapshot[];
   readonly alliances: readonly AllianceSnapshot[];
   readonly allianceRequests: readonly AllianceRequestSnapshot[];
   /** Every building, by ascending id. */
   readonly buildings: readonly BuildingSnapshot[];
+  /** Every wall, by ascending id. */
+  readonly walls: readonly WallSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Team games: the team that won (0 = none). */
@@ -142,16 +164,41 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
   }));
 }
 
+const wallCache = new WeakMap<World, { version: number; walls: readonly WallSnapshot[] }>();
+
+/** Wall snapshots, rebuilt only when a wall changed (they are immutable, so frames share them). */
+function snapshotWalls(world: World): readonly WallSnapshot[] {
+  const cached = wallCache.get(world);
+  if (cached && cached.version === world.wallsVersion) return cached.walls;
+  const walls = world.walls.map((w) => ({
+    id: w.id,
+    owner: w.owner,
+    points: w.points.slice(),
+    tiles: w.tiles.filter((t) => world.wallAt[t] === w.id),
+    level: w.level,
+    targetLevel: w.targetLevel,
+    startTick: w.startTick,
+    readyTick: w.readyTick,
+  }));
+  wallCache.set(world, { version: world.wallsVersion, walls });
+  return walls;
+}
+
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
   const changedOwners = new Uint16Array(changedTiles.length);
   for (let k = 0; k < changedTiles.length; k++) changedOwners[k] = world.owner[changedTiles[k]!]!;
+  const fortTiles = world.fortChanges.toArray();
+  const fortLevels = new Uint8Array(fortTiles.length);
+  for (let k = 0; k < fortTiles.length; k++) fortLevels[k] = world.fortLevel[fortTiles[k]!]!;
   return {
     tick: world.tick,
     phase: world.phase,
     playStartTick: world.playStartTick,
     changedTiles,
     changedOwners,
+    fortTiles,
+    fortLevels,
     players: snapshotPlayers(world),
     attacks: world.attacks.map((a) => ({
       id: a.id,
@@ -180,6 +227,7 @@ export function buildFrame(world: World): TickFrame {
       startTick: b.startTick,
       readyTick: b.readyTick,
     })),
+    walls: snapshotWalls(world),
     events: world.events.slice(),
     winner: world.winner,
     winningTeam: world.winningTeam,

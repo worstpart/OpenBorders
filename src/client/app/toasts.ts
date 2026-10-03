@@ -244,6 +244,24 @@ export function toastsForEvents(
         }
         break;
       }
+      case "wallCompleted":
+        if (event.playerId === me) {
+          toasts.push({
+            text: `${DEFAULT_RULES.walls.levels[event.level - 1]!.name} ready`,
+            tone: "success",
+          });
+        }
+        break;
+      case "wallDestroyed":
+        if (event.playerId === me && event.reason === "breached") {
+          toasts.push({
+            text:
+              event.by !== null ? `${nameOf(event.by)} broke through your wall` : "Your wall fell",
+            tone: "danger",
+            player: event.by ?? undefined,
+          });
+        }
+        break;
       case "buildingDestroyed":
         if (event.reason !== "captured") break;
         if (event.playerId === me) {

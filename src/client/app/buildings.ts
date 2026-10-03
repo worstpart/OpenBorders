@@ -1,9 +1,9 @@
 /**
- * What the HUD shows about buildings (GAME_DESIGN.md §3.17): the build options in the
- * right-click menu, the building card, and which building a click hits. Pure functions
- * over frame snapshots; prices and placement rules come from the simulation itself.
+ * What the HUD shows about buildings and walls (GAME_DESIGN.md §3.17): the build bar, the
+ * building/wall card, the wall being drawn, and which building or wall a click hits. Pure
+ * functions over frame snapshots; prices and placement rules come from the simulation.
  */
-import type { BuildingSnapshot, PlayerSnapshot } from "../../sim/frame.ts";
+import type { BuildingSnapshot, PlayerSnapshot, WallSnapshot } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import { BUILDING_TYPES, type BuildingType, type GameRules } from "../../sim/rules.ts";
 import {
@@ -15,22 +15,36 @@ import {
   placementProblem,
   type PlacementProblem,
 } from "../../sim/systems/buildings.ts";
+import {
+  WALL_PROBLEM_TEXT,
+  wallLevel,
+  wallLevelsOwned,
+  wallPlan,
+  wallPrice,
+  wallTiles,
+  type WallProblem,
+} from "../../sim/systems/walls.ts";
 import { formatTroops } from "../format.ts";
+
+/** What the build bar can pick up: a building, or the wall tool (D-024). */
+export type Placeable = BuildingType | "wall";
 
 export interface BuildContext {
   readonly rules: GameRules;
   readonly map: GameMap | null;
   readonly owner: Uint16Array;
   readonly buildings: readonly BuildingSnapshot[];
+  readonly walls: readonly WallSnapshot[];
   readonly me: PlayerSnapshot | undefined;
   readonly tick: number;
   readonly playing: boolean;
 }
 
 /** One line per building type: what it is for (the build menu's subtitle). */
-export const BUILDING_ROLE: Record<BuildingType, string> = {
+export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
+  wall: "Draw a defence line",
 };
 
 /** What a level gives, in a few words per effect ("+90K troop capacity"). */
@@ -45,6 +59,15 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
     lines.push(`Mobilize ${Math.round(effect.mobilizeDiscount * 100)}% cheaper`);
   }
   return lines;
+}
+
+/** What a wall level does to attackers (GAME_DESIGN.md §3.17.6). */
+export function wallLines(rules: GameRules, level: number): string[] {
+  const l = wallLevel(rules, level);
+  return [
+    `Holds an attack ~${l.holdTicks / 10} s per tile`,
+    `Attackers lose ×${l.loss} + ${formatTroops(l.breakTroops)} troops per tile`,
+  ];
 }
 
 /**
@@ -72,7 +95,7 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
   return lines;
 }
 
-export type BuildBlock = PlacementProblem | "noGold" | "notPlaying";
+export type BuildBlock = PlacementProblem | "noGold" | "notPlaying" | "wall";
 
 export interface BuildOption {
   readonly type: BuildingType;
@@ -86,7 +109,9 @@ export interface BuildOption {
 export function buildOptions(ctx: BuildContext, tile: number): BuildOption[] {
   const me = ctx.me;
   if (!buildingsEnabled(ctx.rules) || !ctx.map || !me || ctx.owner[tile] !== me.id) return [];
-  const problem = placementProblem(ctx.rules, ctx.map, ctx.owner, ctx.buildings, me.id, tile);
+  const problem: BuildBlock | null =
+    placementProblem(ctx.rules, ctx.map, ctx.owner, ctx.buildings, me.id, tile) ??
+    (standingWallTiles(ctx.walls).has(tile) ? "wall" : null);
   return BUILDING_TYPES.map((type) => {
     const price = buildingPrice(ctx.rules, type, 1, levelsOwned(ctx.buildings, me.id, type));
     const blocked: BuildBlock | null = !ctx.playing
@@ -103,27 +128,54 @@ export function buildOptions(ctx: BuildContext, tile: number): BuildOption[] {
 }
 
 export interface BuildBarItem {
-  readonly type: BuildingType;
+  readonly type: Placeable;
   readonly name: string;
   readonly role: string;
   readonly price: number;
+  /** "/tile" for walls (priced per tile). */
+  readonly unit: string;
   readonly affordable: boolean;
 }
 
-/** The build bar (GAME_DESIGN.md §3.17.13): every building with its current price. */
+/** The build bar (GAME_DESIGN.md §3.17.13): every building with its price, then the wall. */
 export function buildBarItems(ctx: BuildContext): BuildBarItem[] {
   const me = ctx.me;
   if (!buildingsEnabled(ctx.rules) || !me) return [];
-  return BUILDING_TYPES.map((type) => {
+  const items: BuildBarItem[] = BUILDING_TYPES.map((type) => {
     const price = buildingPrice(ctx.rules, type, 1, levelsOwned(ctx.buildings, me.id, type));
     return {
       type,
       name: levelRules(ctx.rules, type, 1).name,
       role: BUILDING_ROLE[type],
       price,
+      unit: "",
       affordable: me.gold >= price,
     };
   });
+  const perTile = wallTilePrice(ctx);
+  items.push({
+    type: "wall",
+    name: "Wall",
+    role: BUILDING_ROLE.wall,
+    price: perTile,
+    unit: "/tile",
+    affordable: me.gold >= perTile * 2,
+  });
+  return items;
+}
+
+/** Gold per wall tile at level I for the local player now (escalation included). */
+function wallTilePrice(ctx: BuildContext): number {
+  const rules = ctx.rules;
+  const owned = wallLevelsOwned(
+    ctx.walls.map((w) => ({ owner: w.owner, targetLevel: w.targetLevel, intact: w.tiles.length })),
+    ctx.me?.id ?? 0,
+  );
+  const factor = Math.min(
+    rules.buildings.escalationMax,
+    1 + (rules.buildings.escalationPerLevel * owned) / rules.walls.escalationTiles,
+  );
+  return Math.round(wallLevel(rules, 1).costPerTile * factor);
 }
 
 /** Whether the building being placed may go on `tile` now, and why not. */
@@ -143,11 +195,84 @@ export const BUILD_BLOCK_TEXT: Record<BuildBlock, string> = {
   tooClose: "too close to another building",
   noGold: "not enough gold",
   notPlaying: "after the match starts",
+  wall: "there is a wall there",
+};
+
+const standingCache = new WeakMap<readonly WallSnapshot[], Set<number>>();
+
+/** Every standing wall tile (cached per frame's wall list). */
+export function standingWallTiles(walls: readonly WallSnapshot[]): Set<number> {
+  let set = standingCache.get(walls);
+  if (!set) {
+    set = new Set();
+    for (const w of walls) for (const t of w.tiles) set.add(t);
+    standingCache.set(walls, set);
+  }
+  return set;
+}
+
+/** The wall being drawn (GAME_DESIGN.md §3.17.6): its line, price and whether it may go. */
+export interface WallPreview {
+  /** Corner points placed so far, plus the point under the mouse. */
+  readonly points: readonly number[];
+  /** Every tile of the line (for drawing). */
+  readonly tiles: readonly number[];
+  /** Tiles it would build (tiles already walled are joined, not built again). */
+  readonly newTiles: number;
+  readonly price: number;
+  readonly problem: WallProblem | "noGold" | null;
+}
+
+/** The wall through `points` and then `hover` (if any): what a finish would build. */
+export function wallPreview(
+  ctx: BuildContext,
+  points: readonly number[],
+  hover: number | null,
+): WallPreview | null {
+  const map = ctx.map;
+  const me = ctx.me;
+  if (!map || !me) return null;
+  const all = hover !== null && hover !== points.at(-1) ? [...points, hover] : [...points];
+  if (all.length === 0) return null;
+  const buildingTiles = new Set(ctx.buildings.map((b) => b.tile));
+  const walled = standingWallTiles(ctx.walls);
+  const plan = wallPlan(
+    ctx.rules,
+    map,
+    ctx.owner,
+    (t) => buildingTiles.has(t),
+    (t) => walled.has(t),
+    me.id,
+    all,
+  );
+  const owned = wallLevelsOwned(
+    ctx.walls.map((w) => ({ owner: w.owner, targetLevel: w.targetLevel, intact: w.tiles.length })),
+    me.id,
+  );
+  const price = plan.tiles.length > 0 ? wallPrice(ctx.rules, 1, plan.tiles.length, owned) : 0;
+  const problem =
+    all.length >= 2 && plan.problem === null && me.gold < price
+      ? "noGold"
+      : plan.problem === "tooFewPoints"
+        ? null
+        : plan.problem;
+  return {
+    points: all,
+    tiles: wallTiles(map, all),
+    newTiles: plan.tiles.length,
+    price,
+    problem,
+  };
+}
+
+export const WALL_PREVIEW_TEXT: Record<WallProblem | "noGold", string> = {
+  ...WALL_PROBLEM_TEXT,
+  noGold: "not enough gold",
 };
 
 export interface BuildingCard {
   readonly id: number;
-  readonly type: BuildingType;
+  readonly type: Placeable;
   readonly mine: boolean;
   readonly owner: number;
   /** Working level (0 while first being built) and the name to show. */
@@ -167,6 +292,19 @@ export interface BuildingCard {
     readonly lines: readonly string[];
     readonly affordable: boolean;
   } | null;
+}
+
+function workOf(
+  ctx: BuildContext,
+  item: { readonly startTick: number; readonly readyTick: number; readonly targetLevel: number },
+): BuildingCard["work"] {
+  if (item.readyTick < 0) return null;
+  const total = item.readyTick - item.startTick;
+  return {
+    level: item.targetLevel,
+    secondsLeft: Math.max(0, ((item.readyTick - ctx.tick) * ctx.rules.tickMs) / 1000),
+    progress: total > 0 ? Math.min(1, Math.max(0, (ctx.tick - item.startTick) / total)) : 1,
+  };
 }
 
 export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): BuildingCard {
@@ -190,7 +328,6 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
       affordable: (ctx.me?.gold ?? 0) >= price,
     };
   }
-  const total = building.readyTick - building.startTick;
   return {
     id: building.id,
     type: building.type,
@@ -199,14 +336,43 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
     level: building.level,
     name: levelRules(rules, building.type, shownLevel).name,
     effects: effectLines(rules, building.type, building.level),
-    work: working
-      ? {
-          level: building.targetLevel,
-          secondsLeft: Math.max(0, ((building.readyTick - ctx.tick) * rules.tickMs) / 1000),
-          progress:
-            total > 0 ? Math.min(1, Math.max(0, (ctx.tick - building.startTick) / total)) : 1,
-        }
-      : null,
+    work: workOf(ctx, building),
+    upgrade,
+  };
+}
+
+/** A wall's card (GAME_DESIGN.md §3.17.6): its level, length, effect and upgrade. */
+export function wallCard(ctx: BuildContext, wall: WallSnapshot): BuildingCard {
+  const rules = ctx.rules;
+  const mine = wall.owner === ctx.me?.id;
+  const tiles = wall.tiles.length;
+  let upgrade: BuildingCard["upgrade"] = null;
+  if (mine && wall.readyTick < 0 && wall.level < rules.walls.levels.length) {
+    const owned = wallLevelsOwned(
+      ctx.walls.map((w) => ({
+        owner: w.owner,
+        targetLevel: w.targetLevel,
+        intact: w.tiles.length,
+      })),
+      wall.owner,
+    );
+    const price = wallPrice(rules, wall.level + 1, tiles, owned);
+    upgrade = {
+      name: wallLevel(rules, wall.level + 1).name,
+      price,
+      lines: wallLines(rules, wall.level + 1),
+      affordable: (ctx.me?.gold ?? 0) >= price,
+    };
+  }
+  return {
+    id: wall.id,
+    type: "wall",
+    mine,
+    owner: wall.owner,
+    level: wall.level,
+    name: wallLevel(rules, Math.max(1, wall.level)).name,
+    effects: [`${tiles} tiles standing`, ...(wall.level > 0 ? wallLines(rules, wall.level) : [])],
+    work: workOf(ctx, wall),
     upgrade,
   };
 }
@@ -228,6 +394,30 @@ export function buildingAtPoint(
     if (d <= bestDistance) {
       best = b;
       bestDistance = d;
+    }
+  }
+  return best;
+}
+
+/** The wall with a standing tile nearest to (x, y) in tiles, within `radius` tiles, or null. */
+export function wallAtPoint(
+  walls: readonly WallSnapshot[],
+  width: number,
+  x: number,
+  y: number,
+  radius: number,
+): WallSnapshot | null {
+  let best: WallSnapshot | null = null;
+  let bestDistance = radius * radius;
+  for (const w of walls) {
+    for (const t of w.tiles) {
+      const dx = (t % width) + 0.5 - x;
+      const dy = Math.floor(t / width) + 0.5 - y;
+      const d = dx * dx + dy * dy;
+      if (d <= bestDistance) {
+        best = w;
+        bestDistance = d;
+      }
     }
   }
   return best;

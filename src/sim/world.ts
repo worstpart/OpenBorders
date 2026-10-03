@@ -15,6 +15,7 @@ import {
   type Personality,
 } from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
+import { breakWallTile } from "./systems/walls.ts";
 import type { TileQueue } from "./systems/tileQueue.ts";
 
 /** 1..n for players; 0 means neutral (unowned). */
@@ -128,6 +129,30 @@ export interface Building {
   paid: number;
 }
 
+/**
+ * A wall (GAME_DESIGN.md §3.17.6, D-024): tiles drawn through corner points, built and
+ * upgraded as a whole. Tiles that change hands break (world.wallAt forgets them).
+ */
+export interface Wall {
+  readonly id: number;
+  readonly owner: PlayerId;
+  /** The corner points it was drawn through (A, B, C …). */
+  readonly points: readonly number[];
+  /** Every tile it was built on, in order; those still standing have wallAt = id. */
+  readonly tiles: readonly number[];
+  /** Tiles still standing. */
+  intact: number;
+  /** Working level: 0 while first being built, else 1..3. */
+  level: number;
+  /** Level being built or upgraded to (= level when idle). */
+  targetLevel: number;
+  /** Current construction or upgrade: start and finish ticks (-1 when idle). */
+  startTick: number;
+  readyTick: number;
+  /** Gold paid for it (cancelling refunds part). */
+  paid: number;
+}
+
 /** A bot's own state (GAME_DESIGN.md §3.11). */
 export interface BotBrain {
   readonly tier: BotTier;
@@ -193,6 +218,19 @@ export interface World {
    * system settles them once the tick's fighting is over. Not game state.
    */
   buildingTileChanges: number[];
+  /** Walls (GAME_DESIGN.md §3.17.6, D-024), by ascending id. Changed only by systems/walls.ts. */
+  walls: Wall[];
+  nextWallId: number;
+  /** Wall id standing on each tile (being built or working), or -1. */
+  readonly wallAt: Int32Array;
+  /** XOR of ownerTileHash(tile, wall id) over every wall tile (the walls' tiles in the hash). */
+  wallHash: number;
+  /** Bumped whenever a wall changes (frames reuse the last wall snapshots otherwise). */
+  wallsVersion: number;
+  /** Working wall level on each tile (0 = none or still being built): what attacks read. */
+  readonly fortLevel: Uint8Array;
+  /** Tiles whose wall level changed this tick (for the frame; may repeat). Not state. */
+  readonly fortChanges: TileChangeLog;
   /** Scratch marks for de-duplicating tiles inside one operation (not game state). */
   readonly scratchMarks: Int32Array;
   scratchStamp: number;
@@ -328,6 +366,13 @@ export function createWorld(setup: GameSetup): World {
     nextBuildingId: 1,
     buildingAt: new Int32Array(setup.map.width * setup.map.height).fill(-1),
     buildingTileChanges: [],
+    walls: [],
+    nextWallId: 1,
+    wallAt: new Int32Array(setup.map.width * setup.map.height).fill(-1),
+    wallHash: 0,
+    wallsVersion: 0,
+    fortLevel: new Uint8Array(setup.map.width * setup.map.height),
+    fortChanges: new TileChangeLog(),
     scratchMarks: new Int32Array(setup.map.width * setup.map.height),
     scratchStamp: 0,
     scratchQueue: new Int32Array(setup.map.width * setup.map.height),
@@ -388,6 +433,7 @@ export function setOwner(world: World, tile: number, newOwner: PlayerId): void {
     (world.ownerHash ^ ownerTileHash(tile, oldOwner) ^ ownerTileHash(tile, newOwner)) >>> 0;
   world.changes.push(tile);
   if (world.buildingAt[tile]! >= 0) world.buildingTileChanges.push(tile);
+  if (world.wallAt[tile]! >= 0) breakWallTile(world, tile, newOwner);
 
   const { width } = world.map;
   const x = tile % width;

@@ -444,27 +444,40 @@ integer), `withinRange(map, a, b, r)` (`distanceSq ≤ r²` — no square root),
 spacing, zones, SAM radius, airport/silo range, flight positions, the HUD's rings and
 ETAs. Boats feed their water-path length into the same `travelTicks`.
 
-**Fortification field (2.6).** `world.fortLevel: Uint8Array` per tile = the best Border
-Defense level covering the tile *whose owner owns the tile* (0 = none). Derived, not
-hashed (like border sets): rebuilt for a post's disc when the post is built, upgraded,
-damaged or destroyed, and updated per tile inside `setOwner` (a captured tile drops to
-the best covering post of its new owner via the grid). `tileCost` / `layerDelay` in
-`attacks.ts` and `attackLossFactor` in `battle.ts` read one **zone-modifier** function
-(`zoneLossFactor(world, tile, attacker)`, `zoneSpeedFactor`) that also handles
-suppression zones (2B) — one hook, not one per feature. The client gets the field as an R8
-texture with dirty uploads; the map shader draws a level pattern on border edges of
-fortified tiles that face a non-friendly owner.
+**Walls (2.6, D-024 — as built).** `systems/walls.ts`. A wall is game state:
+`world.walls` (ascending ids; `points`, the rasterized `tiles`, `intact`, level/targetLevel,
+start/ready ticks, paid), `world.wallAt` (tile → wall id, -1) and `world.wallHash` (XOR of
+`ownerTileHash(tile, wallId)` over standing tiles, maintained incrementally) — all in the
+state hash. `wallTiles(map, points)` is Bresenham, 8-connected, shared with the HUD;
+`wallPlan` validates (own land, no water, no building, ≤ 80 tiles, ≤ 12 points; walled
+tiles are joined, not rebuilt). Commands `buildWall {points}`, `upgradeWall`,
+`cancelWall`; `updateWalls` runs with the buildings (step 5b). **Breaking:** `setOwner`
+calls `breakWallTile` when a wall tile changes hands — it is removed at once (events
+`wallBreached`, and `wallDestroyed` when no tile is left). `world.fortLevel` (Uint8 per
+tile) is the *working* wall level (0 while building), logged in `world.fortChanges` for the
+frame (`fortTiles` / `fortLevels`). The attack code reads one hook per effect:
+`tileCost` multiplies by `wallLossFactor` (through `attackLossFactor`, so the HUD/bot
+odds use the same factor) and adds `wallBreakTroops`; `layerDelay` adds
+`wallHoldTicks(tile, speed)` (= hold × max(½, √speed)). Suppression (2B) will plug into
+the same functions. Frames carry `walls` snapshots (standing tiles), rebuilt only when
+`world.wallsVersion` changes and otherwise shared between frames. **Client:** walls are
+drawn in Canvas2D on the label overlay (`render/buildings.ts`: runs of 8-connected
+standing tiles as thick lines by level, towers at run ends, dashed while building, the draft
+wall with lettered points) — not in the map shader: a wall is an object on the land, and a
+screen-width line would need neighbouring tiles' pixels in a shader. The first 2.6 design
+(posts fortifying a zone, derived field, wall pattern on border edges in the shader, D-022)
+was built, tested and replaced the same day; nothing of it remains in the code.
 
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild; (2B) airlift, airAssault, airStrike, launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall; (2B) airlift, airAssault, airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
-3.  advanceAttacks     reads the zone modifiers (fortification, suppression)
+3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
 3b. advanceFlights     (2B) move flights, SAM/flak interceptions, arrivals:
                        airlift → friend's home troops; assault → beachhead attack (2.7);
                        strike/missile → damageBuilding + suppression zones
-    (setOwner)         captured tiles transfer or destroy their building; fortLevel updates
+    (setOwner)         captured tiles transfer or destroy their building; wall tiles break
 6.  growTroops / 6b earnGold   read the cached per-player building effects
 7.  thinkAI            + ai/build.ts (what/where/when to build and upgrade) — a separate module
 ```
@@ -490,13 +503,13 @@ owner, tile, level, targetLevel, readyTick, disabled) and flight launch/intercep
 arrival events — never per-tick positions. The renderer draws building icons (level
 drawings + pips) as instanced quads in WebGL (hundreds of icons in 126-player lobbies;
 the Canvas2D label layer would be the fallback for a first version), range rings and
-routes as an overlay pass, fortified borders in the map shader.
+routes as an overlay pass; walls on the Canvas2D overlay (2.6).
 
 **Multiplayer (Phase 3).** Nothing new is needed in the protocol: these are commands, and
 under D-006 the server runs the same simulation, so construction, upgrades, damage,
 interception, transported troops and captures are computed server-side and checked by the
-state hash. Snapshots must include buildings and flights; the fortification field is
-rebuilt from them.
+state hash. Snapshots must include buildings, walls and flights; `wallAt` and
+`fortLevel` are rebuilt from the walls.
 
 ## 6. Client architecture
 

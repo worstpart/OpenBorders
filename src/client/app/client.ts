@@ -17,7 +17,16 @@ import {
   ICON_PX_PER_ZOOM,
   type BuildGhost,
 } from "../render/buildings.ts";
-import { BUILD_BLOCK_TEXT, buildingAtPoint, placementCheck } from "./buildings.ts";
+import {
+  BUILD_BLOCK_TEXT,
+  buildingAtPoint,
+  placementCheck,
+  WALL_PREVIEW_TEXT,
+  wallAtPoint,
+  wallPreview,
+  type Placeable,
+  type WallPreview,
+} from "./buildings.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
 import {
@@ -128,6 +137,7 @@ export class GameClient {
     this.owner = new Uint16Array(map.width * map.height);
     ui.map = map;
     ui.owner = this.owner;
+    ui.fort = new Uint8Array(this.owner.length);
     this.renderer.setMap(map, this.owner);
     this.renderer.setPlayerColors(["#000000"]);
     this.camera.setMap(map.width, map.height);
@@ -181,6 +191,7 @@ export class GameClient {
     this.owner = initial.owner.slice();
     ui.map = initial.map;
     ui.owner = this.owner;
+    ui.fort = new Uint8Array(this.owner.length);
     this.renderer.setMap(initial.map, this.owner);
     this.renderer.setPlayerColors(colors);
     this.renderer.setLocalOwner(initial.localPlayerId);
@@ -209,6 +220,24 @@ export class GameClient {
       send: (command: Command) => this.host?.send(command),
       /** Sends a command as another player (e.g. a bot asking us for an alliance). */
       sendAs: (playerId: number, command: Command) => this.host?.sendAs(playerId, command),
+      /** Where a tile's centre is on screen (CSS pixels), for scripted clicks. */
+      screenOf: (tile: number) => {
+        const width = this.map?.width ?? 1;
+        return this.camera.worldToScreen({
+          x: (tile % width) + 0.5,
+          y: Math.floor(tile / width) + 0.5,
+        });
+      },
+      /** Centres the camera on a tile, zoomed `factor` times from the current zoom. */
+      look: (tile: number, factor = 1) => {
+        if (!this.map) return;
+        this.camera.focusOn({
+          x: (tile % this.map.width) + 0.5,
+          y: Math.floor(tile / this.map.width) + 0.5,
+        });
+        const size = this.camera.viewportSize;
+        this.camera.zoomAt(factor, { x: size.x / 2, y: size.y / 2 });
+      },
     };
   }
 
@@ -251,9 +280,10 @@ export class GameClient {
    * Picks a building up from the build bar (GAME_DESIGN.md §3.17.13): it follows the mouse
    * until a click on our land places it. Picking the same one again puts it back.
    */
-  pickBuilding(type: BuildingType): void {
+  pickBuilding(type: Placeable): void {
     if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
     ui.placing = ui.placing === type ? null : type;
+    ui.wallPoints = [];
     if (ui.placing) ui.menu = null;
   }
 
@@ -263,6 +293,54 @@ export class GameClient {
 
   cancelBuild(buildingId: number): void {
     this.host?.send({ type: "cancelBuild", buildingId });
+  }
+
+  upgradeWall(wallId: number): void {
+    this.host?.send({ type: "upgradeWall", wallId });
+  }
+
+  cancelWall(wallId: number): void {
+    this.host?.send({ type: "cancelWall", wallId });
+  }
+
+  /**
+   * Drawing a wall (GAME_DESIGN.md §3.17.6): each click adds a corner point (A, B, C …);
+   * a click on the last point again, right-click or Enter finishes.
+   */
+  private addWallPoint(tile: number): void {
+    const points = ui.wallPoints;
+    if (points.at(-1) === tile) {
+      this.finishWall();
+      return;
+    }
+    const preview = wallPreview(ui.buildContext, [...points, tile], null);
+    if (preview?.problem && preview.problem !== "noGold") {
+      this.toast({ text: `Can't wall there: ${WALL_PREVIEW_TEXT[preview.problem]}`, tone: "info" });
+      return;
+    }
+    ui.wallPoints = [...points, tile];
+    if (ui.wallPoints.length >= DEFAULT_RULES.walls.maxPoints) this.finishWall();
+  }
+
+  /** Builds the wall drawn so far, or puts the tool back if fewer than two points. */
+  private finishWall(): void {
+    const points = ui.wallPoints;
+    if (points.length < 2) {
+      ui.placing = null;
+      ui.wallPoints = [];
+      return;
+    }
+    const preview = wallPreview(ui.buildContext, points, null);
+    if (preview?.problem) {
+      this.toast({
+        text: `Can't build the wall: ${WALL_PREVIEW_TEXT[preview.problem]}`,
+        tone: "info",
+      });
+      return;
+    }
+    this.host?.send({ type: "buildWall", points: [...points] });
+    ui.placing = null;
+    ui.wallPoints = [];
   }
 
   retreat(attackId: number): void {
@@ -346,6 +424,7 @@ export class GameClient {
     if (this.map) {
       this.owner = new Uint16Array(this.map.width * this.map.height);
       ui.owner = this.owner;
+      ui.fort = new Uint8Array(this.owner.length);
       this.renderer.setMap(this.map, this.owner);
     }
     this.renderer.setAttacks([], 0);
@@ -373,6 +452,11 @@ export class GameClient {
       }
       this.renderer.applyTileChanges(frame.changedTiles, frame.changedOwners, frame.tick);
       this.labelsDirty = true;
+    }
+    if (frame.fortTiles.length > 0) {
+      for (let k = 0; k < frame.fortTiles.length; k++) {
+        ui.fort[frame.fortTiles[k]!] = frame.fortLevels[k]!;
+      }
     }
     const me = ui.localPlayerId;
     for (const event of frame.events) {
@@ -482,12 +566,16 @@ export class GameClient {
     ui.alliances = frame.alliances;
     ui.allianceRequests = frame.allianceRequests;
     ui.buildings = frame.buildings;
+    ui.walls = frame.walls;
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
     // A building card whose building is gone closes.
     const menu = ui.menu;
-    if (menu?.kind === "building" && !frame.buildings.some((b) => b.id === menu.id)) {
+    if (
+      (menu?.kind === "building" && !frame.buildings.some((b) => b.id === menu.id)) ||
+      (menu?.kind === "wall" && !frame.walls.some((w) => w.id === menu.id))
+    ) {
       ui.menu = null;
     }
     const peaks = new Map<number, number>();
@@ -576,6 +664,10 @@ export class GameClient {
       this.host.send({ type: "spawn", tile: index });
       return;
     }
+    if (ui.placing === "wall") {
+      this.addWallPoint(index);
+      return;
+    }
     if (ui.placing) {
       this.placeBuilding(index);
       return;
@@ -586,13 +678,21 @@ export class GameClient {
       ui.menu = { kind: "building", x: at.x, y: at.y, id: hit };
       return;
     }
+    // So does a click on one of your walls (an enemy's wall is attacked like their land).
+    const point = this.camera.screenToWorld(at);
+    const mine = ui.walls.filter((w) => w.owner === ui.localPlayerId);
+    const wall = wallAtPoint(mine, map.width, point.x, point.y, 0.75);
+    if (wall) {
+      ui.menu = { kind: "wall", x: at.x, y: at.y, id: wall.id };
+      return;
+    }
     this.attackTile(index, ui.attackPercent);
   }
 
   /** Places the building we're holding at `tile`, if it may go there. */
   private placeBuilding(tile: number): void {
     const type = ui.placing;
-    if (!type || !this.host) return;
+    if (!type || type === "wall" || !this.host) return;
     const problem = placementCheck(ui.buildContext, type, tile);
     if (problem) {
       this.toast({ text: `Can't build there: ${BUILD_BLOCK_TEXT[problem]}`, tone: "info" });
@@ -604,6 +704,10 @@ export class GameClient {
 
   /** Right click: the context menu for the land under the cursor (or put a building back). */
   private secondaryClick(at: ScreenPoint): void {
+    if (ui.placing === "wall") {
+      this.finishWall();
+      return;
+    }
     if (ui.placing) {
       ui.placing = null;
       return;
@@ -644,11 +748,14 @@ export class GameClient {
         break;
       }
       case "confirm":
-        this.confirmSpawn();
+        if (ui.placing === "wall") this.finishWall();
+        else this.confirmSpawn();
         break;
       case "escape":
-        if (ui.placing) ui.placing = null;
-        else if (ui.menu) this.closeMenu();
+        if (ui.placing) {
+          ui.placing = null;
+          ui.wallPoints = [];
+        } else if (ui.menu) this.closeMenu();
         else this.pause();
         break;
       case "preset1":
@@ -715,6 +822,9 @@ export class GameClient {
         colorOf: (id) => ui.colorOf(id),
         selectedId: ui.menu?.kind === "building" ? ui.menu.id : null,
         ghost: this.buildGhost(),
+        walls: ui.walls,
+        selectedWall: ui.menu?.kind === "wall" ? ui.menu.id : null,
+        wallPreview: this.wallDraft(),
       });
     }
     this.labels.draw(
@@ -737,12 +847,21 @@ export class GameClient {
     requestAnimationFrame((next) => this.animationFrame(next));
   }
 
+  /** While drawing a wall: the points so far plus the tile under the mouse. */
+  private wallDraft(): WallPreview | null {
+    const map = this.map;
+    if (ui.placing !== "wall" || !map) return null;
+    const cell = this.hoverPoint ? this.camera.tileAt(this.hoverPoint) : null;
+    const hover = cell ? tileAt(map, cell.x, cell.y) : null;
+    return wallPreview(ui.buildContext, ui.wallPoints, hover);
+  }
+
   /** While a building is picked up: where it would go (the tile under the mouse). */
   private buildGhost(): BuildGhost | null {
     const type = ui.placing;
     const map = this.map;
     const point = this.hoverPoint;
-    if (!type || !map || !point) return null;
+    if (!type || type === "wall" || !map || !point) return null;
     const cell = this.camera.tileAt(point);
     if (!cell) return null;
     const tile = tileAt(map, cell.x, cell.y);

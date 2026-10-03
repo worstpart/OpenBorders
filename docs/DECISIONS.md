@@ -27,8 +27,9 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-019 | Teams: fixed sides that win on combined land; alliances unchanged across teams; tribes teamless | **Accepted** 2026-10-02 (user) |
 | D-020 | Economy: land-linked gold, Mobilize, gifts (troops too), full loot | **Accepted** 2026-10-02 |
 | D-021 | Building system: 7 buildings × 3 named levels incl. SAM, Silo, Airport; air phase (2B) before multiplayer, bots first | **Accepted** 2026-10-02 (user's answers) |
-| D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Accepted** 2026-10-02 (user: "go") |
+| D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Superseded** by D-024 (2026-10-02) |
 | D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts only over a shared border or by airlift | **Accepted** 2026-10-02 (user) |
+| D-024 | Border Defense = walls the player draws point by point (Clash of Clans style); hard tiles that hold attacks and break piece by piece | **Accepted** 2026-10-02 (user) |
 
 ---
 
@@ -398,4 +399,28 @@ instant everywhere. This amends D-020; the border rule ships in milestone 2.5, a
 
 **Alternatives.** Percentage interception chances (random, harder to read); keep instant
 troop gifts and make Airport I something else (e.g. faster gifts only — a weak level).
+
+---
+
+## D-024 — Drawn walls replace Border Defense posts · Accepted 2026-10-02
+
+**Context.** While milestone 2.6 was being checked in the browser (posts with a zone that
+fortified the owner's border, D-022 — built and tested), the user asked for walls placed
+point by point — A, B, C … until the shape is built — that buff defence and that enemies
+push through, like Clash of Clans walls.
+
+**Decision** (user, 2026-10-02, GAME_DESIGN §3.17.6). Walls **replace** the posts. A wall
+is a line of tiles drawn on your own land (anywhere, not only at the border) by clicking
+corner points; each piece is a straight line between two points. Wall tiles are **hard**:
+an attack must hold at a wall tile for a few seconds and pay extra troops to break it, so
+fronts flow around the ends and through gaps, and a closed wall forces a break-through.
+A wall tile taken by anyone breaks (a gap); the rest stands. Walls are stored state (not
+derived), stay where they were built when borders move, and upgrade as a whole (levels
+I–III). The zone-modifier hook, HUD odds, frame deltas and wall rendering of D-022 are
+reused; the post, its zone and the friend matrix are dropped.
+
+**Trade-off accepted.** Borders move every second, so a wall right on the border breaks at
+the first push; walls built a few tiles inside your land are the strong play — a second
+line, like Clash of Clans' inner walls. D-022's concern (painted segments go stale) is
+answered by that: a wall is a fixed object on your land, not a property of the border.
 

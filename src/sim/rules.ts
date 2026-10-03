@@ -222,8 +222,9 @@ export interface EconomyRules {
 }
 
 /**
- * Building types built so far (GAME_DESIGN.md §3.17). Border Defense (2.6), Port (2.7) and
- * the air/strategic buildings (Phase 2B) join this list in their own milestones.
+ * Building types built so far (GAME_DESIGN.md §3.17). Port (2.7) and the air/strategic
+ * buildings (Phase 2B) join this list in their own milestones. Border Defense is not a
+ * one-tile building but a drawn wall (D-024): see WallRules.
  */
 export const BUILDING_TYPES = ["housing", "factory"] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
@@ -278,6 +279,41 @@ export interface BuildingRules {
   readonly types: Readonly<Record<BuildingType, BuildingTypeRules>>;
 }
 
+/** One level of a wall (GAME_DESIGN.md §3.17.6, D-024). */
+export interface WallLevelRules {
+  /** Display name ("Stone Wall"). */
+  readonly name: string;
+  /** Gold per wall tile to build it (level I) or upgrade to it, before escalation. */
+  readonly costPerTile: number;
+  /** Construction or upgrade time: this many ticks plus `buildTicksPerTile` per tile. */
+  readonly buildTicks: number;
+  readonly buildTicksPerTile: number;
+  /** An attack taking a wall tile pays this many times the normal losses… */
+  readonly loss: number;
+  /** …plus this many troops (breaking the wall itself)… */
+  readonly breakTroops: number;
+  /** …and the tile falls this many ticks later than a normal tile would. */
+  readonly holdTicks: number;
+}
+
+/**
+ * Walls (GAME_DESIGN.md §3.17.6, D-024): lines of tiles a player draws on their own land,
+ * point by point. Each wall tile holds an attack for a while and costs it extra troops;
+ * a wall tile taken by anyone breaks.
+ */
+export interface WallRules {
+  /** Corner points per wall (A, B, C …), at most. */
+  readonly maxPoints: number;
+  /** Tiles per wall, at most (a whole front, not a whole country). */
+  readonly maxTiles: number;
+  readonly levels: readonly [WallLevelRules, WallLevelRules, WallLevelRules];
+  /**
+   * Price escalation: every this many wall tile-levels a player already owns make walls
+   * `rules.buildings.escalationPerLevel` dearer (same cap as buildings).
+   */
+  readonly escalationTiles: number;
+}
+
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
 export interface BuildAiRules {
   /**
@@ -301,6 +337,22 @@ export interface BuildAiRules {
   readonly growthHorizonTicks: number;
   /** Candidate tiles sampled per placement. */
   readonly placementSamples: number;
+  /**
+   * Walls (GAME_DESIGN.md §3.17.6): a neighbouring nation or human (not a friend) is a
+   * threat when it attacks us or its troops are at least this share of ours…
+   */
+  readonly threatStrength: number;
+  /** …and the bot walls off its fronts toward threats with up to this many walls… */
+  readonly maxWalls: Readonly<Record<Personality, number>>;
+  /**
+   * …valuing a wall level at this share of its capacity (a rough "defenders it is worth"),
+   * times the personality's weight…
+   */
+  readonly wallWorth: readonly [number, number, number];
+  readonly fortifyWeight: Readonly<Record<Personality, number>>;
+  /** …drawn this many tiles behind the threatened border, at most this long. */
+  readonly wallDepth: number;
+  readonly wallLength: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -490,6 +542,7 @@ export interface GameRules {
   readonly diplomacy: DiplomacyRules;
   readonly economy: EconomyRules;
   readonly buildings: BuildingRules;
+  readonly walls: WallRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -720,6 +773,14 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       incomeHorizonTicks: 1_500,
       growthHorizonTicks: 600,
       placementSamples: 24,
+      // Walls (§3.17.6): turtles wall up, aggressors rarely do. A level-I wall is worth
+      // about as much per gold as a Housing to an expander facing a threat.
+      threatStrength: 0.6,
+      maxWalls: { expander: 2, aggressor: 1, turtle: 3, opportunist: 2 },
+      wallWorth: [0.12, 0.2, 0.28],
+      fortifyWeight: { expander: 1, aggressor: 0.6, turtle: 1.3, opportunist: 1 },
+      wallDepth: 5,
+      wallLength: 40,
     },
   },
   tribe: {
@@ -826,6 +887,44 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
     },
   },
+  // Walls (§3.17.6, D-024). Hard tiles: an attack waits at each wall tile (3 / 6 / 10 s at
+  // even odds, stretched or shortened like any tile by the attack's speed) and pays extra
+  // troops, so fronts flow around the ends and through gaps. A 40-tile Palisade costs
+  // 24k — about a Housing; a full Fortress Wall ~250k more.
+  walls: {
+    maxPoints: 12,
+    maxTiles: 80,
+    escalationTiles: 60,
+    levels: [
+      {
+        name: "Palisade",
+        costPerTile: 600,
+        buildTicks: 40,
+        buildTicksPerTile: 1,
+        loss: 3,
+        breakTroops: 150,
+        holdTicks: 30,
+      },
+      {
+        name: "Stone Wall",
+        costPerTile: 1_500,
+        buildTicks: 80,
+        buildTicksPerTile: 1,
+        loss: 5,
+        breakTroops: 500,
+        holdTicks: 60,
+      },
+      {
+        name: "Fortress Wall",
+        costPerTile: 4_000,
+        buildTicks: 150,
+        buildTicksPerTile: 2,
+        loss: 8,
+        breakTroops: 1_500,
+        holdTicks: 100,
+      },
+    ],
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -843,6 +942,7 @@ export function makeRules(overrides: {
   diplomacy?: Partial<DiplomacyRules>;
   economy?: Partial<EconomyRules>;
   buildings?: Partial<BuildingRules>;
+  walls?: Partial<WallRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -859,6 +959,7 @@ export function makeRules(overrides: {
     diplomacy: { ...DEFAULT_RULES.diplomacy, ...overrides.diplomacy },
     economy: { ...DEFAULT_RULES.economy, ...overrides.economy },
     buildings: { ...DEFAULT_RULES.buildings, ...overrides.buildings },
+    walls: { ...DEFAULT_RULES.walls, ...overrides.walls },
   });
 }
 

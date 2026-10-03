@@ -2,7 +2,7 @@
   /** What the UI may ask the game to do (it never changes game state itself). */
   import type { HintId } from "../app/hints.ts";
   import type { MapSize } from "../app/setup.ts";
-  import type { BuildingType } from "../../sim/rules.ts";
+  import type { Placeable } from "../app/buildings.ts";
 
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
@@ -27,9 +27,12 @@
     mobilize: () => void;
     donate: (to: number, resource: "troops" | "gold", percent: number) => void;
     /** Buildings (GAME_DESIGN.md §3.17): pick one up from the build bar to place it. */
-    pickBuilding: (type: BuildingType) => void;
+    pickBuilding: (type: Placeable) => void;
     upgrade: (buildingId: number) => void;
     cancelBuild: (buildingId: number) => void;
+    /** Walls (GAME_DESIGN.md §3.17.6): drawn with the build bar's wall tool. */
+    upgradeWall: (wallId: number) => void;
+    cancelWall: (wallId: number) => void;
     pause: () => void;
     closeMenu: () => void;
     setSpeed: (multiplier: number) => void;
@@ -101,8 +104,8 @@
     onClose={actions.closeMenu}
   />
   <BuildingCard
-    onUpgrade={actions.upgrade}
-    onCancel={actions.cancelBuild}
+    onUpgrade={(id, wall) => (wall ? actions.upgradeWall(id) : actions.upgrade(id))}
+    onCancel={(id, wall) => (wall ? actions.cancelWall(id) : actions.cancelBuild(id))}
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />

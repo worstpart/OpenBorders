@@ -65,6 +65,8 @@ mount(App, {
       pickBuilding: (type) => client?.pickBuilding(type),
       upgrade: (buildingId) => client?.upgrade(buildingId),
       cancelBuild: (buildingId) => client?.cancelBuild(buildingId),
+      upgradeWall: (wallId) => client?.upgradeWall(wallId),
+      cancelWall: (wallId) => client?.cancelWall(wallId),
       pause: () => client?.pause(),
       closeMenu: () => client?.closeMenu(),
       setSpeed: (multiplier) => client?.setSpeed(multiplier),

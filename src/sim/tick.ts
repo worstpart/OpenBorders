@@ -25,6 +25,7 @@ import {
   updateBuildings,
 } from "./systems/buildings.ts";
 import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
+import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -60,6 +61,7 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
   }
   world.tick = turn.tick;
   world.changes.clear();
+  world.fortChanges.clear();
   world.events.length = 0;
 
   // 1. Commands: the bots' decisions from last tick, then this turn's (human) commands.
@@ -87,8 +89,10 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 5. Players with no land (or a collapsed remnant under attack) are out.
     eliminate(world);
     probe?.("eliminate");
-    // 5b. Buildings on captured land change hands; constructions finish; bonuses add up.
+    // 5b. Buildings on captured land change hands; constructions finish (walls too);
+    //     bonuses add up.
     updateBuildings(world);
+    updateWalls(world);
     probe?.("buildings");
     // 6. Troops regrow.
     growTroops(world);
@@ -156,6 +160,12 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyUpgrade(world, player, command.buildingId);
     case "cancelBuild":
       return applyCancelBuild(world, player, command.buildingId);
+    case "buildWall":
+      return applyBuildWall(world, player, command.points);
+    case "upgradeWall":
+      return applyUpgradeWall(world, player, command.wallId);
+    case "cancelWall":
+      return applyCancelWall(world, player, command.wallId);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

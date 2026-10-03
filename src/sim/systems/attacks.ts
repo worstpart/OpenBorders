@@ -30,6 +30,7 @@ import {
   type World,
 } from "../world.ts";
 import { isAllied, isTraitor } from "./diplomacy.ts";
+import { wallBreakTroops, wallHoldTicks, wallLossFactor } from "./walls.ts";
 import { isSpawnProtected } from "./spawn.ts";
 import { gradientNoise } from "../map/noise.ts";
 import { TileQueue } from "./tileQueue.ts";
@@ -292,6 +293,8 @@ function layerDelay(world: World, attack: Attack, tile: number): number {
     // Traitors are overrun faster (GAME_DESIGN.md §3.14).
     if (isTraitor(world, getPlayer(world, attack.target)))
       delay *= world.rules.diplomacy.traitorDelay;
+    // A wall (GAME_DESIGN.md §3.17.6) holds the front for a while.
+    delay += wallHoldTicks(world, tile, ratio);
   }
   return delay;
 }
@@ -324,12 +327,14 @@ export function tileCost(world: World, attack: Attack, tile: number): number {
     isTribe(getPlayer(world, attack.attacker)),
     isTribe(defender),
     isTraitor(world, defender),
+    wallLossFactor(world, tile),
   );
   return (
     discount *
-    terrainValue(combat.terrainLoss, terrain) *
-    ratio *
-    (combat.lossBase + combat.lossDensity * defenderDensity(defender))
+      terrainValue(combat.terrainLoss, terrain) *
+      ratio *
+      (combat.lossBase + combat.lossDensity * defenderDensity(defender)) +
+    wallBreakTroops(world, tile)
   );
 }
 

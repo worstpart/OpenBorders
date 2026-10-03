@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), Border Defense, naval, more maps | 🟡 2.0–2.5 ✅ · next 2.6 |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, more maps | 🟡 2.0–2.6 ✅ · next 2.7 |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -159,7 +159,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.3 ✅ | **Teams mode** — choose 2–N teams of players + bots, team colours, shared victory on combined land, no attacking teammates, team-aware AI (help teammates, gang up) | Team games end with a winning team; teammates never fight |
 | 2.4 ✅ | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | Gold earned, mobilized, given and looted in the browser; games no longer than before |
 | 2.5 ✅ | **Building framework + Housing & Factory (levels I–III)** — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
-| 2.6 | **Border Defense I–III** *(PLANNED)* — fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
+| 2.6 ✅ | **Border Defense I–III → drawn walls** (D-024; first built as posts fortifying the border, D-022, replaced at the user's request the same day) — originally: fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
 | 2.7 | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 | **More maps** *(was 2.7)* — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps; `WorkerHost`; re-check building spacing and range values on bigger maps | |
 | 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B) | |
@@ -344,6 +344,33 @@ agg 21 (more even than before), 15 buildings captured per game; 10 nations + 100
 (50): 13.4 min, turtle 25 · exp 12 · opp 8 · agg 5, first L3 at 5:26. Browser: bar, ghost
 (green on your land, red elsewhere), placing, Esc and right-click to put it back, card
 *Upgrade* and *Cancel* (refund) — all clicked; clean console.
+
+
+**Milestone 2.6 result (2026-10-02)** — Border Defense as **walls drawn point by point**
+(GAME_DESIGN §3.17.6, D-024). The first version — a post whose circle fortified the owner's
+border, the border drawn as a wall in the shader (D-022) — was built and verified (tests;
+headless: 8 nations 8.5 min, turtles 28; tribe lobbies 14.5 min, turtles 16/50; a frontal
+attack on a level-III line needed 1.55× the troops) and shown in the browser; the user then
+asked for Clash of Clans-style walls placed A, B, C … that enemies push through, and chose:
+walls replace posts, hard tiles, anywhere on your land.
+
+| Headless games | Median (longest) | 2.5 | Walls / tiles / upgrades / tiles broken per game | Wins | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 8 nations, walls off (`maxWalls` 0) (100) | 7.9 min (15.4) — identical to 2.5 | 7.9 | — | turtle 28 · opp 27 · exp 24 · agg 21 (= 2.5) | 0.85 / 7.6 ms |
+| 8 nations (100) | **7.7 min** (16.6) | 7.9 | 29.7 / 565 / 7.3 / 461 | turtle 33 · opp 23 · agg 22 · exp 22 | 0.82 / 6.8 ms |
+| 10 nations + 100 tribes, Medium, walls off (50) | 13.4 min (21.6) — identical to 2.5 | 13.4 | — | turtle 25 · exp 12 · opp 8 · agg 5 (= 2.5) | 0.93 / 6.7 ms |
+| 10 nations + 100 tribes, Medium (50) | **12.9 min** (20.7) | 13.4 | 32.6 / 604 / 7.6 / 531 | exp 17 · opp 17 · turtle 13 · agg 3 | 1.15 / 9.0 ms |
+
+No errors; every game has a winner. Turtles win 13 of 50 tribe lobbies (2.4: 24, 2.5: 25 —
+the "done when" was "not worse"); in 8-nation games they win 33 (2.4: 34). Most walls
+are eventually broken through (enemies push). Hold times measured (army 3× the defender):
+open border 0.6 s, Palisade 2 s, Fortress Wall 5.2 s. **Watch:** aggressors win only 3/50
+tribe lobbies (2.5: 5) — 2.10 balance. Browser: Wall tool in the build bar (600/tile),
+points A, B, C with the line following the mouse and "35 tiles · 21K", right-click to
+build, dashed construction with a progress ring, the Palisade (stakes), the wall card
+(Upgrade to Stone Wall 60K — red until affordable, then clicked), Stone Wall with towers and
+the "Stone Wall ready" toast; nations drew their own Palisades behind their fronts; clean
+console. Not seen in the browser yet: an enemy breaking a gap (covered by tests).
 
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 

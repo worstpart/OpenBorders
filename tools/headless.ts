@@ -130,6 +130,12 @@ export interface GameReport {
     firstL1: number | null;
     firstL2: number | null;
     firstL3: number | null;
+    /** Walls (GAME_DESIGN §3.17.6): built, upgraded, tiles broken, walls destroyed. */
+    walls: number;
+    wallTiles: number;
+    wallUpgrades: number;
+    wallTilesBroken: number;
+    wallsDestroyed: number;
   };
   tickMs: { avg: number; p99: number; max: number };
   /** Per tick step: average and worst milliseconds. */
@@ -311,6 +317,11 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     firstL1: null,
     firstL2: null,
     firstL3: null,
+    walls: 0,
+    wallTiles: 0,
+    wallUpgrades: 0,
+    wallTilesBroken: 0,
+    wallsDestroyed: 0,
   };
   let reason = "timeout";
   let error: string | null = null;
@@ -358,6 +369,15 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
           if (event.level === 1) buildings.builds++;
           else buildings.upgrades++;
           buildings.goldSpent += event.gold;
+        } else if (event.type === "wallStarted") {
+          if (event.level === 1) {
+            buildings.walls++;
+            buildings.wallTiles += event.tiles;
+          } else buildings.wallUpgrades++;
+          buildings.goldSpent += event.gold;
+        } else if (event.type === "wallBreached") buildings.wallTilesBroken++;
+        else if (event.type === "wallDestroyed" && event.reason === "breached") {
+          buildings.wallsDestroyed++;
         } else if (event.type === "buildingCancelled") buildings.cancelled++;
         else if (event.type === "buildingCaptured") buildings.captured++;
         else if (event.type === "buildingDestroyed" && event.reason === "captured") {

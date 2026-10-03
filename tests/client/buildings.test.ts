@@ -1,16 +1,20 @@
 /** The HUD's building logic (GAME_DESIGN.md §3.17). */
 import { describe, expect, it } from "vitest";
 import {
+  buildBarItems,
   buildingAtPoint,
   buildingCard,
   buildOptions,
+  wallAtPoint,
+  wallCard,
+  wallPreview,
   effectLines,
   upgradeLines,
   type BuildContext,
 } from "../../src/client/app/buildings.ts";
 import { HintTracker } from "../../src/client/app/hints.ts";
 import { toastsForEvents } from "../../src/client/app/toasts.ts";
-import type { BuildingSnapshot, PlayerSnapshot } from "../../src/sim/frame.ts";
+import type { BuildingSnapshot, PlayerSnapshot, WallSnapshot } from "../../src/sim/frame.ts";
 import { createMap, Terrain } from "../../src/sim/map/gameMap.ts";
 import { DEFAULT_RULES, makeRules } from "../../src/sim/rules.ts";
 
@@ -70,6 +74,7 @@ const ctx = (overrides: Partial<BuildContext> = {}): BuildContext => ({
   map,
   owner,
   buildings: [],
+  walls: [],
   me: me(),
   tick: 100,
   playing: true,
@@ -97,6 +102,57 @@ describe("build options", () => {
   it("price in the levels we already own", () => {
     const owned = [building({ level: 2, targetLevel: 2, tile: at(0, 0) })];
     expect(buildOptions(ctx({ buildings: owned }), at(12, 8))[0]!.price).toBe(60_000);
+  });
+});
+
+/** A finished wall of player 1 along row 2, x 2..8. */
+function wall(overrides: Partial<WallSnapshot> = {}): WallSnapshot {
+  return {
+    id: 4,
+    owner: 1,
+    points: [at(2, 2), at(8, 2)],
+    tiles: [2, 3, 4, 5, 6, 7, 8].map((x) => at(x, 2)),
+    level: 1,
+    targetLevel: 1,
+    startTick: -1,
+    readyTick: -1,
+    ...overrides,
+  };
+}
+
+describe("walls in the HUD (GAME_DESIGN.md §3.17.6)", () => {
+  it("the build bar offers the wall tool, priced per tile", () => {
+    const item = buildBarItems(ctx()).at(-1)!;
+    expect(item).toMatchObject({ type: "wall", name: "Wall", unit: "/tile" });
+    expect(item.price).toBe(DEFAULT_RULES.walls.levels[0].costPerTile);
+  });
+
+  it("previews the line through the points and the mouse, its length and price", () => {
+    const preview = wallPreview(ctx(), [at(2, 5)], at(6, 5))!;
+    expect(preview.points).toEqual([at(2, 5), at(6, 5)]);
+    expect(preview.newTiles).toBe(5);
+    expect(preview.price).toBe(3_000);
+    expect(preview.problem).toBeNull();
+    // Into their land, or through a building: refused, with the reason.
+    expect(wallPreview(ctx(), [at(10, 5)], at(17, 5))!.problem).toBe("notYourLand");
+    const blocked = ctx({ buildings: [building({ tile: at(4, 5) })] });
+    expect(wallPreview(blocked, [at(2, 5)], at(6, 5))!.problem).toBe("building");
+    // Joining a standing wall builds only the new tiles.
+    expect(wallPreview(ctx({ walls: [wall()] }), [at(5, 0)], at(5, 4))!.newTiles).toBe(4);
+    expect(wallPreview(ctx({ me: me({ gold: 0 }) }), [at(2, 5)], at(6, 5))!.problem).toBe("noGold");
+  });
+
+  it("a wall card shows its length, effect and upgrade; clicks find the wall", () => {
+    const card = wallCard(ctx(), wall());
+    expect(card).toMatchObject({ type: "wall", name: "Palisade", level: 1, mine: true });
+    expect(card.effects[0]).toBe("7 tiles standing");
+    expect(card.upgrade).toMatchObject({ name: "Stone Wall" });
+    expect(wallAtPoint([wall()], WIDTH, 5.4, 2.6, 0.75)?.id).toBe(4);
+    expect(wallAtPoint([wall()], WIDTH, 5.4, 4.6, 0.75)).toBeNull();
+  });
+
+  it("keeps buildings off walls", () => {
+    expect(buildOptions(ctx({ walls: [wall()] }), at(5, 2))[0]!.blocked).toBe("wall");
   });
 });
 
@@ -206,5 +262,17 @@ describe("building toasts and hint", () => {
     expect(hints.update({ playing: true, canAttackPlayer: false, canBuild: true }, 1)).toBe(
       "build",
     );
+  });
+});
+
+describe("wall drawing", () => {
+  it("splits a broken wall into runs, so the gap shows", async () => {
+    const { wallRuns } = await import("../../src/client/render/buildings.ts");
+    const row = [2, 3, 4, 5, 6, 7, 8].map((x) => at(x, 2));
+    expect(wallRuns(row, WIDTH)).toEqual([row]);
+    const broken = row.filter((t) => t !== at(5, 2));
+    expect(wallRuns(broken, WIDTH)).toEqual([row.slice(0, 3), row.slice(4)]);
+    // A diagonal step is still one run (8-connected).
+    expect(wallRuns([at(2, 2), at(3, 3), at(4, 4)], WIDTH)).toHaveLength(1);
   });
 });

@@ -1,10 +1,10 @@
 <script lang="ts">
   /** A building's drawing (icons.ts — the same art as on the map), as inline SVG. */
-  import type { BuildingType } from "../../../sim/rules.ts";
+  import type { Placeable } from "../../app/buildings.ts";
   import { iconPath } from "../../icons.ts";
 
   interface Props {
-    type: BuildingType;
+    type: Placeable;
     level?: number;
     size?: number;
   }

@@ -23,7 +23,7 @@
   const owner = $derived(hover && hover.owner !== 0 ? ui.players[hover.owner - 1] : undefined);
   const isMe = $derived(hover?.owner === ui.localPlayerId);
   const preview = $derived(
-    hover ? previewClick(ui.previewContext, hover.owner, ui.attackPercent) : null,
+    hover ? previewClick(ui.previewContext, hover.owner, ui.attackPercent, hover.tile) : null,
   );
   const attacksMe = $derived(
     !!hover && ui.attacks.some((a) => a.attacker === hover.owner && a.target === ui.localPlayerId),
@@ -36,6 +36,11 @@
   const terrain = $derived(hover ? TERRAIN[hover.terrain] : undefined);
   const alliance = $derived(hover ? allianceStatus(ui.diplomacyContext, hover.owner) : null);
   const traitorFor = $derived(traitorSecondsLeft(DEFAULT_RULES, ui.tick, owner));
+  // Border Defense (GAME_DESIGN.md §3.17.6); ui.fort isn't reactive, so re-read every tick.
+  const wall = $derived.by(() => {
+    const level = hover && ui.tick >= 0 ? (ui.fort[hover.tile] ?? 0) : 0;
+    return level > 0 ? DEFAULT_RULES.walls.levels[level - 1]! : null;
+  });
 
   // Keep the card on screen: flip to the other side of the cursor near the edges.
   const left = $derived(
@@ -101,6 +106,13 @@
       {#if myAttack}<div class="badge">
           You're attacking ({formatTroops(myAttack.troops)} left)
         </div>{/if}
+    {/if}
+
+    {#if wall}
+      <div class="badge wall">
+        {isMe ? "Your wall" : "Wall"} · {wall.name}: holds attacks ~{wall.holdTicks / 10} s per tile,
+        attackers lose ×{wall.loss}
+      </div>
     {/if}
 
     <div class="preview">
