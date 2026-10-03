@@ -3,8 +3,8 @@
 > **For the next session: read this file first**, then
 > [`PHASE_1_HANDOFF.md`](PHASE_1_HANDOFF.md) §4–§6 (how the user wants us to work,
 > environment gotchas, repo map — all still valid; the debug hook is
-> `window.__openborder`). Written 2026-10-02. Last code commit: "Phase 2.6: Border Defense
-> as walls drawn point by point (D-024)".
+> `window.__openborder`). Written 2026-10-02. Last code commit: "2.6 fix: nations build
+> economy before walls; far-zoom buildings shown as dots" (1cf3d5f).
 
 ## 1. Where we are
 
