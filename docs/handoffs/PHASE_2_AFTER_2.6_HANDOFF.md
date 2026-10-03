@@ -62,6 +62,11 @@ handoff: commit, push, confirm `main` = `origin/main` to the user.
 + 100 tribes: 12.9 min (2.5: 13.4); **turtles 13/50** (2.5: 25; target "not worse than 24");
 aggressors 3/50 (watch). ~30 walls per game, most eventually broken through.
 
+**After the user's report "nations only build walls" (same day):** far-zoom buildings are
+now dots (they were hidden), and nations build walls only after their first Housing or
+Factory unless under attack. After the fix: 8 nations 7.7 min (turtle 35); tribe lobbies
+12.6 min, turtles 19/50, aggressors 5/50.
+
 ## 5. Known issues / open items
 
 | Item | Where it goes |

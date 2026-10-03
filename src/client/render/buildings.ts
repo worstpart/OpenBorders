@@ -54,7 +54,7 @@ export interface BuildingDrawInput {
 /** Icon size in CSS px per unit of zoom (pixels per tile), and its bounds. */
 export const ICON_PX_PER_ZOOM = 8;
 export const ICON_MAX_PX = 40;
-/** Below this size only your own and level-III buildings are drawn (at this size). */
+/** Below this size only your own and level-III buildings keep their icon (at this size); others are dots. */
 export const ICON_MIN_PX = 18;
 
 const ICON_INK = "#f6f1e4";
@@ -99,9 +99,14 @@ export class BuildingLayer {
 
     for (const b of input.buildings) {
       const mine = b.owner === input.localPlayerId;
-      if (small && !mine && b.level < 3) continue;
       const at = toScreen(b.tile);
       if (at.x < -size || at.y < -size || at.x > halfW * 2 + size || at.y > halfH * 2 + size) {
+        continue;
+      }
+      // Zoomed out, other players' level I–II buildings shrink to a dot (still visible,
+      // without cluttering the map); yours and level III keep their icon.
+      if (small && !mine && b.level < 3) {
+        this.dot(at.x, at.y, input.colorOf(b.owner), b.level);
         continue;
       }
       const working = b.readyTick >= 0;
@@ -143,6 +148,26 @@ export class BuildingLayer {
       });
       ctx.restore();
     }
+  }
+
+  /** A far-zoom building marker: a dark dot ringed in the owner's colour (bigger per level). */
+  private dot(x: number, y: number, color: string, level: number): void {
+    const ctx = this.context;
+    const r = level >= 2 ? 4.5 : 3.5;
+    ctx.save();
+    if (level === 0) ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#0e121a";
+    ctx.fill();
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.3, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffd166";
+    ctx.fill();
+    ctx.restore();
   }
 
   /** One wall: its runs of standing tiles, by level (see the header). */

@@ -22,7 +22,8 @@
  * hardest to capture.
  *
  * Walls (§3.17.6, D-024): a neighbouring nation or human that isn't a friend and is
- * attacking the bot, or has at least `threatStrength` of its troops, is a threat. A new
+ * attacking the bot, or has at least `threatStrength` of its troops, is a threat. Walls come
+ * after the first Housing or Factory (unless under attack). A new
  * wall (up to `maxWalls`) is one straight line `wallDepth` tiles behind a threatened border
  * tile that no wall guards yet, across the front (perpendicular to the way in), up to
  * `wallLength` tiles and clipped to the bot's own clear land.
@@ -125,6 +126,10 @@ function buildingGoal(world: World, bot: Player): Goal | null {
     }
   }
 
+  // Walls come after the economy: not before the first Housing or Factory, unless the
+  // nation is already under attack (user, 2.6: nations looked like they only built walls).
+  const attacked = world.attacks.some((x) => x.target === bot.id && x.retreatTick < 0);
+  if (mine.length === 0 && !attacked) return goal;
   const front = threatenedFront(world, bot);
   if (front.length === 0) return goal;
   const frontSet = new Set(front);

@@ -372,6 +372,16 @@ build, dashed construction with a progress ring, the Palisade (stakes), the wall
 the "Stone Wall ready" toast; nations drew their own Palisades behind their fronts; clean
 console. Not seen in the browser yet: an enemy breaking a gap (covered by tests).
 
+**User report (same day): "nation bots aren't placing buildings, just walls".** Two causes: zoomed
+out, other players' level I–II buildings were hidden (since 2.5) while walls were always
+drawn; and a nation's first wall (~15k) was affordable before its first Housing (40k), so
+every nation walled first. Fixed: far-zoom buildings are small dots ringed in the owner's
+colour (clickable); nations build walls only after their first Housing or Factory (unless
+under attack), wall worth 0.10 / 0.18 / 0.26. Every nation now starts with a Housing at
+~1:12, walls from ~1:20. Headless after the fix — 8 nations (100): 7.7 min, turtle 35 · exp
+28 · agg 19 · opp 18; 10 nations + 100 tribes (50): 12.6 min, turtle 19 · exp 17 · opp 9 ·
+agg 5; ~31 walls per game.
+
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 
 Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before

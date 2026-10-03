@@ -773,11 +773,11 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       incomeHorizonTicks: 1_500,
       growthHorizonTicks: 600,
       placementSamples: 24,
-      // Walls (§3.17.6): turtles wall up, aggressors rarely do. A level-I wall is worth
-      // about as much per gold as a Housing to an expander facing a threat.
+      // Walls (§3.17.6): turtles wall up, aggressors rarely do. Early on a Housing is worth
+      // more per gold than a wall; walls catch up as capacity grows (bigger empires defend).
       threatStrength: 0.6,
       maxWalls: { expander: 2, aggressor: 1, turtle: 3, opportunist: 2 },
-      wallWorth: [0.12, 0.2, 0.28],
+      wallWorth: [0.1, 0.18, 0.26],
       fortifyWeight: { expander: 1, aggressor: 0.6, turtle: 1.3, opportunist: 1 },
       wallDepth: 5,
       wallLength: 40,

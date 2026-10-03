@@ -851,7 +851,9 @@ On the map they sit in a round dark badge ringed in the owner's colour, gold dot
 level, a gold outer ring at level III; 18–40 px depending on zoom. Construction:
 the icon fills in from the bottom with a thin progress ring; upgrade: a brief scaffold
 outline, then a soft pulse as the new icon and (if any) the larger range ring appear.
-Icons fade out when zoomed far out, except your own and level-III buildings.
+Zoomed far out, other players' level I–II buildings shrink to small dots ringed in their
+colour (2.6 fix: hiding them made nations look like they only built walls); your own and
+level-III buildings keep their icon.
 
 **As built in milestone 2.5 (Housing, Factory — rows marked ✅).** The first measurement
 showed nations never upgrading: level I gave the most per gold. Re-priced so every level

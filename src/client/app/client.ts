@@ -729,12 +729,14 @@ export class GameClient {
     const natural = zoom * ICON_PX_PER_ZOOM;
     const size = iconSize(zoom);
     const point = this.camera.screenToWorld(at);
-    const visible =
+    const icons =
       natural >= ICON_MIN_PX
         ? ui.buildings
         : ui.buildings.filter((b) => b.owner === ui.localPlayerId || b.level >= 3);
-    const hit = buildingAtPoint(visible, map.width, point.x, point.y, (size * 0.6) / zoom);
-    return hit?.id ?? null;
+    const hit = buildingAtPoint(icons, map.width, point.x, point.y, (size * 0.6) / zoom);
+    if (hit || natural >= ICON_MIN_PX) return hit?.id ?? null;
+    // Zoomed out, other buildings are small dots (render/buildings.ts).
+    return buildingAtPoint(ui.buildings, map.width, point.x, point.y, 6 / zoom)?.id ?? null;
   }
 
   private key(action: KeyAction): void {
