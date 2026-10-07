@@ -48,6 +48,7 @@ import {
 } from "../systems/buildings.ts";
 import { distanceSq } from "../geometry.ts";
 import { areFriendly } from "../systems/diplomacy.ts";
+import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
 import {
   isTribe,
@@ -116,18 +117,19 @@ function buildingGoal(world: World, bot: Player): Goal | null {
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
     const value =
-      worth(world, bot, levelRules(rules, b.type, level)) -
-      worth(world, bot, levelRules(rules, b.type, b.level));
+      worth(world, bot, levelRules(rules, b.type, level), b.tile) -
+      worth(world, bot, levelRules(rules, b.type, b.level), b.tile);
     consider(price, value, { ...none, upgrade: b.id });
   }
   if (mine.length < Math.floor(bot.tiles / ai.tilesPerBuilding)) {
     for (const type of BUILDING_TYPES) {
       if (!buildingAvailable(rules, type)) continue;
       // One Port is enough (its speed doesn't stack); it needs a coast.
-      if (type === "port" && (mine.some((b) => b.type === "port") || !hasCoast(world, bot)))
-        continue;
+      const coast = type === "port" ? anyCoast(world, bot) : -1;
+      if (type === "port" && (mine.some((b) => b.type === "port") || coast < 0)) continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
-      consider(price, worth(world, bot, levelRules(rules, type, 1)), { ...none, newType: type });
+      const value = worth(world, bot, levelRules(rules, type, 1), coast);
+      consider(price, value, { ...none, newType: type });
     }
   }
 
@@ -352,9 +354,10 @@ function planWall(
 
 /**
  * What a level's effects are worth to this bot, in troop-equivalents. A Port's faster
- * boats and extra slots count as `portWorth` × capacity per boat speed step (§3.18).
+ * boats and extra slots count as `portWorth` × capacity per boat speed step (§3.18); its
+ * trade as the gold it would bring now from the partner Ports on its sea (§3.19).
  */
-function worth(world: World, bot: Player, effect: BuildingLevelRules): number {
+function worth(world: World, bot: Player, effect: BuildingLevelRules, tile = -1): number {
   const ai = world.rules.ai.build;
   const troops = world.rules.troops;
   const peakGrowth = troops.growthScale * detPow(Math.max(1, bot.capacity), troops.growthExponent);
@@ -364,14 +367,15 @@ function worth(world: World, bot: Player, effect: BuildingLevelRules): number {
     (effect.growthBonus ?? 0) * peakGrowth * ai.growthHorizonTicks +
     (effect.income ?? 0) * ai.incomeHorizonTicks +
     (effect.mobilizeDiscount ?? 0) * income +
-    ((effect.boatSpeed ?? 1) - 1) * ai.portWorth * bot.capacity
+    ((effect.boatSpeed ?? 1) - 1) * ai.portWorth * bot.capacity +
+    expectedTradePerTick(world, bot.id, tile, effect.tradeEveryTicks ?? 0) * ai.incomeHorizonTicks
   );
 }
 
-/** The bot owns a coast tile (a Port could stand there). */
-function hasCoast(world: World, bot: Player): boolean {
-  for (const tile of bot.border) if (isCoast(world.map, tile)) return true;
-  return false;
+/** One of the bot's coast tiles (a Port could stand there), or -1. */
+function anyCoast(world: World, bot: Player): number {
+  for (const tile of bot.border) if (isCoast(world.map, tile)) return tile;
+  return -1;
 }
 
 /**

@@ -263,7 +263,7 @@ describe("Ports", () => {
     for (let k = 0; k < 4; k++) order(two, 1, boatTo(2, at(23, 2), 500));
     expect(two.boats).toHaveLength(5); // 3 + 2 from the Naval Port
     expect(rejection(order(two, 1, boatTo(2, at(23, 2), 500)))).toBe("all your boats are at sea");
-    expect(two.players[0]!.bonus.income).toBe(40);
+    expect(two.players[0]!.bonus.income).toBe(15); // harbour income; trade comes on top (§3.19)
   });
 
   it("stops at level II for now", () => {

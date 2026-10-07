@@ -222,6 +222,22 @@ export type SimEvent =
       readonly troops: number;
     }
   | {
+      /**
+       * A trade ship docked (GAME_DESIGN.md §3.19): its owner and the Port's owner (`receiver`)
+       * each earned `gold` — or, if the Port was gone or is now the owner's own, nobody did
+       * (`receiver` 0, `gold` 0).
+       */
+      readonly type: "tradeDocked";
+      readonly shipId: number;
+      readonly owner: PlayerId;
+      readonly receiver: PlayerId;
+      readonly fromPort: number;
+      readonly toPort: number;
+      /** The destination Port's tile. */
+      readonly tile: number;
+      readonly gold: number;
+    }
+  | {
       readonly type: "commandRejected";
       readonly playerId: PlayerId;
       readonly command: Command["type"];

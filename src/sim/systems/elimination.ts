@@ -14,6 +14,7 @@ import { endAttacksInvolving, primaryAttacker } from "./attacks.ts";
 import { dropDiplomacy } from "./diplomacy.ts";
 import { lootGold } from "./economy.ts";
 import { sinkBoatsOf } from "./naval.ts";
+import { sinkTradeShipsOf } from "./trade.ts";
 
 /** Tick system. */
 export function eliminate(world: World): void {
@@ -42,6 +43,7 @@ function eliminatePlayer(world: World, player: Player, by: PlayerId | null): voi
   player.eliminatedTick = world.tick;
   endAttacksInvolving(world, player.id);
   sinkBoatsOf(world, player.id);
+  sinkTradeShipsOf(world, player.id);
   dropDiplomacy(world, player.id);
   player.homeTroops = 0;
   player.fieldTroops = 0;

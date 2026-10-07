@@ -40,6 +40,7 @@ function me(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     growthPerTick: 0,
     gold: 100_000,
     goldPerTick: 20,
+    tradeGold: 0,
     mobilizeDiscount: 0,
     growthBonus: 0,
     peakTiles: 150,

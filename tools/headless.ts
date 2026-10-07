@@ -7,7 +7,7 @@
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
  *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
- *                          [--no-boats] [--continent]
+ *                          [--no-boats] [--no-trade] [--continent]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -29,7 +29,7 @@
  * game reports builds, upgrades, gold spent on them, captures, and when the first level
  * I / II / III building was finished.
  *
- * --no-boats turns boats off (GAME_DESIGN §3.18) and --continent plays on the single-
+ * --no-trade turns trade ships off (GAME_DESIGN §3.19); --no-boats turns boats off (§3.18) and --continent plays on the single-
  * continent map of milestones 1.1–2.6 (no islands, D-025): together they reproduce 2.6.
  * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
  *
@@ -155,6 +155,10 @@ export interface GameReport {
     sunk: number;
     ports: number;
     portUpgrades: number;
+    /** Trade ships (GAME_DESIGN §3.19): trips docked, gold paid (both sides), ships lost. */
+    tradeTrips: number;
+    tradeGold: number;
+    tradeLost: number;
   };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -191,6 +195,7 @@ async function main(): Promise<void> {
       "no-economy": { type: "boolean", default: false },
       "no-buildings": { type: "boolean", default: false },
       "no-boats": { type: "boolean", default: false },
+      "no-trade": { type: "boolean", default: false },
       continent: { type: "boolean", default: false },
     },
   });
@@ -201,9 +206,12 @@ async function main(): Promise<void> {
   const withBuildings = args["no-buildings"]
     ? { ...withEconomy, buildings: { ...withEconomy.buildings, enabled: false } }
     : withEconomy;
-  const rules = args["no-boats"]
+  const withBoats = args["no-boats"]
     ? { ...withBuildings, naval: { ...withBuildings.naval, enabled: false } }
     : withBuildings;
+  const rules = args["no-trade"]
+    ? { ...withBoats, trade: { ...withBoats.trade, enabled: false } }
+    : withBoats;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -357,6 +365,9 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     sunk: 0,
     ports: 0,
     portUpgrades: 0,
+    tradeTrips: 0,
+    tradeGold: 0,
+    tradeLost: 0,
   };
   let reason = "timeout";
   let error: string | null = null;
@@ -405,6 +416,11 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         } else if (event.type === "boatLanded") {
           if (event.attackId >= 0) naval.beachheads++;
           else naval.landedHome++;
+        } else if (event.type === "tradeDocked") {
+          if (event.gold > 0) {
+            naval.tradeTrips++;
+            naval.tradeGold += 2 * event.gold;
+          } else naval.tradeLost++;
         } else if (event.type === "boatRecalled") naval.recalled++;
         else if (event.type === "boatReturned" && event.troops === 0) naval.sunk++;
         else if (event.type === "buildingStarted" && event.buildingType === "port") {

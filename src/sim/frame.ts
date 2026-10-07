@@ -7,7 +7,7 @@ import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
 import { landNeighbors } from "./systems/attacks.ts";
 import type { BuildingType, Difficulty } from "./rules.ts";
-import type { Boat, BotTier, Phase, PlayerId, PlayerKind, World } from "./world.ts";
+import type { Boat, BotTier, Phase, PlayerId, PlayerKind, TradeShip, World } from "./world.ts";
 
 export interface PlayerSnapshot {
   readonly id: PlayerId;
@@ -24,6 +24,8 @@ export interface PlayerSnapshot {
   /** Gold, and gold earned in the last tick (GAME_DESIGN.md §3.16). */
   readonly gold: number;
   readonly goldPerTick: number;
+  /** Gold earned from trade ships so far (GAME_DESIGN.md §3.19). */
+  readonly tradeGold: number;
   /** Mobilize discount from Factories (GAME_DESIGN.md §3.17), a share. */
   readonly mobilizeDiscount: number;
   /** Troop growth bonus from Housing, a share. */
@@ -84,6 +86,24 @@ export interface BoatSnapshot {
   readonly arriveTick: number;
   /** Tick it turned back, or -1. */
   readonly recallTick: number;
+}
+
+/**
+ * A trade ship at sea (GAME_DESIGN.md §3.19). Made once per ship (and again if its owner or
+ * destination changes) and shared between frames.
+ */
+export interface TradeShipSnapshot {
+  readonly id: number;
+  readonly owner: PlayerId;
+  readonly fromPort: number;
+  readonly toPort: number;
+  readonly launchTile: number;
+  readonly landingTile: number;
+  readonly route: Int32Array;
+  readonly launchTick: number;
+  readonly tilesPerTick: number;
+  readonly arriveTick: number;
+  readonly gold: number;
 }
 
 /** A building (GAME_DESIGN.md §3.17). */
@@ -154,6 +174,8 @@ export interface TickFrame {
   readonly walls: readonly WallSnapshot[];
   /** Every boat at sea, by ascending id. */
   readonly boats: readonly BoatSnapshot[];
+  /** Every trade ship at sea, by ascending id. */
+  readonly tradeShips: readonly TradeShipSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Team games: the team that won (0 = none). */
@@ -177,6 +199,7 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     growthPerTick: p.lastGrowth,
     gold: p.gold,
     goldPerTick: p.lastIncome,
+    tradeGold: p.tradeGold,
     mobilizeDiscount: p.bonus.mobilizeDiscount,
     growthBonus: p.bonus.growth,
     peakTiles: p.peakTiles,
@@ -234,6 +257,28 @@ function snapshotBoat(boat: Boat): BoatSnapshot {
   return snapshot;
 }
 
+const tradeCache = new WeakMap<TradeShip, TradeShipSnapshot>();
+
+function snapshotTradeShip(ship: TradeShip): TradeShipSnapshot {
+  const cached = tradeCache.get(ship);
+  if (cached && cached.owner === ship.owner && cached.toPort === ship.toPort) return cached;
+  const snapshot: TradeShipSnapshot = {
+    id: ship.id,
+    owner: ship.owner,
+    fromPort: ship.fromPort,
+    toPort: ship.toPort,
+    launchTile: ship.launchTile,
+    landingTile: ship.landingTile,
+    route: cached?.route ?? ship.route.slice(),
+    launchTick: ship.launchTick,
+    tilesPerTick: ship.tilesPerTick,
+    arriveTick: ship.arriveTick,
+    gold: ship.gold,
+  };
+  tradeCache.set(ship, snapshot);
+  return snapshot;
+}
+
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
   const changedOwners = new Uint16Array(changedTiles.length);
@@ -280,6 +325,7 @@ export function buildFrame(world: World): TickFrame {
     })),
     walls: snapshotWalls(world),
     boats: world.boats.map(snapshotBoat),
+    tradeShips: world.tradeShips.map(snapshotTradeShip),
     events: world.events.slice(),
     winner: world.winner,
     winningTeam: world.winningTeam,

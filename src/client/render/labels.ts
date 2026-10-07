@@ -173,6 +173,8 @@ export interface LootFloater {
   readonly age: number;
   /** Captured by the local player (bigger, brighter). */
   readonly mine: boolean;
+  /** A trade ship's cargo (GAME_DESIGN.md §3.19): a small number over a Port. */
+  readonly small?: boolean;
 }
 
 const LOOT_GOLD = "#ffd166";
@@ -293,8 +295,9 @@ export class LabelLayer {
       const sy = (f.y - view.centerY) * view.zoom + halfH;
       if (sx < -100 || sy < -100 || sx > halfW * 2 + 100 || sy > halfH * 2 + 100) continue;
       const pop = Math.min(1, f.age * 6); // quick pop-in…
-      const size = (f.mine ? 22 : 14) * (0.7 + 0.3 * pop);
-      const y = sy - LOOT_RISE_PX * (1 - (1 - f.age) * (1 - f.age)); // …easing upward…
+      const size = (f.small ? 12 : f.mine ? 22 : 14) * (0.7 + 0.3 * pop);
+      const rise = f.small ? LOOT_RISE_PX / 2 : LOOT_RISE_PX;
+      const y = sy - rise * (1 - (1 - f.age) * (1 - f.age)); // …easing upward…
       ctx.globalAlpha = pop * Math.min(1, (1 - f.age) * 2.5); // …fading at the end
       const text = `+${formatTroops(f.gold)}`;
       ctx.font = `800 ${size}px ${this.font}`;

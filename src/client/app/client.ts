@@ -69,6 +69,17 @@ const BOAT_PREVIEW_REST_MS = 120;
 /** The gold capture effect (GAME_DESIGN.md §3.16) lasts this long, in real time. */
 const LOOT_FX_MS = 2_400;
 
+/** Trade gold (GAME_DESIGN.md §3.19) floats up over a Port this long. */
+const TRADE_FX_MS = 1_600;
+
+/** Gold a trade ship brought the local player, floating up over a Port (tile coordinates). */
+interface TradeEffect {
+  readonly x: number;
+  readonly y: number;
+  readonly gold: number;
+  readonly start: number;
+}
+
 /** A capture whose gold is pouring into the capturer (border shimmer + floating number). */
 interface LootEffect {
   readonly capturer: number;
@@ -116,6 +127,7 @@ export class GameClient {
   /** Player flags from the latest frame (ally, traitor); loot effects are added per frame. */
   private baseFlags: Uint8Array = new Uint8Array(1);
   private lootEffects: LootEffect[] = [];
+  private tradeEffects: TradeEffect[] = [];
 
   constructor(elements: ClientElements) {
     this.mapCanvas = elements.mapCanvas;
@@ -479,6 +491,7 @@ export class GameClient {
     this.boatPreviewTile = -1;
     this.placements.clear();
     this.lootEffects = [];
+    this.tradeEffects = [];
     this.baseFlags = new Uint8Array(1);
     ui.reset();
     ui.screen = "start";
@@ -538,6 +551,25 @@ export class GameClient {
         this.hints.complete("build");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
+      }
+      if (event.type === "tradeDocked" && event.gold > 0) {
+        // Our ship docked somewhere (the gold shows over the Port it left from), or someone's
+        // ship docked at our Port.
+        const tile =
+          event.receiver === me
+            ? event.tile
+            : event.owner === me
+              ? (frame.buildings.find((b) => b.id === event.fromPort)?.tile ?? -1)
+              : -1;
+        if (tile >= 0 && this.map) {
+          const width = this.map.width;
+          this.tradeEffects.push({
+            x: (tile % width) + 0.5,
+            y: Math.floor(tile / width) - 0.5,
+            gold: event.gold,
+            start: performance.now(),
+          });
+        }
       }
       if (event.type === "eliminated" && event.by !== null && event.loot >= 1) {
         // Labels refresh lazily, so the captured player's last label spot is still known.
@@ -616,6 +648,7 @@ export class GameClient {
     ui.buildings = frame.buildings;
     ui.walls = frame.walls;
     ui.boats = frame.boats;
+    ui.tradeShips = frame.tradeShips;
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
@@ -657,13 +690,24 @@ export class GameClient {
   }
 
   private lootFloaters(now: number): LootFloater[] {
-    return this.lootEffects.map((e) => ({
+    this.tradeEffects = this.tradeEffects.filter((e) => now - e.start < TRADE_FX_MS);
+    const trade = this.tradeEffects.map((e) => ({
       x: e.x,
       y: e.y,
       gold: e.gold,
-      age: Math.min(1, (now - e.start) / LOOT_FX_MS),
-      mine: e.capturer === ui.localPlayerId,
+      age: Math.min(1, (now - e.start) / TRADE_FX_MS),
+      mine: true,
+      small: true,
     }));
+    return this.lootEffects
+      .map((e) => ({
+        x: e.x,
+        y: e.y,
+        gold: e.gold,
+        age: Math.min(1, (now - e.start) / LOOT_FX_MS),
+        mine: e.capturer === ui.localPlayerId,
+      }))
+      .concat(trade);
   }
 
   /**
@@ -879,6 +923,7 @@ export class GameClient {
       });
       this.boatLayer.draw(view, {
         boats: ui.boats,
+        tradeShips: ui.tradeShips,
         width: this.map.width,
         tick,
         localPlayerId: ui.localPlayerId,

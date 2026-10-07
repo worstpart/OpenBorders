@@ -27,6 +27,7 @@ import {
 import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
+import { advanceTrade } from "./systems/trade.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -102,8 +103,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 6. Troops regrow.
     growTroops(world);
     probe?.("troops");
-    // 6b. Gold comes in (GAME_DESIGN.md §3.16).
+    // 6b. Gold comes in (GAME_DESIGN.md §3.16); trade ships dock and set sail (§3.19).
     earnGold(world);
+    advanceTrade(world);
     probe?.("economy");
     // 7. Bots decide; their commands apply next tick through step 1.
     thinkBots(world);

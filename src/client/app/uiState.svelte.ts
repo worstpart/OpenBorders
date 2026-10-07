@@ -8,6 +8,7 @@ import type {
   AllianceSnapshot,
   AttackSnapshot,
   BoatSnapshot,
+  TradeShipSnapshot,
   BuildingSnapshot,
   WallSnapshot,
   PlayerSnapshot,
@@ -88,6 +89,8 @@ class UiState {
   walls = $state.raw<readonly WallSnapshot[]>([]);
   /** Boats at sea (GAME_DESIGN.md §3.18). */
   boats = $state.raw<readonly BoatSnapshot[]>([]);
+  /** Trade ships at sea (GAME_DESIGN.md §3.19). */
+  tradeShips = $state.raw<readonly TradeShipSnapshot[]>([]);
   /** The crossing a click on the hovered land would start (null: the click isn't a boat). */
   boatPreview = $state.raw<BoatPreview | null>(null);
   /** The building picked up from the build bar, following the mouse until placed. */
@@ -140,6 +143,7 @@ class UiState {
     this.buildings = [];
     this.walls = [];
     this.boats = [];
+    this.tradeShips = [];
     this.boatPreview = null;
     this.placing = null;
     this.wallPoints = [];

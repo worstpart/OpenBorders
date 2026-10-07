@@ -31,6 +31,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts only over a shared border or by airlift | **Accepted** 2026-10-02 (user) |
 | D-024 | Border Defense = walls the player draws point by point (Clash of Clans style); hard tiles that hold attacks and break piece by piece | **Accepted** 2026-10-02 (user) |
 | D-025 | Islands on every generated map; boats from any coast land as beachhead attacks; Ports make them better | **Accepted** 2026-10-02 (user: islands always) |
+| D-026 | Trade ships between players' Ports (OpenFront-style) in 2.8; warships capture non-allied ones in 2B.6; real-world maps parked | **Accepted** 2026-10-06 (user) |
 
 ---
 
@@ -453,3 +454,38 @@ does the same).
 
 **Alternatives.** A map choice on the start screen (my recommendation: keeps the old map
 for comparison); one continent until real maps arrive in 2.8 (boats would barely matter).
+
+---
+
+## D-026 — Trade ships now; warship piracy in 2B.6; real-world maps parked · Accepted 2026-10-06
+
+**Context.** At the start of 2.8 (more maps) the user, asked how boats feel: boats and
+routes feel good, *"but we need ports to bring in income. Little ships should be around the
+map that is considered trade and go to other nations and players ports. These ships will
+eventually be able to be captured for income by warships. Allies are immune to warships,
+all other trade is intercepted. Exactly how OpenFront is."* Asked where real-world maps
+should come from (our own pipeline from public-domain NOAA elevation data — my
+recommendation — or OpenFront's CC BY-SA maps), the user answered **"No real maps yet"**,
+while picking World, Europe, North America and East Asia, with real country names for the
+nations, for when they come.
+
+**Decision.**
+- **Trade ships** are built first in 2.8 (they extend 2.7's boats and Ports directly):
+  every Port sends ships to other players' Ports on its sea; both owners earn gold on
+  docking, more for longer routes (GAME_DESIGN §3.19). Ports' flat harbour income drops
+  (+15/+40 → +5/+15 gold per tick) since trade is now where their money comes from.
+  No embargo for now.
+- **Warships capturing trade ships** (non-allied ships only; allies' and teammates' ships
+  immune) belong with warships in **2B.6** (Port III Naval Base); the warship patrol there
+  is no longer "only if boats prove fun" — the user confirmed they are.
+- **Real-world maps are parked** (ROADMAP "Parked"), with the user's picks recorded; the data
+  source is decided when they are scheduled. 2.8 keeps bigger and more varied generated maps,
+  `WorkerHost` and the range re-check.
+
+**Consequences.** Games with Ports have a second gold source (~20% of all gold in headless
+games); tribe lobbies run ~1.6 min longer (13.4 → 15.0 min median), within the accepted
+15–20 min target.
+
+**Alternatives.** Trade ships as their own milestone after 2.8 (rejected: the user wants
+Port income now and the code builds on 2.7's); keeping the flat harbour income on top
+(rejected: Ports would out-earn Factories).

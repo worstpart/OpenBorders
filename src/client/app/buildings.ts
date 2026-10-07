@@ -25,6 +25,7 @@ import {
   wallTiles,
   type WallProblem,
 } from "../../sim/systems/walls.ts";
+import { tradeEnabled, tradePartners } from "../../sim/systems/trade.ts";
 import { formatTroops } from "../format.ts";
 
 /** What the build bar can pick up: a building, or the wall tool (D-024). */
@@ -45,7 +46,7 @@ export interface BuildContext {
 export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
-  port: "Faster boats",
+  port: "Trade & faster boats",
   wall: "Draw a defence line",
 };
 
@@ -72,6 +73,9 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
     lines.push(`+${effect.boatSlots} boat${effect.boatSlots > 1 ? "s" : ""} at sea`);
   if (effect.boatLoss) {
     lines.push(`Marines: landings lose ${Math.round((1 - effect.boatLoss) * 100)}% less`);
+  }
+  if (effect.tradeEveryTicks && tradeEnabled(rules)) {
+    lines.push(`A trade ship every ${(effect.tradeEveryTicks * rules.tickMs) / 1000} s`);
   }
   return lines;
 }
@@ -106,6 +110,9 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     lines.push(
       `${now.mobilizeDiscount ? "" : "New: "}Mobilize ${Math.round(next.mobilizeDiscount * 100)}% cheaper`,
     );
+  }
+  if (next.tradeEveryTicks && tradeEnabled(rules)) {
+    lines.push(`Trade ships every ${(next.tradeEveryTicks * rules.tickMs) / 1000} s`);
   }
   if (next.boatSpeed) lines.push(`Boats ×${next.boatSpeed} faster`);
   if (next.boatSlots) lines.push(`+${next.boatSlots} boats at sea`);
@@ -359,10 +366,27 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
     owner: building.owner,
     level: building.level,
     name: levelRules(rules, building.type, shownLevel).name,
-    effects: effectLines(rules, building.type, building.level),
+    effects: [...effectLines(rules, building.type, building.level), ...tradeLines(ctx, building)],
     work: workOf(ctx, building),
     upgrade,
   };
+}
+
+/** A working Port's trade (GAME_DESIGN.md §3.19): its partners, and your trade so far. */
+function tradeLines(ctx: BuildContext, building: BuildingSnapshot): string[] {
+  if (building.type !== "port" || building.level < 1 || !ctx.map || !tradeEnabled(ctx.rules)) {
+    return [];
+  }
+  const partners = tradePartners(ctx.map, ctx.buildings, building, () => true).length;
+  const lines = [
+    partners > 0
+      ? `Trades with ${partners} other Port${partners > 1 ? "s" : ""}`
+      : "No other player's Port on this sea yet",
+  ];
+  if (building.owner === ctx.me?.id) {
+    lines.push(`Your trade so far: ${formatTroops(ctx.me.tradeGold)} gold`);
+  }
+  return lines;
 }
 
 /** A wall's card (GAME_DESIGN.md §3.17.6): its level, length, effect and upgrade. */

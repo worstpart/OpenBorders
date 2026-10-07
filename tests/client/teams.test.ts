@@ -39,6 +39,7 @@ function player(id: number, team: number, overrides: Partial<PlayerSnapshot> = {
     growthPerTick: 0,
     gold: 0,
     goldPerTick: 0,
+    tradeGold: 0,
     mobilizeDiscount: 0,
     growthBonus: 0,
     peakTiles: 100,

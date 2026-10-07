@@ -1004,6 +1004,38 @@ mobilizes before a boat attack like before a land attack. Nations build one Port
 for its income plus 0.2 × capacity per unit of boat speed) and upgrade it. Tribes stay on
 land.
 
+### 3.19 Trade ships (milestone 2.8 · the user's request at the 2.8 start)
+
+The user, after playing boats: *"we need ports to bring in income. Little ships should be
+around the map that is considered trade and go to other nations and players ports … exactly
+how OpenFront is."* Warships that capture trade ships (allies immune, every other ship fair
+game) come with warships in **2B.6**; trade ships are built so they can be captured later
+without rework (their owner and destination can change at sea).
+
+**How it works.** Every finished Port sends a small trade ship to another player's Port on
+the same sea, picked at random, on a fixed rhythm (Port I every 20 s, Naval Port every 10 s;
+each Port has its own beat so they don't all leave at once). The ship sails the sea route at
+1 tile per tick (Port speed bonuses are for troop boats). When it docks, **both** owners
+earn gold — the more sea it crossed, the more: 400 + 10 per route tile, at most 6,000 (≈
+1.4k for 100 tiles, 3.4k for 300). Allies, teammates and enemies all trade (no embargo yet).
+
+| Rule | Value / behaviour | Why |
+|---|---|---|
+| Partners | any other living player's finished Port that shares a sea with yours | OpenFront: any trading partner |
+| Gold per trip | each side `min(6,000, 400 + 10 × route tiles)`, paid on docking | Long routes pay more (like OpenFront), but capped |
+| Rhythm | Port I one ship per 20 s, Naval Port one per 10 s | Levels matter; a typical Port I earns ~30 gold/tick from trade (≈ a Factory I), a Naval Port ~60 |
+| Harbour income | the flat Port income drops to +5 / +15 gold per tick (was +15 / +40) | Trade is now where a Port's money comes from; the small flat part keeps a lone Port useful |
+| Destination Port captured | the ship docks with the new owner (they earn the receiving half) — unless that's the ship's own owner (no gold) | Ports change hands; trade follows the Port |
+| Destination Port destroyed, or sender eliminated | the ship is lost, no gold | — |
+| At sea at once | at most 200 trade ships in the whole game (a new ship waits otherwise) | Keeps huge lobbies cheap and the sea readable |
+| Seen on the map | a small hull in the owner's colour with a gold cargo dot; "+2.3k" floats up over your Port when a ship of yours docks somewhere, or someone's ship docks at yours | Trade income is visible, not a hidden number |
+| HUD | the Port card shows "Trade: a ship every 20 s · N partner Ports" and the gold its trade earned so far | — |
+
+**Nations.** They value a Port's trade at what it would earn now (partner Ports on its sea ×
+the average trip), so Ports get more attractive once others have built them.
+**Later (2B.6):** warships capture non-allied trade ships (the ship sails to the captor's
+nearest Port and its cargo is theirs); allies' and teammates' ships are immune.
+
 ---
 
 ## 4. Interaction model

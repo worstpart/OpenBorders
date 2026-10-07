@@ -7,13 +7,15 @@
  * Drawn with Canvas2D on the label overlay, like buildings and walls. Positions come from
  * the route and the tick alone (app/boats.ts), so boats glide smoothly between ticks.
  */
-import type { BoatSnapshot } from "../../sim/frame.ts";
+import type { BoatSnapshot, TradeShipSnapshot } from "../../sim/frame.ts";
 import { boatPosition, boatSteps, type BoatPreview } from "../app/boats.ts";
 import { formatTroops } from "../format.ts";
 import type { MapView } from "./renderer.ts";
 
 export interface BoatDrawInput {
   readonly boats: readonly BoatSnapshot[];
+  /** Trade ships (GAME_DESIGN.md §3.19): small hulls with a gold cargo dot, no labels. */
+  readonly tradeShips: readonly TradeShipSnapshot[];
   readonly width: number;
   /** Tick with fraction (smooth movement). */
   readonly tick: number;
@@ -62,6 +64,14 @@ export class BoatLayer {
       this.route(points.map(tileScreen), color, 2);
       const land = tileScreen(preview.plan.landingTile);
       this.ring(land.x, land.y, Math.max(6, view.zoom * 1.5), color);
+    }
+
+    const tradeSize = Math.max(11, Math.min(17, view.zoom * 2.6));
+    for (const ship of input.tradeShips) {
+      const at = boatPosition(ship, input.width, input.tick);
+      const p = toScreen(at.x, at.y);
+      if (p.x < -20 || p.y < -20 || p.x > halfW * 2 + 20 || p.y > halfH * 2 + 20) continue;
+      this.tradeHull(p.x, p.y, at.dx, at.dy, tradeSize, input.colorOf(ship.owner));
     }
 
     const size = Math.max(9, Math.min(20, view.zoom * 3.2));
@@ -180,6 +190,34 @@ export class BoatLayer {
     ctx.strokeStyle = "rgba(10, 14, 20, 0.85)";
     ctx.lineWidth = 1;
     ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** A trade ship: a small hull along its heading with a gold cargo dot amidships. */
+  private tradeHull(x: number, y: number, dx: number, dy: number, size: number, color: string) {
+    const ctx = this.context;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(dx === 0 && dy === 0 ? 0 : Math.atan2(dy, dx));
+    ctx.beginPath();
+    ctx.moveTo(size * 0.6, 0);
+    ctx.quadraticCurveTo(size * 0.15, -size * 0.36, -size * 0.5, -size * 0.3);
+    ctx.lineTo(-size * 0.5, size * 0.3);
+    ctx.quadraticCurveTo(size * 0.15, size * 0.36, size * 0.6, 0);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    // A light rim: trade hulls are small and must read on dark water in any colour.
+    ctx.strokeStyle = "rgba(246, 241, 228, 0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(10, 14, 20, 0.85)";
+    ctx.arc(-size * 0.02, 0, size * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffd166";
+    ctx.fill();
+    ctx.lineWidth = 0.8;
     ctx.stroke();
     ctx.restore();
   }

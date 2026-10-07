@@ -258,6 +258,8 @@ export interface BuildingLevelRules {
   readonly boatSlots?: number;
   /** …and landings from it pay this share of the normal losses per tile (Marines). */
   readonly boatLoss?: number;
+  /** Ports (GAME_DESIGN.md §3.19): it sends a trade ship this often (ticks). */
+  readonly tradeEveryTicks?: number;
 }
 
 export interface BuildingTypeRules {
@@ -343,6 +345,23 @@ export interface NavalRules {
   readonly landingSearchTiles: number;
   /** Route search gives up after visiting this many sea tiles ("no sea route"). */
   readonly maxRouteNodes: number;
+}
+
+/**
+ * Trade ships (GAME_DESIGN.md §3.19, milestone 2.8): every Port sends ships to other players'
+ * Ports on its sea; when one docks, both owners earn gold.
+ */
+export interface TradeRules {
+  /** false: no trade ships (Ports earn only their harbour income). Needs boats and buildings. */
+  readonly enabled: boolean;
+  /** Gold each side earns per trip: goldBase + goldPerTile · route tiles, at most goldMax. */
+  readonly goldBase: number;
+  readonly goldPerTile: number;
+  readonly goldMax: number;
+  /** Sea tiles a trade ship sails per tick. */
+  readonly tilesPerTick: number;
+  /** Trade ships at sea in the whole game, at most (a Port's next ship waits otherwise). */
+  readonly maxShips: number;
 }
 
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
@@ -584,6 +603,7 @@ export interface GameRules {
   readonly buildings: BuildingRules;
   readonly walls: WallRules;
   readonly naval: NavalRules;
+  readonly trade: TradeRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -935,7 +955,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         ],
       },
       // Better boats (§3.18): faster crossings and more boats at once from its stretch of
-      // coast, a little harbour income, and at level II Marines (cheaper landings). Level
+      // coast, trade ships (§3.19) plus a little harbour income, and at level II Marines (cheaper landings). Level
       // III (Naval Base) waits for Phase 2B.
       port: {
         onCapture: "adopt",
@@ -945,20 +965,22 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             name: "Port",
             cost: 50_000,
             buildTicks: 100,
-            income: 15,
+            income: 5,
             boatSpeed: 1.5,
             range: 30,
             boatSlots: 1,
+            tradeEveryTicks: 200,
           },
           {
             name: "Naval Port",
             cost: 120_000,
             buildTicks: 150,
-            income: 40,
+            income: 15,
             boatSpeed: 2,
             range: 30,
             boatSlots: 2,
             boatLoss: 0.8,
+            tradeEveryTicks: 100,
           },
         ],
       },
@@ -1013,12 +1035,18 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     landingSearchTiles: 60,
     maxRouteNodes: 600_000,
   },
+  // Trade ships (§3.19, the user's request in 2.8): a typical Port I earns ~30 gold/tick
+  // from trade (sending and receiving), about a Factory I; long routes pay more, capped.
+  trade: {
+    enabled: true,
+    goldBase: 400,
+    goldPerTile: 10,
+    goldMax: 6_000,
+    tilesPerTick: 1,
+    maxShips: 200,
+  },
 });
 
-/**
- * Boats (§3.18). Three at sea at once like OpenFront, 10 tiles/s (a 100-tile crossing takes
- * 10 s: long enough to see it coming, short enough to matter).
- */
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
 export function makeRules(overrides: {
   troops?: Partial<TroopRules>;
@@ -1036,6 +1064,7 @@ export function makeRules(overrides: {
   buildings?: Partial<BuildingRules>;
   walls?: Partial<WallRules>;
   naval?: Partial<NavalRules>;
+  trade?: Partial<TradeRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -1054,6 +1083,7 @@ export function makeRules(overrides: {
     buildings: { ...DEFAULT_RULES.buildings, ...overrides.buildings },
     walls: { ...DEFAULT_RULES.walls, ...overrides.walls },
     naval: { ...DEFAULT_RULES.naval, ...overrides.naval },
+    trade: { ...DEFAULT_RULES.trade, ...overrides.trade },
   });
 }
 

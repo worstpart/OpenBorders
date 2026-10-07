@@ -68,6 +68,8 @@ export interface Player {
   gold: number;
   /** Gold earned in the last tick (shown on the HUD). */
   lastIncome: number;
+  /** Gold earned from trade ships so far (GAME_DESIGN.md §3.19). */
+  tradeGold: number;
   /**
    * What this player's finished buildings add (GAME_DESIGN.md §3.17), recomputed every tick
    * from world.buildings — derived, so not hashed.
@@ -183,6 +185,29 @@ export interface Boat {
   recallTick: number;
 }
 
+/**
+ * A trade ship (GAME_DESIGN.md §3.19): sails from one player's Port to another player's
+ * Port; when it docks, both owners earn `gold`. Like a boat, its position is a pure
+ * function of the tick. Owner and destination are mutable so warships (2B.6) can capture it.
+ */
+export interface TradeShip {
+  readonly id: number;
+  owner: PlayerId;
+  /** The Port it left from (building id) and the one it sails for. */
+  readonly fromPort: number;
+  toPort: number;
+  /** Coast tiles of the two Ports. */
+  readonly launchTile: number;
+  readonly landingTile: number;
+  /** Sea tiles from Port to Port, in order. */
+  readonly route: Int32Array;
+  readonly launchTick: number;
+  readonly tilesPerTick: number;
+  readonly arriveTick: number;
+  /** Gold each side earns when it docks. */
+  readonly gold: number;
+}
+
 /** A bot's own state (GAME_DESIGN.md §3.11). */
 export interface BotBrain {
   readonly tier: BotTier;
@@ -230,6 +255,9 @@ export interface World {
   /** Boats at sea, by ascending id (GAME_DESIGN.md §3.18). */
   boats: Boat[];
   nextBoatId: number;
+  /** Trade ships at sea, by ascending id (GAME_DESIGN.md §3.19). */
+  tradeShips: TradeShip[];
+  nextTradeShipId: number;
   /** Alliances by pairKey(a, b), in the order they were formed (GAME_DESIGN.md §3.14). */
   readonly alliances: Map<number, Alliance>;
   /** Open alliance requests, oldest first. */
@@ -378,6 +406,7 @@ export function createWorld(setup: GameSetup): World {
     betrayals: 0,
     gold: 0,
     lastIncome: 0,
+    tradeGold: 0,
     bonus: { capacity: 0, growth: 0, income: 0, mobilizeDiscount: 0 },
     team: p.team ?? 0,
     encircleDirty: true,
@@ -399,6 +428,8 @@ export function createWorld(setup: GameSetup): World {
     attacks: [],
     boats: [],
     nextBoatId: 1,
+    tradeShips: [],
+    nextTradeShipId: 1,
     alliances: new Map(),
     allianceRequests: [],
     lastRequestTick: new Map(),

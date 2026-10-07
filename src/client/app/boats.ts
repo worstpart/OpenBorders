@@ -29,16 +29,27 @@ export interface BoatContext {
 }
 
 /** How far along its route a boat is at `tick` (fraction allowed), in route steps. */
-export function boatSteps(boat: BoatSnapshot, tick: number): number {
+/** A ship following a fixed route: a boat, or a trade ship (which is never recalled). */
+export interface Voyage {
+  readonly route: Int32Array;
+  readonly launchTile: number;
+  readonly landingTile: number;
+  readonly launchTick: number;
+  readonly tilesPerTick: number;
+  /** Boats only: the tick it turned back, or -1. */
+  readonly recallTick?: number;
+}
+
+export function boatSteps(boat: Voyage, tick: number): number {
   const steps = boat.route.length + 1;
-  if (boat.recallTick < 0)
+  if (boat.recallTick === undefined || boat.recallTick < 0)
     return Math.min(steps, Math.max(0, tick - boat.launchTick) * boat.tilesPerTick);
   const turned = Math.min(steps, (boat.recallTick - boat.launchTick) * boat.tilesPerTick);
   return Math.max(0, turned - Math.max(0, tick - boat.recallTick) * boat.tilesPerTick);
 }
 
 /** The tile at route step `k` (0 = the launch coast, route.length + 1 = the landing coast). */
-function stepTile(boat: BoatSnapshot, k: number): number {
+function stepTile(boat: Voyage, k: number): number {
   if (k <= 0) return boat.launchTile;
   if (k > boat.route.length) return boat.landingTile;
   return boat.route[k - 1]!;
@@ -46,7 +57,7 @@ function stepTile(boat: BoatSnapshot, k: number): number {
 
 /** A boat's position (tile coordinates, tile centres at .5) and heading at `tick`. */
 export function boatPosition(
-  boat: BoatSnapshot,
+  boat: Voyage,
   width: number,
   tick: number,
 ): { x: number; y: number; dx: number; dy: number } {
@@ -59,7 +70,7 @@ export function boatPosition(
   const ay = Math.floor(a / width) + 0.5;
   const bx = (b % width) + 0.5;
   const by = Math.floor(b / width) + 0.5;
-  const back = boat.recallTick >= 0 ? -1 : 1;
+  const back = (boat.recallTick ?? -1) >= 0 ? -1 : 1;
   return {
     x: ax + (bx - ax) * f,
     y: ay + (by - ay) * f,

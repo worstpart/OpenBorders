@@ -48,7 +48,8 @@ export function hashWorld(world: World): number {
       .addInt(p.traitorUntilTick)
       .addInt(p.betrayals)
       .addInt(p.team)
-      .addNumber(p.gold);
+      .addNumber(p.gold)
+      .addNumber(p.tradeGold);
   }
   for (const p of world.players) {
     if (p.brain) {
@@ -101,6 +102,20 @@ export function hashWorld(world: World): number {
       .addNumber(b.lossFactor)
       .addInt(b.arriveTick)
       .addInt(b.recallTick);
+  }
+  h.addInt(world.nextTradeShipId).addInt(world.tradeShips.length);
+  for (const s of world.tradeShips) {
+    h.addInt(s.id)
+      .addInt(s.owner)
+      .addInt(s.fromPort)
+      .addInt(s.toPort)
+      .addInt(s.launchTile)
+      .addInt(s.landingTile)
+      .addInt(s.route.length)
+      .addInt(s.launchTick)
+      .addNumber(s.tilesPerTick)
+      .addInt(s.arriveTick)
+      .addInt(s.gold);
   }
   h.addInt(world.nextBuildingId).addInt(world.buildings.length);
   for (const b of world.buildings) {

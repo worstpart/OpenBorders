@@ -227,7 +227,7 @@ interface World {
 5. eliminate         players below the threshold are absorbed; 0 tiles → dead
                      (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
-6b. earnGold         gold income (milestone 2.4)
+6b. earnGold         gold income (milestone 2.4); advanceTrade: trade ships dock and sail (2.8)
 7. thinkAI           bots emit commands for the NEXT tick (world.pendingCommands,
                      applied first in step 1 — same validation path as people)
 8. checkVictory
@@ -525,6 +525,19 @@ snapshots, made once per boat (the route copied once) and remade only on recall.
 draws boats, routes and the click preview on the Canvas2D overlay (`render/boats.ts`); HUD
 logic in `client/app/boats.ts` (chips, preview, `needsBoat`: a click on land whose owner
 we don't border, or on a landmass where we own nothing, sends a boat).
+
+**Trade ships (2.8, `systems/trade.ts`, D-026).** `world.tradeShips` (ascending ids; owner,
+fromPort/toPort building ids, launch/landing tiles, route, launchTick, tilesPerTick,
+arriveTick, gold) — hashed, positions a pure function of the tick like boats (the client's
+`boatPosition` takes any `Voyage`). `advanceTrade` runs in step 6b right after `earnGold`:
+ships that arrive dock (the destination Port's *current* owner receives; none if the Port is
+gone or now the sender's own), then every finished Port whose beat comes up (`(tick + id·37)
+mod tradeEveryTicks`) sends a ship to a random partner Port (`tradePartners`: other living
+players' finished Ports sharing a sea) using `world.rng`. Port-to-Port routes are cached per
+map (static). `owner`/`toPort` are mutable so warships can capture ships (2B.6). Events:
+`tradeDocked`; frames carry `tradeShips` snapshots (made once per ship); players carry
+`tradeGold`. Nations value a Port's trade with `expectedTradePerTick` (straight-line
+distances, no searches).
 
 **Frames and rendering.** Frames carry building deltas (added/changed/removed: id, type,
 owner, tile, level, targetLevel, readyTick, disabled) and flight launch/interception/
