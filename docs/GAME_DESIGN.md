@@ -609,8 +609,9 @@ up) 11.6–12.1 min.
 
 ### 3.17 Buildings & strategic warfare — design (2026-10-02; partly built)
 
-> **Status (2026-10-06):** built so far — Housing, Factory (2.5), walls (2.6), Port I–II
-> (2.7), trade (2.8), flights (2B.0); rows marked ✅ in §3.17.10. The rest is still the plan.
+> **Status (2026-10-07):** built so far — Housing, Factory (2.5), walls (2.6), Port I–II
+> (2.7), trade (2.8), flights (2B.0), Airport I + airlift (2B.1), SAM I–III (2B.2); rows marked
+> ✅ in §3.17.10. The rest is still the plan.
 > It is the design the user asked for on 2026-10-02 (seven buildings with three levels each, Border
 > Defense, SAMs, Missile Silos and Airports) — written *before* any code. The user's
 > answers of 2026-10-02: air & strategic warfare comes **before multiplayer** (Phase 2B,
@@ -827,6 +828,27 @@ surprise or a second front, not a better ground attack.
 Selecting a SAM (or hovering one in build mode) shows its radius; a "air defense" view
 toggle shows all your coverage (and enemies' known SAM rings) at once.
 
+*As built (2B.2):* **SAM I–III** (80k / +180k / +400k; 10 / 15 / 25 s; any land of yours) with
+the table's radius, interceptors and reload. Each tick, before flights arrive, every flight is
+checked against the SAMs of everyone who isn't its owner's friend (the target's and any third
+player's: airspace matters): a working SAM with a ready interceptor whose radius holds the
+flight's position fires one, which destroys one plane and the troops aboard it. A SAM fires at
+most once a tick, an interceptor never wastes itself on a plane already down, so overlapping
+SAMs add shots, never multipliers, and four transports against three interceptors still land
+one plane. A SAM being upgraded keeps firing at its old level; a captured SAM changes sides like
+any building. **Missile interception (II) and the warhead + early warning (III) come with
+missiles (2B.5)** — the upgrade preview says "Later:" so nobody pays for them now. **On screen:**
+the SAM card shows its interceptors (filled = ready) and when the next is back, and its radius on
+the map with the ready interceptors as marks on the rim; **V** (or the ◎ button at the end of
+the build bar) is the air defence view — every SAM's ring, yours light, friends' blue, others'
+red; placing a SAM shows its 25 km reach; aiming an airlift shows the hostile rings and warns
+"⚠ SAMs: 2 of 4 planes shot down" (or "all 4") with the interceptors ready now. Each shot is a
+short streak from the SAM and a puff where the plane was; toasts tell you when your planes are
+shot down (and the troops lost) and when your SAM hits. **Nations** build SAMs only under an
+air threat — an Airport of a non-friend that can reach their Housing, Factories or Airports —
+placed among those buildings (at most two, upgraded when worth it), and route airlifts around
+hostile SAMs (or not at all when every route would lose every plane).
+
 #### 3.17.8 Missile Silo
 
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
@@ -865,9 +887,9 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Wall ✅ (D-024) | I Palisade | 600/tile | 4 s + 0.1 s/tile | wall tiles hold 3 s, ×3 + 150 losses | drawn A, B, C … anywhere on your land | — | ≤ 80 tiles | — | go around, break through (a gap), airborne, strike, missile | brown stakes |
 | Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
 | Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** (Phase 2B) | — | — | — | same | thick stone, merlons, big towers |
-| SAM | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
-| SAM | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles | 35 | 2 | 8 | same | twin launcher + radar |
-| SAM | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
+| SAM ✅ | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
+| SAM ✅ | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles (with missiles, 2B.5) | 35 | 2 | 8 | same | twin launcher + radar |
+| SAM ✅ | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning (with missiles, 2B.5) | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
 | Missile Silo | I | 250k (250k) | 15 s | strike missile (75k per launch) | — | 250 | 1 slot | 30 | SAM II+, capture (destroyed) | hatch in the ground |
 | Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
 | Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |

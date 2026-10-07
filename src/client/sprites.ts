@@ -3,7 +3,7 @@
  * `tools/iconPack.mjs` into `assets/icons/<kind>-<level>.png` — buildings, walls and vehicles,
  * one per level, the eras WW1 → WW2 → Modern standing for levels I → III — and four single
  * missiles (`<kind>.png`). The map draws them on Canvas2D (render/), the HUD as plain images
- * (BuildingIcon.svelte). SAM, Silo and missile art waits for those features (2B.2, 2B.5);
+ * (BuildingIcon.svelte). SAMs use theirs since 2B.2; Silo and missile art waits for 2B.5;
  * walls are drawn as lines on the map and use their art in the HUD; warships have no art yet.
  *
  * The isometric art does not rotate well, so vehicles are mirrored left/right by heading

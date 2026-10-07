@@ -273,6 +273,8 @@ export type SimEvent =
       readonly owner: PlayerId;
       readonly by: PlayerId;
       readonly tile: number;
+      /** Where the shot came from (a SAM's tile, GAME_DESIGN.md §3.17.7), or -1. */
+      readonly fromTile: number;
       readonly planes: number;
       readonly planesLeft: number;
       readonly troopsLost: number;

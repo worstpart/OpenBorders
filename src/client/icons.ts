@@ -159,12 +159,23 @@ const AIRPORT = [
   rect(2, 21, 20, 1.5), // runway
 ].join("");
 
+/** SAM: a launcher tilted at the sky on a base, beside a radar dish (one drawing for now). */
+const SAM = [
+  rect(3, 18, 18, 3), // base
+  "M6 18L9 13H11L8 18Z", // launcher arm
+  "M7.6 13.6L17.6 4.2L19.4 6.1L9.4 15.5Z", // missile tube, tilted at the sky
+  "M17.6 4.2L20.6 2.5L19.4 6.1Z", // missile nose
+  "M14 18V15H15.2V18Z", // dish post
+  "M11.5 13.5A4 4 0 0 0 18.5 13.5Z", // radar dish
+].join("");
+
 export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, string, string]>> = {
   housing: [HOUSE_1, HOUSE_2, HOUSE_3],
   factory: [FACTORY_1, FACTORY_2, FACTORY_3],
   // Level III (Naval Base) comes with Phase 2B; until then nothing reaches it.
   port: [PORT_1, PORT_2, PORT_2],
   airport: [AIRPORT, AIRPORT, AIRPORT],
+  sam: [SAM, SAM, SAM],
 };
 
 /** The wall tool and wall cards (GAME_DESIGN.md §3.17.6). */

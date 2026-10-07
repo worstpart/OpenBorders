@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -509,7 +509,7 @@ bot games before anyone has to play them.
 | 2B.0 ✅ | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
 | 2B.0b ✅ | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
 | 2B.1 ✅ | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
-| 2B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
+| 2B.2 ✅ | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
 | 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
@@ -601,6 +601,41 @@ cards; SAM/Silo/missile art waits for 2B.2/2B.5. Browser (own tab, Teams on Isla
 gifted by teammates (`sendAs`), Airport placed from the build bar, built, card, aimed (ring,
 line, ETA), sent 2.03K to a teammate 185 km away, plane flew and landed, both toasts, card
 cooldown "ready in 20 s", clean console. Tests: 376 (7 new airlift tests, sprites).
+
+**Milestone 2B.2 result (2026-10-07)** — SAM I–III (GAME_DESIGN §3.17.7 "as built",
+ARCHITECTURE §5.7). **Rules:** `sam` building (80k / +180k / +400k, 10 / 15 / 25 s, any land,
+adopted on capture), radius 25 / 35 / 45 km, interceptors 1 / 2 / 3, reload 10 / 8 / 6 s each
+(one at a time); only with `rules.flights.enabled`. **The one rule:** every tick, before
+arrivals, each flight (id order) meets the SAMs (id order) of everyone who isn't its owner's
+friend — target and third players alike; a working SAM with a ready interceptor whose radius
+holds the flight's tile fires once, destroying one plane and its share of the troops. Decided
+here: **at most one shot per SAM per tick** (shots come staggered, ~0.1 s apart; it can't
+change who wins a saturation — a flight spends 10+ ticks in any ring); a SAM being upgraded
+fires at its old level. Missile interception (II) and the warhead + early warning (III) wait
+for missiles (2B.5); the upgrade preview marks them "Later:". **Nations:** SAMs only under an
+air threat (a non-friend's working Airport within its range + 60 km of their Housing / Factory
+/ Airport), worth 0.12 × capacity per interceptor × the share of those buildings' levels it
+covers, placed among them, at most 2, upgraded by the same measure; their airlifts land where
+the route meets the fewest ready interceptors, and don't fly when every route would lose every
+plane. **Headless** (60 games each, same settings on the 2B.1 commit for comparison): Twin
+lands teams 0.3 SAMs/game, median 6.6 min (2B.1: 6.6); Continent teams 0.2, median 5.1 (5.1);
+**0 planes shot down** — nations' airlifts never cross a hostile SAM yet; SAMs start to matter
+for bots with airborne assaults (2B.3). Today they are mostly a human tool against human
+airlifts, and a deterrent the nations answer. **Regression:** the 18 seed-by-seed games are
+identical to 2B.1 with flights off *and* on. **Client:** SAM in the build bar (the user's
+`sam-1..3` art); the command panel grew 580 → 620 px with slightly more compact tiles to fit
+six buildings, the wall and the new ◎ air defence toggle, and the placing / aiming instruction
+moved to its own line above the tiles (it had been squeezed to nothing); SAM card with
+interceptors (filled = ready) and "next in N s"; radius ring when its card is open, every SAM's
+ring in the air defence view (key **V**), when placing a SAM (plus the ghost's 25 km reach) and
+the hostile ones while aiming an airlift, with "⚠ SAMs: n of 4 planes shot down"; shot streak +
+puff; toasts "💥 X's SAM shot down one of your planes (−N troops)" / "🎯 Your SAM shot down one
+of X's planes" (no sound). **Browser** (own tab, Teams on Islands, Easy): built a SAM and an
+Airport with gifted gold; card, ring with interceptor marks, upgrade preview; an enemy test
+flight over our SAM lost a plane (toast, ring mark emptied); our test flight into an enemy SAM
+lost a plane (toast, red ring in the air defence view, puff); SAM placement ghost; no console
+errors. The map gave no enemy land under an airlift route, so the airlift warning is covered by
+unit tests. Tests: 392 (16 new: `tests/sim/sam.test.ts`, `tests/client/sam.test.ts`).
 
 **Dependency map** (what must exist first):
 

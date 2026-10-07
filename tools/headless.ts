@@ -36,7 +36,8 @@
  * archipelago, twin) and --size a start-screen size (sets --width/--height).
  * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
  * --no-flights turns Airports and air missions off (Phase 2B); each game reports Airports
- * built, airlifts flown and the troops they carried (delivered / flown back).
+ * built, airlifts flown and the troops they carried (delivered / flown back), SAMs built and
+ * upgraded, and the planes they shot down with the troops aboard (2B.2).
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -182,6 +183,10 @@ export interface GameReport {
     airlifts: number;
     troopsDelivered: number;
     troopsReturned: number;
+    sams: number;
+    samUpgrades: number;
+    planesShotDown: number;
+    troopsShotDown: number;
   };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -412,6 +417,10 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     airlifts: 0,
     troopsDelivered: 0,
     troopsReturned: 0,
+    sams: 0,
+    samUpgrades: 0,
+    planesShotDown: 0,
+    troopsShotDown: 0,
   };
   let reason = "timeout";
   let error: string | null = null;
@@ -475,6 +484,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         }
         if (event.type === "buildingStarted" && event.buildingType === "airport") {
           if (event.level === 1) air.airports++;
+        } else if (event.type === "buildingStarted" && event.buildingType === "sam") {
+          if (event.level === 1) air.sams++;
+          else air.samUpgrades++;
+        } else if (event.type === "flightIntercepted") {
+          air.planesShotDown += event.planes;
+          air.troopsShotDown += event.troopsLost;
         } else if (event.type === "flightLaunched" && event.kind === "airlift") air.airlifts++;
         else if (event.type === "airliftDelivered") {
           air.troopsDelivered += event.troops;

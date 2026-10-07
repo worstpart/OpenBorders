@@ -3,7 +3,8 @@
    * A building's card (GAME_DESIGN.md §3.17.13): opened by clicking its icon. Name, level
    * pips, what it gives; for your own: construction progress (with Cancel) and the next
    * level's price and gains (Upgrade); your Airport's Airlift button (GAME_DESIGN.md
-   * §3.17.7) with its capacity and cooldown. Small, next to the building, closes with Esc or
+   * §3.17.7) with its capacity and cooldown; a SAM's interceptors (ready ones filled) and
+   * when the next one is back (its radius is drawn on the map while the card is open). Small, next to the building, closes with Esc or
    * a click elsewhere.
    */
   import { buildingCard, wallCard } from "../../app/buildings.ts";
@@ -30,6 +31,7 @@
     factory: "Factory",
     port: "Port",
     airport: "Airport",
+    sam: "SAM",
     wall: "Wall",
   } as const;
   let cardElement = $state<HTMLElement | null>(null);
@@ -122,6 +124,24 @@
           </button>
         {/if}
       </div>
+    {/if}
+
+    {#if card.sam}
+      <div class="sam">
+        <span class="muted">Interceptors</span>
+        <span class="shots" aria-label="{card.sam.ready} of {card.sam.max} ready">
+          {#each Array.from({ length: card.sam.max }, (_, k) => k) as k (k)}<span
+              class="shot"
+              class:on={k < card.sam.ready}
+            ></span>{/each}
+        </span>
+        <span class="muted"
+          >{card.sam.ready === card.sam.max
+            ? "all ready"
+            : `next in ${Math.ceil(card.sam.secondsToNext)} s`}</span
+        >
+      </div>
+      <div class="muted hint">Press V to see every SAM's range (air defence view)</div>
     {/if}
 
     {#if card.airlift}
@@ -283,6 +303,30 @@
 
   .work {
     margin-top: var(--space-2);
+  }
+
+  .sam {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .shots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .shot {
+    width: 6px;
+    height: 12px;
+    border: 1px solid rgb(255 255 255 / 0.5);
+    border-radius: 3px 3px 1px 1px;
+  }
+
+  .shot.on {
+    border-color: var(--color-success);
+    background: var(--color-success);
   }
 
   .work-line {

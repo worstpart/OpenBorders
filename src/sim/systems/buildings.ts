@@ -41,11 +41,11 @@ export function buildingsEnabled(rules: GameRules): boolean {
 
 /**
  * Building types this game offers: Ports only come with boats (GAME_DESIGN.md §3.18),
- * Airports with flights (§3.17.7).
+ * Airports and SAMs with flights (§3.17.7).
  */
 export function buildingAvailable(rules: GameRules, type: BuildingType): boolean {
   if (type === "port") return rules.naval.enabled;
-  if (type === "airport") return rules.flights.enabled;
+  if (type === "airport" || type === "sam") return rules.flights.enabled;
   return true;
 }
 
@@ -276,7 +276,11 @@ export function updateBuildings(world: World): void {
  * Charges (Phase 2B — SAM interceptors, silo slots): how many of a building's `max` charges
  * are ready at `tick`.
  */
-export function readyCharges(building: Building, max: number, tick: number): number {
+export function readyCharges(
+  building: { readonly reloads: readonly number[] },
+  max: number,
+  tick: number,
+): number {
   let away = 0;
   for (const back of building.reloads) if (back > tick) away++;
   return Math.max(0, max - away);

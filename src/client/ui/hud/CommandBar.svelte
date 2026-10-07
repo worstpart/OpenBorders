@@ -146,7 +146,8 @@
     left: 50%;
     bottom: var(--space-4);
     transform: translateX(-50%);
-    width: min(580px, calc(100% - 2 * var(--space-4)));
+    /* 620: room for six buildings, the wall and the air defence toggle (2B.2). */
+    width: min(620px, calc(100% - 2 * var(--space-4)));
     padding: var(--space-3) var(--space-4);
     background: var(--surface-glass);
     backdrop-filter: blur(var(--surface-blur));

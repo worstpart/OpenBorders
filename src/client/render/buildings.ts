@@ -10,6 +10,12 @@
  * snapped to the tile under it, with a ring showing the spacing: green where it may go,
  * red where it may not.
  *
+ * Range rings (GAME_DESIGN.md §3.17.7) go under everything: a SAM's radius while its card is
+ * open, every SAM's in the air defence view (key V), while placing a SAM, or the hostile ones
+ * while aiming an airlift — yours light, friends' blue, everyone else's red — each with its
+ * ready interceptors as small marks on the rim; the ghost of a SAM being placed shows its
+ * radius too.
+ *
  * Walls (GAME_DESIGN.md §3.17.6, D-024) are drawn here too, under the icons: each run of
  * standing tiles as a thick line through the tile centres — a palisade of stakes (I), a
  * stone wall with blocks (II), a fortress wall with merlons (III) — with towers at the
@@ -33,7 +39,26 @@ export interface BuildGhost {
   readonly ok: boolean;
   /** Spacing radius in tiles. */
   readonly radius: number;
+  /** What it would reach (a SAM's radius), in tiles; 0 for none. */
+  readonly reach: number;
 }
+
+/** A range ring on the map: a SAM's radius, or the range of the Airport whose card is open. */
+export interface RangeRing {
+  readonly tile: number;
+  /** Radius in tiles. */
+  readonly radius: number;
+  readonly tone: "mine" | "friend" | "hostile";
+  /** A SAM's interceptors: ready ones, of `max` (max 0: not a SAM). */
+  readonly ready: number;
+  readonly max: number;
+}
+
+const RING_COLORS: Readonly<Record<RangeRing["tone"], { line: string; fill: string }>> = {
+  mine: { line: "rgba(246, 241, 228, 0.75)", fill: "rgba(246, 241, 228, 0.05)" },
+  friend: { line: "rgba(120, 180, 255, 0.8)", fill: "rgba(120, 180, 255, 0.06)" },
+  hostile: { line: "rgba(255, 110, 90, 0.85)", fill: "rgba(255, 110, 90, 0.08)" },
+};
 
 export interface BuildingDrawInput {
   readonly buildings: readonly BuildingSnapshot[];
@@ -51,6 +76,8 @@ export interface BuildingDrawInput {
   readonly wallPreview: WallPreview | null;
   /** The building being placed, if any. */
   readonly ghost: BuildGhost | null;
+  /** Range rings to show now (see the header). */
+  readonly rings: readonly RangeRing[];
 }
 
 /** Icon size in CSS px per unit of zoom (pixels per tile), and its bounds. */
@@ -97,6 +124,12 @@ export class BuildingLayer {
 
     const width = halfW * 2;
     const height = halfH * 2;
+    for (const ring of input.rings) {
+      const at = toScreen(ring.tile);
+      const r = ring.radius * view.zoom;
+      if (at.x < -r || at.y < -r || at.x > width + r || at.y > height + r) continue;
+      this.ring(at.x, at.y, r, ring);
+    }
     for (const wall of input.walls) {
       this.wall(wall, toScreen, view.zoom, input, width, height);
     }
@@ -141,6 +174,16 @@ export class BuildingLayer {
       ctx.arc(at.x, at.y, Math.max(size * 0.7, ghost.radius * view.zoom), 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      if (ghost.reach > 0) {
+        // What it would cover (a SAM's radius): fainter, so the spacing ring still reads.
+        ctx.setLineDash([2, 5]);
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = ghost.ok ? "rgba(140, 240, 190, 0.05)" : "rgba(255, 120, 100, 0.04)";
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, ghost.reach * view.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
       ctx.save();
       ctx.globalAlpha = 0.85;
@@ -153,6 +196,42 @@ export class BuildingLayer {
       });
       ctx.restore();
     }
+  }
+
+  /** A range ring with its SAM's ready interceptors as marks along the top of the rim. */
+  private ring(x: number, y: number, r: number, ring: RangeRing): void {
+    const ctx = this.context;
+    const colors = RING_COLORS[ring.tone];
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = colors.fill;
+    ctx.fill();
+    ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = "rgba(10, 14, 20, 0.35)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = colors.line;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (ring.max > 0 && r > 24) {
+      // One mark per interceptor on the rim's top: filled = ready.
+      const step = Math.min(0.12, 14 / r);
+      for (let k = 0; k < ring.max; k++) {
+        const angle = -Math.PI / 2 + (k - (ring.max - 1) / 2) * step;
+        const px = x + Math.cos(angle) * r;
+        const py = y + Math.sin(angle) * r;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = k < ring.ready ? colors.line : "rgba(14, 18, 26, 0.9)";
+        ctx.fill();
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = colors.line;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   /** A far-zoom building marker: a dark dot ringed in the owner's colour (bigger per level). */

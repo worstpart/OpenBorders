@@ -108,6 +108,27 @@ export function toastsForEvents(
         }
         break;
       }
+      case "flightIntercepted":
+        // SAMs (GAME_DESIGN.md §3.17.7): our planes lost, or our SAM's hit.
+        if (event.owner === me) {
+          const troops =
+            event.troopsLost >= 1 ? ` (−${formatTroops(event.troopsLost)} troops)` : "";
+          toasts.push({
+            text:
+              event.planesLeft === 0
+                ? `💥 ${nameOf(event.by)}'s SAMs shot down your last plane${troops}`
+                : `💥 ${nameOf(event.by)}'s SAM shot down ${event.planes === 1 ? "one of your planes" : `${event.planes} of your planes`}${troops}`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `🎯 Your SAM shot down one of ${nameOf(event.owner)}'s planes`,
+            tone: "success",
+            player: event.owner,
+          });
+        }
+        break;
       case "airliftDelivered":
         if (event.from === me) {
           const back =

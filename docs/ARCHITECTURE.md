@@ -394,7 +394,7 @@ runner keep using LocalHost with a manual clock.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights built; the rest PLANNED*
+### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs built; the rest PLANNED*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
@@ -490,8 +490,8 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, airAssault, airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
-2c. advanceFlights     (2B.0 ✅ arrivals) flights over their target arrive; SAM/flak interceptions
-                       (2B.2/2B.3) and arrival effects: airlift → friend's home troops (2B.1);
+2c. advanceFlights     (2B.0 ✅ arrivals) SAM interceptions first (2B.2 ✅; flak 2B.3), then
+                       flights over their target arrive, with arrival effects: airlift → friend's home troops (2B.1);
                        assault → beachhead attack (2.7, 2B.3) — before step 3, like boats, so a
                        landing's first tile falls the same tick; strike/missile → damageBuilding
                        + suppression zones (2B.4/2B.5)
@@ -524,9 +524,7 @@ mission slot), with `readyCharges` / `spendCharge` / `cooldownLeft` / `startCool
 `buildings.ts`; building snapshots carry both. **Debug:** the `testFlight {from, to}`
 command (empty transports from your land to any tile) is accepted only with
 `rules.flights.testFlights` — off by default, on in dev builds of the client (`client.ts`
-passes `makeRules` when `import.meta.env.DEV`). *Planned (2B.2):* each tick a flight's tile
-is checked against hostile SAMs with a ready interceptor whose radius contains it (spatial
-grid); a plane is targeted by one interceptor only, in id order (deterministic).
+passes `makeRules` when `import.meta.env.DEV`). Interception: see "SAMs (2B.2)" below.
 **Client (2B.0):** `app/flights.ts` (`FLIGHT_INFO` per kind: icon, name, hostile;
 `flightPosition`, `flightSecondsLeft`), `render/flights.ts` (`FlightLayer` on the label
 canvas after boats: aircraft glyph in the owner's colour pointing along its line, "×planes",
@@ -555,6 +553,39 @@ era of the plane sprite). **Client:** `app/flights.ts` `airliftPreview` +
 game ends), `client.ts` `startAirlift` / `sendAirlift`, `render/flights.ts` draws the range
 ring, line, landing ring and "✈ troops · s"; the building card's `airlift` field and
 `laterLevel` note; toasts for `flightLaunched` (airlift to me) and `airliftDelivered`.
+
+**SAMs (2B.2 — as built).** `rules.buildings.types.sam` (placement `land`, adopted on
+capture; level fields `range` = radius, `interceptors`, `reloadTicks`); available with
+`rules.flights.enabled` (off = no SAMs, games replay 2B.1 exactly). In `systems/flights.ts`,
+`advanceFlights` first runs `interceptFlights`: the working SAMs (level ≥ 1; one being
+upgraded fires at its old level) are listed once; each flight, in id order, is checked at
+`flightTile(tick)` against them in id order — a SAM fires when its owner isn't the flight's
+owner or a friend (`areFriendly`: the target's and any third player's SAMs alike), it has a
+ready charge (`readyCharges`) and its radius holds the tile (`withinRange`): `spendCharge`
+(reload queue), `shootDown(flight, 1, owner, samTile)`. At most one shot per SAM per tick and
+one plane per interceptor (no multipliers). A plain loop, no spatial grid: flights and SAMs
+are few (revisit if headless tick times say otherwise). Event `flightIntercepted` gained
+`fromTile` (the SAM's tile, -1 = none). Shared helpers on `SamLike` (building or snapshot):
+`samRadius`, `samInterceptors`, `samReady`, and `interceptorsOnRoute` (follows a would-be
+flight tick by tick over the same `flightTile`s and sums the ready interceptors of the hostile
+SAMs it meets) — used by the HUD's airlift warning and by `airliftSite`, which, when any
+hostile SAM stands, checks up to 24 of the friend's border tiles in range (spread from nearest
+to farthest) and lands on the one meeting the fewest interceptors (none when every route
+would lose every plane). AI (`ai/build.ts`): `airDefence` — only while a non-friend's working
+Airport reaches one of the bot's Housing/Factory/Airport buildings (range + `samThreatMargin`);
+`samValue` = `samWorth` × capacity × interceptors × share of guarded levels covered (new SAMs:
+only levels no SAM of the bot covers yet); `bestSamCenter` / `samSite` (sampled within half a
+radius of the guarded building with the most uncovered levels); at most `maxSams`; upgrades
+valued the same way. Headless `airPerGame` adds `sams`, `samUpgrades`, `planesShotDown`,
+`troopsShotDown`. **Client:** the building card's `sam` field (ready / max interceptors,
+seconds to the next, radius) and `SAM_LATER` upgrade lines (missile features marked
+"Later"); `ui.airDefense` (key V, the build bar's ◎ toggle); `client.ts` `rangeRings()` →
+`render/buildings.ts` `RangeRing`s under the icons (every SAM in the air defence view or while
+placing a SAM, hostile ones while aiming an airlift, the SAM or Airport whose card is open;
+yours light, friends' blue, others red; ready interceptors as marks on the rim); the SAM ghost's
+`reach` ring; `airliftPreview` → `planesLost` / `planes` (label "⚠ SAMs: n of 4 planes shot
+down"); `ShotEffect`s from `flightIntercepted` (streak `SHOT_MS`, then puff `PUFF_MS`, drawn by
+`FlightLayer`); toasts for our planes lost and our SAM's hits (no sound — alerts stay rare).
 
 **Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
 (one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army

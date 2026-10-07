@@ -13,6 +13,7 @@ import {
   airportRange,
   flightPoint,
   flightTicks,
+  interceptorsOnRoute,
   type AirliftProblem,
 } from "../../sim/systems/flights.ts";
 import type { FlightKind, PlayerId } from "../../sim/world.ts";
@@ -49,6 +50,12 @@ export interface AirliftPreview {
   readonly troops: number;
   readonly seconds: number;
   readonly problem: AirliftProblem | "noTroops" | null;
+  /**
+   * Planes the hostile SAMs on the route would shoot down with the interceptors they have
+   * ready now (GAME_DESIGN.md §3.17.7), at most all of them, and how many planes fly.
+   */
+  readonly planesLost: number;
+  readonly planes: number;
 }
 
 export const AIRLIFT_PREVIEW_TEXT: Record<AirliftProblem | "noTroops", string> = {
@@ -66,16 +73,59 @@ export function airliftPreview(
   tick: number,
   tile: number | null,
   percent: number,
+  buildings: readonly BuildingSnapshot[] = [],
 ): AirliftPreview {
   const range = airportRange(rules, airport);
   const troops = airliftTroops(rules, airport.level, me, Math.round(percent * 100));
-  if (tile === null) return { airport, range, tile, troops, seconds: 0, problem: null };
+  const planes = rules.flights.airliftPlanes;
+  if (tile === null) {
+    return { airport, range, tile, troops, seconds: 0, problem: null, planesLost: 0, planes };
+  }
   const friendly = owner[tile] !== me.id && friends.has(owner[tile]!);
   const problem =
     airliftProblem(rules, map, airport, tick, tile, friendly) ?? (troops < 1 ? "noTroops" : null);
   const seconds = (flightTicks(rules, map, airport.tile, tile, "transport") * rules.tickMs) / 1000;
-  return { airport, range, tile, troops, seconds, problem };
+  const shots = problem
+    ? 0
+    : interceptorsOnRoute(
+        rules,
+        map,
+        buildings,
+        (samOwner) => isHostile(samOwner, me.id, friends),
+        airport.tile,
+        tile,
+        "transport",
+        tick,
+      ).interceptors;
+  return {
+    airport,
+    range,
+    tile,
+    troops,
+    seconds,
+    problem,
+    planesLost: Math.min(planes, shots),
+    planes,
+  };
 }
+
+/** Whose SAMs shoot at our planes: everyone but us and our friends (GAME_DESIGN.md §3.17.7). */
+export function isHostile(owner: PlayerId, me: PlayerId, friends: ReadonlySet<PlayerId>): boolean {
+  return owner !== me && !friends.has(owner);
+}
+
+/** An interception being drawn: a SAM's shot streaking to a plane, then a puff. */
+export interface ShotEffect {
+  /** Where the SAM stands and where the plane was hit (tiles). */
+  readonly fromTile: number;
+  readonly tile: number;
+  /** performance.now() when it was fired. */
+  readonly start: number;
+}
+
+/** How long a shot streaks, and how long the puff after it lasts (ms). */
+export const SHOT_MS = 280;
+export const PUFF_MS = 900;
 
 /** A flight's position (tile coordinates, tile centres at .5) and heading at `tick`. */
 export function flightPosition(

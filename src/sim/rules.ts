@@ -223,10 +223,10 @@ export interface EconomyRules {
 
 /**
  * Building types built so far (GAME_DESIGN.md §3.17). The air/strategic buildings (Phase
- * 2B) join this list in their own milestones (Airport: 2B.1). Border Defense is not a
+ * 2B) join this list in their own milestones (Airport: 2B.1, SAM: 2B.2). Border Defense is not a
  * one-tile building but a drawn wall (D-024): see WallRules.
  */
-export const BUILDING_TYPES = ["housing", "factory", "port", "airport"] as const;
+export const BUILDING_TYPES = ["housing", "factory", "port", "airport", "sam"] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 
 /**
@@ -267,6 +267,13 @@ export interface BuildingLevelRules {
   readonly liftShare?: number;
   /** …and the Airport's missions are ready again this many ticks after a launch. */
   readonly missionCooldownTicks?: number;
+  /**
+   * SAMs (GAME_DESIGN.md §3.17.7): it holds this many interceptors, each of which destroys
+   * one hostile plane within `range` tiles…
+   */
+  readonly interceptors?: number;
+  /** …and reloads them one at a time, each taking this many ticks. */
+  readonly reloadTicks?: number;
 }
 
 export interface BuildingTypeRules {
@@ -482,6 +489,16 @@ export interface BuildAiRules {
    * by air (a teammate or human ally it doesn't border); nothing otherwise.
    */
   readonly airportWorth: number;
+  /**
+   * SAMs (GAME_DESIGN.md §3.17.7): only while a player that isn't a friend has a working
+   * Airport whose range (plus `samThreatMargin` tiles) reaches the bot's land, a SAM level is
+   * worth this share of capacity per interceptor, times the share of the bot's Housing /
+   * Factory / Airport levels it covers…
+   */
+  readonly samWorth: number;
+  readonly samThreatMargin: number;
+  /** …and a nation keeps at most this many SAMs. */
+  readonly maxSams: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -931,6 +948,11 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // An Airport is insurance for a distant friend: worth less than the economy, so a
       // nation builds one once its cheap Housing and Factories got dearer.
       airportWorth: 0.25,
+      // SAMs answer an air threat: worthless until someone hostile can fly at the bot, then
+      // about a Housing per interceptor when it covers everything the bot has built.
+      samWorth: 0.12,
+      samThreatMargin: 60,
+      maxSams: 2,
     },
   },
   tribe: {
@@ -1081,6 +1103,41 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 250,
             liftShare: 0.1,
             missionCooldownTicks: 300,
+          },
+        ],
+      },
+      // Air defence (§3.17.7): each interceptor always destroys one hostile plane in its
+      // radius, and they reload one at a time. No stacking bonuses: overlapping SAMs add
+      // interceptors, never multipliers — more planes than interceptors (saturation) get
+      // through. Intercepting missiles (II) and the warhead + early warning (III) come with
+      // missiles (2B.5).
+      sam: {
+        onCapture: "adopt",
+        placement: "land",
+        levels: [
+          {
+            name: "SAM Site",
+            cost: 80_000,
+            buildTicks: 100,
+            range: 25,
+            interceptors: 1,
+            reloadTicks: 100,
+          },
+          {
+            name: "Advanced SAM Site",
+            cost: 180_000,
+            buildTicks: 150,
+            range: 35,
+            interceptors: 2,
+            reloadTicks: 80,
+          },
+          {
+            name: "Integrated Air Defense",
+            cost: 400_000,
+            buildTicks: 250,
+            range: 45,
+            interceptors: 3,
+            reloadTicks: 60,
           },
         ],
       },

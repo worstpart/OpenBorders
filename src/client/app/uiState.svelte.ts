@@ -122,6 +122,8 @@ class UiState {
   placing = $state<Placeable | null>(null);
   /** The Airport whose airlift target is being chosen (GAME_DESIGN.md §3.17.7), or null. */
   airliftFrom = $state<number | null>(null);
+  /** The air defence view (GAME_DESIGN.md §3.17.7, key V): every SAM's ring on the map. */
+  airDefense = $state(false);
   /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */
   wallPoints = $state.raw<readonly number[]>([]);
   /**

@@ -29,7 +29,9 @@ export type KeyAction =
   /** Turn gold into troops (GAME_DESIGN.md §3.16). */
   | "mobilize"
   /** Drop a map ping under the cursor for allies and teammates (GAME_DESIGN.md §3.20). */
-  | "ping";
+  | "ping"
+  /** Show or hide every SAM's ring (the air defence view, GAME_DESIGN.md §3.17.7). */
+  | "airDefense";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -72,6 +74,7 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   KeyN: "diplomacyNo",
   KeyM: "mobilize",
   KeyG: "ping",
+  KeyV: "airDefense",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {

@@ -27,7 +27,16 @@ import {
 import { incomingThreats, THREAT_ICON } from "./threats.ts";
 import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
-import { AIRLIFT_PREVIEW_TEXT, airliftPreview, type AirliftPreview } from "./flights.ts";
+import {
+  AIRLIFT_PREVIEW_TEXT,
+  airliftPreview,
+  isHostile,
+  PUFF_MS,
+  SHOT_MS,
+  type AirliftPreview,
+  type ShotEffect,
+} from "./flights.ts";
+import { airportRange, samInterceptors, samRadius, samReady } from "../../sim/systems/flights.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
 import {
@@ -36,6 +45,7 @@ import {
   ICON_MIN_PX,
   ICON_PX_PER_ZOOM,
   type BuildGhost,
+  type RangeRing,
 } from "../render/buildings.ts";
 import {
   BUILD_BLOCK_TEXT,
@@ -153,6 +163,8 @@ export class GameClient {
   private baseFlags: Uint8Array = new Uint8Array(1);
   private lootEffects: LootEffect[] = [];
   private tradeEffects: TradeEffect[] = [];
+  /** SAM shots being drawn (GAME_DESIGN.md §3.17.7). */
+  private shotEffects: ShotEffect[] = [];
   /** Which map is loaded, and the latest load asked for (older results are dropped). */
   private mapKey = "";
   private mapRequest = 0;
@@ -485,7 +497,54 @@ export class GameClient {
       this.latestFrame?.tick ?? 0,
       tile,
       ui.attackPercent,
+      ui.buildings,
     );
+  }
+
+  /**
+   * The range rings to show (GAME_DESIGN.md §3.17.7, render/buildings.ts): every SAM in the
+   * air defence view or while placing a SAM, the hostile ones while aiming an airlift, and the
+   * SAM or Airport whose card is open.
+   */
+  private rangeRings(): RangeRing[] {
+    const me = ui.localPlayerId;
+    const tick = this.latestFrame?.tick ?? 0;
+    const selected = ui.menu?.kind === "building" ? ui.menu.id : null;
+    const all = ui.airDefense || ui.placing === "sam";
+    const aiming = ui.airliftFrom !== null;
+    const rings: RangeRing[] = [];
+    for (const b of ui.buildings) {
+      if (b.level < 1) continue;
+      const tone = b.owner === me ? "mine" : ui.friends.has(b.owner) ? "friend" : "hostile";
+      if (b.type === "sam") {
+        const show = all || b.id === selected || (aiming && isHostile(b.owner, me, ui.friends));
+        if (!show) continue;
+        rings.push({
+          tile: b.tile,
+          radius: samRadius(DEFAULT_RULES, b),
+          tone,
+          ready: samReady(DEFAULT_RULES, b, tick),
+          max: samInterceptors(DEFAULT_RULES, b.level),
+        });
+      } else if (b.type === "airport" && b.id === selected) {
+        rings.push({
+          tile: b.tile,
+          radius: airportRange(DEFAULT_RULES, b),
+          tone,
+          ready: 0,
+          max: 0,
+        });
+      }
+    }
+    return rings;
+  }
+
+  /** SAM shots still showing (older ones are dropped). */
+  private shotsNow(now: number): ShotEffect[] {
+    if (this.shotEffects.length > 0) {
+      this.shotEffects = this.shotEffects.filter((s) => now - s.start < SHOT_MS + PUFF_MS);
+    }
+    return this.shotEffects;
   }
 
   /** While aiming an airlift: the one the tile under the mouse would get. */
@@ -672,6 +731,7 @@ export class GameClient {
     this.placements.clear();
     this.lootEffects = [];
     this.tradeEffects = [];
+    this.shotEffects = [];
     this.emotes = [];
     this.alerts = new AlertPlanner();
     this.baseFlags = new Uint8Array(1);
@@ -737,6 +797,13 @@ export class GameClient {
         ui.myLastEmoteTick = frame.tick;
       } else if (event.type === "pinged" && event.from === me) {
         ui.myLastPingTick = frame.tick;
+      }
+      if (event.type === "flightIntercepted" && event.fromTile >= 0) {
+        this.shotEffects.push({
+          fromTile: event.fromTile,
+          tile: event.tile,
+          start: performance.now(),
+        });
       }
       if (event.type === "tradeDocked" && event.gold > 0) {
         // Our ship docked somewhere (the gold shows over the Port it left from), or someone's
@@ -1095,6 +1162,9 @@ export class GameClient {
       case "ping":
         this.quickPing();
         break;
+      case "airDefense":
+        if (ui.screen === "game" && DEFAULT_RULES.flights.enabled) ui.airDefense = !ui.airDefense;
+        break;
       case "diplomacyYes":
       case "diplomacyNo":
         if (ui.screen === "game") this.answerTopCard(action === "diplomacyYes");
@@ -1140,6 +1210,7 @@ export class GameClient {
         colorOf: (id) => ui.colorOf(id),
         selectedId: ui.menu?.kind === "building" ? ui.menu.id : null,
         ghost: this.buildGhost(),
+        rings: this.rangeRings(),
         walls: ui.walls,
         selectedWall: ui.menu?.kind === "wall" ? ui.menu.id : null,
         wallPreview: this.wallDraft(),
@@ -1167,6 +1238,8 @@ export class GameClient {
         owner: this.owner,
         buildings: ui.buildings,
         airlift: this.airliftDraft(),
+        shots: this.shotsNow(startedAt),
+        now: startedAt,
       });
     }
     this.labels.draw(
@@ -1263,6 +1336,7 @@ export class GameClient {
       tile,
       ok: placementCheck(ui.buildContext, type, tile) === null,
       radius: DEFAULT_RULES.buildings.minSpacing,
+      reach: type === "sam" ? (DEFAULT_RULES.buildings.types.sam.levels[0]!.range ?? 0) : 0,
     };
   }
 

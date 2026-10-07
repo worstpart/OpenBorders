@@ -26,7 +26,13 @@ import {
   type WallProblem,
 } from "../../sim/systems/walls.ts";
 import { tradeEnabled, tradePartners } from "../../sim/systems/trade.ts";
-import { airliftCapacity, airliftCooldownLeft } from "../../sim/systems/flights.ts";
+import {
+  airliftCapacity,
+  airliftCooldownLeft,
+  samInterceptors,
+  samRadius,
+  samReady,
+} from "../../sim/systems/flights.ts";
 import { formatTroops } from "../format.ts";
 
 /** What the build bar can pick up: a building, or the wall tool (D-024). */
@@ -49,6 +55,7 @@ export const BUILDING_ROLE: Record<Placeable, string> = {
   factory: "More gold",
   port: "Trade & faster boats",
   airport: "Airlift troops to friends",
+  sam: "Shoots down enemy planes",
   wall: "Draw a defence line",
 };
 
@@ -88,8 +95,23 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
       `Ready again ${(effect.missionCooldownTicks * rules.tickMs) / 1000} s after each flight`,
     );
   }
+  if (effect.interceptors) {
+    lines.push(`Shoots down enemy planes within ${effect.range ?? 0} km`);
+    lines.push(
+      `${effect.interceptors} interceptor${effect.interceptors > 1 ? "s" : ""}, each reloads in ${((effect.reloadTicks ?? 0) * rules.tickMs) / 1000} s`,
+    );
+  }
   return lines;
 }
+
+/**
+ * What a SAM level will add once missiles exist (GAME_DESIGN.md §3.17.7: 2B.5) — shown on
+ * the upgrade, clearly as later, so nobody pays for it thinking it works now.
+ */
+const SAM_LATER: Readonly<Record<number, string>> = {
+  2: "Later: also intercepts missiles (with Missile Silos)",
+  3: "Later: stops strategic warheads; early warning",
+};
 
 /** What a wall level does to attackers (GAME_DESIGN.md §3.17.6). */
 export function wallLines(rules: GameRules, level: number): string[] {
@@ -131,6 +153,14 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     lines.push(
       `${now.boatLoss ? "" : "New: Marines — "}landings lose ${Math.round((1 - next.boatLoss) * 100)}% less`,
     );
+  }
+  if (next.interceptors) {
+    lines.push(`Radius ${next.range ?? 0} km`);
+    lines.push(
+      `${next.interceptors} interceptors, reload ${((next.reloadTicks ?? 0) * rules.tickMs) / 1000} s each`,
+    );
+    const later = SAM_LATER[level + 1];
+    if (later) lines.push(later);
   }
   return lines;
 }
@@ -342,6 +372,15 @@ export interface BuildingCard {
     /** Seconds until it can fly again (0 = ready). */
     readonly secondsLeft: number;
   } | null;
+  /** A working SAM (GAME_DESIGN.md §3.17.7): its interceptors now. */
+  readonly sam: {
+    readonly ready: number;
+    readonly max: number;
+    /** Seconds until the next interceptor is back (0 = all ready). */
+    readonly secondsToNext: number;
+    /** Radius in km. */
+    readonly radius: number;
+  } | null;
   /** A level the game doesn't have yet (shown instead of an upgrade). */
   readonly laterLevel: string | null;
 }
@@ -397,10 +436,24 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
             secondsLeft: (airliftCooldownLeft(building, ctx.tick) * rules.tickMs) / 1000,
           }
         : null,
+    sam: samStatus(ctx, building),
     laterLevel:
       mine && !working && building.level === maxLevel(rules, building.type)
         ? (LATER_LEVELS[building.type] ?? null)
         : null,
+  };
+}
+
+/** A working SAM's interceptors (anyone's: SAMs are in plain sight), or null. */
+function samStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard["sam"] {
+  if (building.type !== "sam" || building.level < 1) return null;
+  const rules = ctx.rules;
+  const next = building.reloads.find((t) => t > ctx.tick);
+  return {
+    ready: samReady(rules, building, ctx.tick),
+    max: samInterceptors(rules, building.level),
+    secondsToNext: next === undefined ? 0 : ((next - ctx.tick) * rules.tickMs) / 1000,
+    radius: samRadius(rules, building),
   };
 }
 
@@ -461,6 +514,7 @@ export function wallCard(ctx: BuildContext, wall: WallSnapshot): BuildingCard {
     work: workOf(ctx, wall),
     upgrade,
     airlift: null,
+    sam: null,
     laterLevel: null,
   };
 }

@@ -6,6 +6,9 @@
  * on to its target — yours light, hostile ones at your land red (with a ring and the ETA),
  * everyone else's faint (flights are visible to everyone).
  *
+ * SAM shots (GAME_DESIGN.md §3.17.13): a short bright streak from the SAM to the plane, then
+ * a puff of flame and smoke where it was hit.
+ *
  * Drawn with Canvas2D on the label overlay, like boats. Positions come from the tick alone
  * (app/flights.ts → the simulation's flightPoint), so flights glide smoothly between ticks.
  * Until the image has loaded, a plain aircraft glyph stands in.
@@ -17,7 +20,10 @@ import {
   FLIGHT_INFO,
   flightPosition,
   flightSecondsLeft,
+  PUFF_MS,
+  SHOT_MS,
   type AirliftPreview,
+  type ShotEffect,
 } from "../app/flights.ts";
 import { formatTroops } from "../format.ts";
 import { drawSprite, FACES_LEFT, spriteHeight } from "../sprites.ts";
@@ -39,6 +45,9 @@ export interface FlightDrawInput {
   readonly buildings: readonly BuildingSnapshot[];
   /** The airlift being aimed (GAME_DESIGN.md §3.17.7): its range ring, line and ETA. */
   readonly airlift: AirliftPreview | null;
+  /** SAM shots still showing, and the time now (performance.now()). */
+  readonly shots: readonly ShotEffect[];
+  readonly now: number;
 }
 
 const MINE = "rgba(246, 241, 228, 0.8)";
@@ -61,7 +70,7 @@ export class FlightLayer {
   }
 
   draw(view: MapView, input: FlightDrawInput): void {
-    if (input.flights.length === 0 && !input.airlift) return;
+    if (input.flights.length === 0 && !input.airlift && input.shots.length === 0) return;
     const ctx = this.context;
     const ratio = window.devicePixelRatio || 1;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -134,7 +143,52 @@ export class FlightLayer {
         labels.push({ x: p.x, y: p.y - height / 2 - 7, text });
       }
     }
+    for (const shot of input.shots) this.shot(shot, tileScreen, input.now, view.zoom);
     for (const label of labels) this.label(label.x, label.y, label.text);
+  }
+
+  /** A SAM shot: the streak flies to the plane, then a puff blooms and fades there. */
+  private shot(
+    shot: ShotEffect,
+    tileScreen: (tile: number) => { x: number; y: number },
+    now: number,
+    zoom: number,
+  ): void {
+    const age = now - shot.start;
+    if (age < 0 || age > SHOT_MS + PUFF_MS) return;
+    const ctx = this.context;
+    const from = tileScreen(shot.fromTile);
+    const to = tileScreen(shot.tile);
+    ctx.save();
+    if (age < SHOT_MS) {
+      const t = age / SHOT_MS;
+      const head = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+      const tailT = Math.max(0, t - 0.35);
+      const tail = { x: from.x + (to.x - from.x) * tailT, y: from.y + (to.y - from.y) * tailT };
+      const gradient = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
+      gradient.addColorStop(0, "rgba(255, 220, 160, 0)");
+      gradient.addColorStop(1, "rgba(255, 245, 220, 0.95)");
+      ctx.lineCap = "round";
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(tail.x, tail.y);
+      ctx.lineTo(head.x, head.y);
+      ctx.stroke();
+    } else {
+      const t = (age - SHOT_MS) / PUFF_MS;
+      const r = (9 + Math.min(12, zoom * 1.5)) * (0.6 + 0.8 * t);
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = "rgba(90, 90, 96, 0.75)";
+      ctx.beginPath();
+      ctx.arc(to.x, to.y - t * 6, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 170, 70, 0.95)";
+      ctx.beginPath();
+      ctx.arc(to.x, to.y - t * 6, r * 0.55 * (1 - t), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private route(
@@ -201,6 +255,17 @@ export class FlightLayer {
       ? AIRLIFT_PREVIEW_TEXT[aim.problem]
       : `✈ ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
     this.label(to.x, to.y - Math.max(10, zoom * 1.5) - 8, text);
+    if (!aim.problem && aim.planesLost > 0) {
+      // Hostile SAMs on the route (their rings are drawn under it, render/buildings.ts).
+      this.label(
+        to.x,
+        to.y - Math.max(10, zoom * 1.5) - 24,
+        aim.planesLost >= aim.planes
+          ? `⚠ SAMs: all ${aim.planes} planes would be shot down`
+          : `⚠ SAMs: ${aim.planesLost} of ${aim.planes} planes shot down`,
+        "#ffb36b",
+      );
+    }
   }
 
   /** The flight's shadow on the ground, in its owner's colour. */
@@ -253,7 +318,7 @@ export class FlightLayer {
     ctx.restore();
   }
 
-  private label(x: number, y: number, text: string): void {
+  private label(x: number, y: number, text: string, color = "#f6f1e4"): void {
     const ctx = this.context;
     ctx.save();
     ctx.font = this.font;
@@ -262,7 +327,7 @@ export class FlightLayer {
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(10, 14, 20, 0.85)";
     ctx.strokeText(text, x, y);
-    ctx.fillStyle = "#f6f1e4";
+    ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     ctx.restore();
   }

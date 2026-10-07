@@ -42,28 +42,29 @@
 
 {#if items.length > 0}
   <div class="build">
-    <span class="label">
-      {#if placing?.type === "wall"}
-        {#if ui.wallPoints.length === 0}
-          Click your land to start a wall (point A)
-        {:else if !draft}
-          Click point B
-        {:else}
-          {draft.newTiles} tiles · {formatTroops(draft.price)} — click more points, or right-click to
-          build
+    <!-- Instructions get their own line (the row is full of buildings since 2B.2). -->
+    {#if placing || airlift}
+      <span class="label">
+        {#if placing?.type === "wall"}
+          {#if ui.wallPoints.length === 0}
+            Click your land to start a wall (point A)
+          {:else if !draft}
+            Click point B
+          {:else}
+            {draft.newTiles} tiles · {formatTroops(draft.price)} — click more points, or right-click to
+            build
+          {/if}
+          <span class="muted">· Esc to cancel</span>
+        {:else if airlift}
+          Click an ally's or teammate's land within range to airlift {formatTroops(airlift.troops)}
+          troops
+          <span class="muted">· Esc or right-click to cancel</span>
+        {:else if placing}
+          Click your land to place the {placing.name}
+          <span class="muted">· Esc or right-click to cancel</span>
         {/if}
-        <span class="muted">· Esc to cancel</span>
-      {:else if airlift}
-        Click an ally's or teammate's land within range to airlift {formatTroops(airlift.troops)}
-        troops
-        <span class="muted">· Esc or right-click to cancel</span>
-      {:else if placing}
-        Click your land to place the {placing.name}
-        <span class="muted">· Esc or right-click to cancel</span>
-      {:else}
-        Build
-      {/if}
-    </span>
+      </span>
+    {/if}
     <div class="items" role="toolbar" aria-label="Buildings">
       {#each items as item (item.type)}
         <button
@@ -76,13 +77,28 @@
           title="{item.name} — {item.role}{item.affordable ? '' : ' (not enough gold)'}"
           onclick={() => onPick(item.type)}
         >
-          <BuildingIcon type={item.type} size={30} />
+          <BuildingIcon type={item.type} size={26} />
           <span class="text">
             <span class="name">{item.name}</span>
             <span class="price">{formatTroops(item.price)}{item.unit}</span>
           </span>
         </button>
       {/each}
+      {#if items.some((i) => i.type === "sam")}
+        <button
+          type="button"
+          class="view"
+          class:on={ui.airDefense}
+          tabindex={-1}
+          aria-pressed={ui.airDefense}
+          aria-label="Air defence view"
+          title="Air defence view: every SAM's range on the map (V)"
+          onclick={() => (ui.airDefense = !ui.airDefense)}
+        >
+          <span class="view-icon">◎</span>
+          <span class="key">V</span>
+        </button>
+      {/if}
     </div>
   </div>
 {/if}
@@ -90,8 +106,10 @@
 <style>
   .build {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    justify-content: center;
+    gap: var(--space-2) var(--space-3);
     margin-top: var(--space-2);
     padding-top: var(--space-2);
     border-top: 1px solid var(--surface-hairline);
@@ -99,7 +117,7 @@
   }
 
   .label {
-    flex: 1;
+    flex: 1 0 100%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -113,15 +131,15 @@
 
   .items {
     display: flex;
-    gap: var(--space-2);
+    gap: 6px;
   }
 
   .item {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
     height: 36px;
-    padding: 0 var(--space-3) 0 var(--space-2);
+    padding: 0 var(--space-2) 0 6px;
     border: 1px solid var(--surface-hairline);
     border-radius: var(--radius-control);
     background: rgb(255 255 255 / 0.05);
@@ -173,5 +191,43 @@
 
   .short .price {
     color: var(--color-danger);
+  }
+
+  .view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 36px;
+    padding: 0;
+    border: 1px dashed var(--surface-hairline);
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .view:hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .view.on {
+    border-style: solid;
+    border-color: rgb(255 110 90 / 0.8);
+    background: rgb(255 110 90 / 0.14);
+    color: #f6f1e4;
+  }
+
+  .view-icon {
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  .key {
+    font-size: 9px;
+    line-height: 1;
+    color: var(--text-muted);
   }
 </style>

@@ -9,6 +9,13 @@
  *    where it is with `flightTile`.
  *  - `shootDown` is the one place planes are lost (SAMs 2B.2, Fortress Wall flak 2B.3): a
  *    plane shot down takes its share of the troops aboard with it.
+ *  - SAMs (2B.2, the one rule of §3.17.7): every tick, before arrivals, each flight (in id
+ *    order) is checked against the SAMs (in id order) of every player who isn't a friend of
+ *    its owner — the target's and any third player's alike (airspace matters). A working SAM
+ *    whose radius holds the tile the flight is over, with an interceptor ready, fires one:
+ *    it always destroys one plane (no dice). Each SAM fires at most once a tick and each
+ *    interceptor kills exactly one plane, so overlapping SAMs add interceptors, never
+ *    multipliers; more planes than interceptors get through.
  *  - Arrivals act by kind: airlift → the friend's home troops, what doesn't fit under their
  *    capacity flies back ("return" → the owner's home troops) — 2B.1; assault → a beachhead
  *    attack (2B.3), strike/missile → buildings lose levels (2B.4–2B.5). Test flights (debug,
@@ -33,6 +40,7 @@ import type { GameRules } from "../rules.ts";
 import {
   getPlayer,
   NEUTRAL,
+  type Building,
   type Flight,
   type FlightKind,
   type Player,
@@ -40,7 +48,14 @@ import {
   type World,
 } from "../world.ts";
 import { updateFieldTroops } from "./attacks.ts";
-import { buildingsEnabled, findBuilding, levelRules, startCooldown } from "./buildings.ts";
+import {
+  buildingsEnabled,
+  findBuilding,
+  levelRules,
+  readyCharges,
+  spendCharge,
+  startCooldown,
+} from "./buildings.ts";
 import { areFriendly } from "./diplomacy.ts";
 import { troopRoom } from "./economy.ts";
 
@@ -307,20 +322,66 @@ function isFriendOf(world: World, id: PlayerId, other: PlayerId): boolean {
   return getPlayer(world, other)?.alive === true && areFriendly(world, id, other);
 }
 
+/** Candidate landing tiles a nation checks against hostile SAMs, at most. */
+const SITE_CANDIDATES = 24;
+
 /**
- * Where a nation lands an airlift for `friend`: the friend's border tile nearest the
- * Airport within its range (-1: none). Ties go to the lower tile, so the order the border is
- * kept in doesn't matter.
+ * Where a nation lands an airlift for `friend` (-1: nowhere worth it): the friend's border
+ * tile nearest the Airport within its range. Ties go to the lower tile, so the order the
+ * border is kept in doesn't matter. When hostile SAMs stand somewhere (2B.2), it flies
+ * around them: of up to SITE_CANDIDATES border tiles spread from the nearest to the farthest
+ * in range, the one whose route meets the fewest ready interceptors (nearest first among
+ * equals) — and none at all if every route would lose every plane.
  */
-export function airliftSite(world: World, airport: AirportLike, friend: Player): number {
-  const range = airportRange(world.rules, airport);
-  let best = -1;
-  let bestDistance = range * range;
+export function airliftSite(
+  world: World,
+  airport: AirportLike & { readonly owner: PlayerId },
+  friend: Player,
+): number {
+  const rules = world.rules;
+  const range = airportRange(rules, airport);
+  const owner = airport.owner;
+  const hostile = (samOwner: PlayerId) =>
+    samOwner !== owner && !areFriendly(world, owner, samOwner);
+  const sams = world.buildings.filter((b) => b.type === "sam" && b.level >= 1 && hostile(b.owner));
+  if (sams.length === 0) {
+    let best = -1;
+    let bestDistance = range * range;
+    for (const tile of friend.border) {
+      const d = distanceSq(world.map, airport.tile, tile);
+      if (d < bestDistance || (d === bestDistance && (best < 0 || tile < best))) {
+        best = tile;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+  const inRange: { tile: number; d: number }[] = [];
   for (const tile of friend.border) {
     const d = distanceSq(world.map, airport.tile, tile);
-    if (d < bestDistance || (d === bestDistance && (best < 0 || tile < best))) {
+    if (d <= range * range) inRange.push({ tile, d });
+  }
+  if (inRange.length === 0) return -1;
+  inRange.sort((a, b) => a.d - b.d || a.tile - b.tile);
+  const stride = Math.max(1, Math.ceil(inRange.length / SITE_CANDIDATES));
+  let best = -1;
+  let fewest = rules.flights.airliftPlanes; // as many as the planes: all of them lost
+  for (let k = 0; k < inRange.length; k += stride) {
+    const tile = inRange[k]!.tile;
+    const met = interceptorsOnRoute(
+      rules,
+      world.map,
+      sams,
+      hostile,
+      airport.tile,
+      tile,
+      "transport",
+      world.tick,
+    ).interceptors;
+    if (met < fewest) {
       best = tile;
-      bestDistance = d;
+      fewest = met;
+      if (met === 0) break;
     }
   }
   return best;
@@ -355,9 +416,107 @@ function deliverAirlift(world: World, flight: Flight): void {
   }
 }
 
-/** Tick system (step 2c, right after the boats): flights that reach their target arrive. */
+/** A SAM as interception sees it (a building or its frame snapshot). */
+export interface SamLike {
+  readonly id: number;
+  readonly type: string;
+  readonly owner: PlayerId;
+  readonly level: number;
+  readonly tile: number;
+  readonly reloads: readonly number[];
+}
+
+/** A SAM's radius in tiles at its working level (0 while first being built). */
+export function samRadius(rules: GameRules, sam: SamLike): number {
+  return sam.type === "sam" && sam.level >= 1
+    ? (levelRules(rules, "sam", sam.level).range ?? 0)
+    : 0;
+}
+
+/** How many interceptors a SAM of `level` holds (0 while first being built). */
+export function samInterceptors(rules: GameRules, level: number): number {
+  return level >= 1 ? (levelRules(rules, "sam", level).interceptors ?? 0) : 0;
+}
+
+/** Interceptors a SAM has ready at `tick`. */
+export function samReady(rules: GameRules, sam: SamLike, tick: number): number {
+  return readyCharges(sam, samInterceptors(rules, sam.level), tick);
+}
+
+/**
+ * The SAMs that would shoot at a flight from `from` to `to` owned by `owner` (`hostile`
+ * says whose SAMs shoot at that owner's planes), and how many interceptors they have ready
+ * now: the flight is followed tick by tick over the same tiles the simulation checks
+ * (flightTile), so the HUD and the nations see exactly what a launch would meet — except
+ * for interceptors that reload while it flies.
+ */
+export function interceptorsOnRoute(
+  rules: GameRules,
+  map: GameMap,
+  sams: readonly SamLike[],
+  hostile: (samOwner: PlayerId) => boolean,
+  from: number,
+  to: number,
+  plane: PlaneType,
+  tick: number,
+): { readonly sams: readonly SamLike[]; readonly interceptors: number } {
+  const threats = sams.filter((s) => s.level >= 1 && s.type === "sam" && hostile(s.owner));
+  if (threats.length === 0) return { sams: [], interceptors: 0 };
+  const path: FlightPath = {
+    fromTile: from,
+    toTile: to,
+    launchTick: 0,
+    arriveTick: flightTicks(rules, map, from, to, plane),
+  };
+  const met: SamLike[] = [];
+  for (let t = 0; t <= path.arriveTick && met.length < threats.length; t++) {
+    const tile = flightTile(map, path, t);
+    for (const sam of threats) {
+      if (!met.includes(sam) && withinRange(map, sam.tile, tile, samRadius(rules, sam))) {
+        met.push(sam);
+      }
+    }
+  }
+  met.sort((a, b) => a.id - b.id);
+  let interceptors = 0;
+  for (const sam of met) interceptors += samReady(rules, sam, tick);
+  return { sams: met, interceptors };
+}
+
+/**
+ * Tick system part (GAME_DESIGN.md §3.17.7): hostile SAMs fire at the flights inside their
+ * radius (see the header for the order). One interceptor, one plane.
+ */
+function interceptFlights(world: World): void {
+  const rules = world.rules;
+  const sams: Building[] = [];
+  for (const b of world.buildings) if (b.type === "sam" && b.level >= 1) sams.push(b);
+  if (sams.length === 0) return;
+  const fired = new Set<number>();
+  // shootDown drops flights with no planes left from world.flights, so walk a copy.
+  for (const flight of world.flights.slice()) {
+    const tile = flightTile(world.map, flight, world.tick);
+    for (const sam of sams) {
+      if (flight.planes === 0) break;
+      if (fired.has(sam.id) || sam.owner === flight.owner) continue;
+      if (areFriendly(world, sam.owner, flight.owner)) continue;
+      const level = levelRules(rules, "sam", sam.level);
+      if (readyCharges(sam, level.interceptors ?? 0, world.tick) < 1) continue;
+      if (!withinRange(world.map, sam.tile, tile, level.range ?? 0)) continue;
+      spendCharge(sam, world.tick, level.reloadTicks ?? 0);
+      fired.add(sam.id);
+      shootDown(world, flight, 1, sam.owner, sam.tile);
+    }
+  }
+}
+
+/**
+ * Tick system (step 2c, right after the boats): hostile SAMs fire, then flights that reach
+ * their target arrive.
+ */
 export function advanceFlights(world: World): void {
   if (world.flights.length === 0) return;
+  interceptFlights(world);
   let arrived = false;
   let troops = false;
   for (const flight of world.flights) {
@@ -388,7 +547,13 @@ export function advanceFlights(world: World): void {
  * Shoots down `planes` of a flight (SAMs 2B.2, flak 2B.3): each takes its share of the troops
  * aboard. A flight with no planes left is gone. The one place planes are lost.
  */
-export function shootDown(world: World, flight: Flight, planes: number, by: PlayerId): void {
+export function shootDown(
+  world: World,
+  flight: Flight,
+  planes: number,
+  by: PlayerId,
+  fromTile = -1,
+): void {
   const downed = Math.min(planes, flight.planes);
   if (downed <= 0) return;
   const troopsLost = (flight.troops * downed) / flight.planes;
@@ -401,6 +566,7 @@ export function shootDown(world: World, flight: Flight, planes: number, by: Play
     owner: flight.owner,
     by,
     tile,
+    fromTile,
     planes: downed,
     planesLeft: flight.planes,
     troopsLost,

@@ -18,6 +18,11 @@
  * troops attacking it than it has at home, the same need that makes it airlift (bot.ts) — and
  * close enough for an Airport in the middle of its land to reach; one is enough. (Valued for any distant friend, nations built 3–7 per team game and airlifted
  * almost never: 2B.1 headless runs.) It stands on plains, deep inside like the rest.
+ * A SAM (§3.17.7, 2B.2) is worth something only under an air threat — a working Airport of a
+ * player who isn't a friend whose range (plus `samThreatMargin`) reaches one of the bot's
+ * Housing, Factories or Airports: then `samWorth` × capacity per interceptor, times the share
+ * of those buildings' levels it covers (that no SAM of the bot covers yet, for a new one). It
+ * stands among them (at most `maxSams`), and is upgraded by the same measure.
  * Escalating prices make the next new building dearer, so upgrades win in time. Gold is
  * also its war chest (§3.16, Mobilize right before attacking a player); while saving, it
  * keeps part of the goal's price out of the chest (`saving`, by personality), and builds
@@ -53,6 +58,7 @@ import {
 } from "../systems/buildings.ts";
 import { distanceSq, withinRange } from "../geometry.ts";
 import { bordersTarget } from "../systems/attacks.ts";
+import { airportRange, samInterceptors } from "../systems/flights.ts";
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
@@ -119,13 +125,19 @@ function buildingGoal(world: World, bot: Player): Goal | null {
     }
   };
   const none = { upgrade: null, newType: null, wallUpgrade: null, wallPoints: null };
+  const air = airDefence(world, bot, mine);
   for (const b of mine) {
     if (b.level >= maxLevel(rules, b.type)) continue;
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
     const value =
-      worth(world, bot, levelRules(rules, b.type, level), b.tile) -
-      worth(world, bot, levelRules(rules, b.type, b.level), b.tile);
+      b.type === "sam"
+        ? air
+          ? samValue(world, bot, air, b.tile, level, null) -
+            samValue(world, bot, air, b.tile, b.level, null)
+          : 0
+        : worth(world, bot, levelRules(rules, b.type, level), b.tile) -
+          worth(world, bot, levelRules(rules, b.type, b.level), b.tile);
     consider(price, value, { ...none, upgrade: b.id });
   }
   if (mine.length < Math.floor(bot.tiles / ai.tilesPerBuilding)) {
@@ -140,11 +152,20 @@ function buildingGoal(world: World, bot: Player): Goal | null {
         (mine.some((b) => b.type === "airport") || !friendInNeed(world, bot))
       )
         continue;
+      // SAMs only under an air threat, a few at most, where they cover the most.
+      const samCenter = type === "sam" && air ? bestSamCenter(world, bot, air) : -1;
+      if (
+        type === "sam" &&
+        (samCenter < 0 || mine.filter((b) => b.type === "sam").length >= ai.maxSams)
+      )
+        continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
       const value =
         type === "airport"
           ? ai.airportWorth * bot.capacity
-          : worth(world, bot, levelRules(rules, type, 1), coast);
+          : type === "sam"
+            ? samValue(world, bot, air!, samCenter, 1, mine)
+            : worth(world, bot, levelRules(rules, type, 1), coast);
       consider(price, value, { ...none, newType: type });
     }
   }
@@ -188,7 +209,9 @@ export function decideBuild(world: World, bot: Player, incoming: number): Comman
   const tile =
     world.rules.buildings.types[type].placement === "coast"
       ? portSite(world, bot)
-      : buildSite(world, bot, type);
+      : type === "sam"
+        ? samSite(world, bot)
+        : buildSite(world, bot, type);
   return tile < 0 ? null : { type: "build", buildingType: type, tile };
 }
 
@@ -411,6 +434,137 @@ function friendInNeed(world: World, bot: Player): boolean {
     for (const tile of friend.border) if (withinRange(world.map, middle, tile, reach)) return true;
   }
   return false;
+}
+
+/** What SAMs guard (GAME_DESIGN.md §3.17.7): the bot's economy and its Airports. */
+const GUARDED: ReadonlySet<BuildingType> = new Set<BuildingType>(["housing", "factory", "airport"]);
+
+/** The bot's guarded buildings while an air threat hangs over them (see the header). */
+interface AirDefence {
+  readonly guarded: readonly Building[];
+  /** Their levels together (the ones being built count at their target level). */
+  readonly totalLevels: number;
+}
+
+/** The bot's guarded buildings if a hostile Airport can reach one of them, else null. */
+function airDefence(world: World, bot: Player, mine: readonly Building[]): AirDefence | null {
+  const rules = world.rules;
+  if (!rules.flights.enabled) return null;
+  const guarded = mine.filter((b) => GUARDED.has(b.type));
+  if (guarded.length === 0) return null;
+  const margin = rules.ai.build.samThreatMargin;
+  const threat = world.buildings.some(
+    (a) =>
+      a.type === "airport" &&
+      a.level >= 1 &&
+      a.owner !== bot.id &&
+      !areFriendly(world, bot.id, a.owner) &&
+      guarded.some((g) => withinRange(world.map, a.tile, g.tile, airportRange(rules, a) + margin)),
+  );
+  if (!threat) return null;
+  let totalLevels = 0;
+  for (const g of guarded) totalLevels += g.targetLevel;
+  return { guarded, totalLevels };
+}
+
+/** A SAM's radius at `level` (0 below level I). */
+function samRadiusAt(world: World, level: number): number {
+  return level >= 1 ? (levelRules(world.rules, "sam", level).range ?? 0) : 0;
+}
+
+/**
+ * Guarded levels a SAM of `level` at `tile` covers; with `others`, only those that none of
+ * the bot's SAMs among them covers yet.
+ */
+function coveredLevels(
+  world: World,
+  air: AirDefence,
+  tile: number,
+  level: number,
+  others: readonly Building[] | null,
+): number {
+  const radius = samRadiusAt(world, level);
+  let levels = 0;
+  for (const g of air.guarded) {
+    if (!withinRange(world.map, tile, g.tile, radius)) continue;
+    const covered = others?.some(
+      (s) =>
+        s.type === "sam" &&
+        withinRange(world.map, s.tile, g.tile, samRadiusAt(world, Math.max(1, s.targetLevel))),
+    );
+    if (!covered) levels += g.targetLevel;
+  }
+  return levels;
+}
+
+/** What a SAM of `level` at `tile` is worth to the bot, in troop-equivalents (see the header). */
+function samValue(
+  world: World,
+  bot: Player,
+  air: AirDefence,
+  tile: number,
+  level: number,
+  others: readonly Building[] | null,
+): number {
+  if (level < 1 || air.totalLevels === 0) return 0;
+  const share = coveredLevels(world, air, tile, level, others) / air.totalLevels;
+  return world.rules.ai.build.samWorth * bot.capacity * samInterceptors(world.rules, level) * share;
+}
+
+/**
+ * The guarded building a new SAM would cover the most uncovered levels around (the first
+ * among equals, by id), or -1 when everything is covered already.
+ */
+function bestSamCenter(world: World, bot: Player, air: AirDefence): number {
+  const mine = world.buildings.filter((b) => b.owner === bot.id);
+  let best = -1;
+  let bestLevels = 0;
+  for (const g of air.guarded) {
+    const levels = coveredLevels(world, air, g.tile, 1, mine);
+    if (levels > bestLevels) {
+      best = g.tile;
+      bestLevels = levels;
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a nation puts a new SAM, or -1: sampled within half a radius of the guarded building
+ * it should cover most around; the tile covering the most uncovered levels wins, then the
+ * deeper one (harder to capture).
+ */
+function samSite(world: World, bot: Player): number {
+  const mine = world.buildings.filter((b) => b.owner === bot.id);
+  const air = airDefence(world, bot, mine);
+  if (!air) return -1;
+  const center = bestSamCenter(world, bot, air);
+  if (center < 0) return -1;
+  const { map } = world;
+  const reach = Math.max(2, Math.floor(samRadiusAt(world, 1) / 2));
+  const cx = center % map.width;
+  const cy = Math.floor(center / map.width);
+  let best = -1;
+  let bestLevels = 0;
+  let bestDepth = 0;
+  const samples = world.rules.ai.build.placementSamples;
+  for (let k = 0; k < samples; k++) {
+    const x = cx + world.rng.nextIntBetween(-reach, reach);
+    const y = cy + world.rng.nextIntBetween(-reach, reach);
+    if (!inBounds(map, x, y)) continue;
+    const tile = tileAt(map, x, y);
+    if (world.owner[tile] !== bot.id || !isLand(map, tile) || world.wallAt[tile]! >= 0) continue;
+    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile, "sam"))
+      continue;
+    const levels = coveredLevels(world, air, tile, 1, mine);
+    const depth = depthOf(world, bot, x, y);
+    if (levels > bestLevels || (levels === bestLevels && levels > 0 && depth > bestDepth)) {
+      best = tile;
+      bestLevels = levels;
+      bestDepth = depth;
+    }
+  }
+  return best;
 }
 
 /** The tile in the middle of the bot's border (roughly the middle of its land), or -1. */
