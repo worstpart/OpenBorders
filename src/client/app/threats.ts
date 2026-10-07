@@ -2,7 +2,7 @@
  * The incoming-threat warning (GAME_DESIGN.md §3.20, milestone 2.9): everything on its way
  * to hit the local player — today boats sailing for their coast; in Phase 2B also enemy
  * flights and missiles (add a kind and a source below; the chips, the map markers, the
- * edge arrows and the alarm sound all work from this one list).
+ * edge arrows and the boat horn all work from this one list).
  */
 import type { BoatSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
@@ -52,9 +52,4 @@ export function incomingThreats(ctx: ThreatContext): Threat[] {
     });
   }
   return threats.sort((a, b) => a.secondsLeft - b.secondsLeft || a.key.localeCompare(b.key));
-}
-
-/** Keys in `next` that weren't in `seen` (new threats: one alarm each). */
-export function newKeys(seen: ReadonlySet<string>, next: readonly { key: string }[]): string[] {
-  return next.filter((t) => !seen.has(t.key)).map((t) => t.key);
 }

@@ -154,7 +154,7 @@ describe("alliance toasts", () => {
       ],
       1,
       name,
-      (id) => id === 4,
+      () => false, // every betrayal is news, even far away in a big lobby
     );
     expect(toasts.map((t) => t.tone)).toEqual(["danger", "danger", "info"]);
     expect(toasts[0]!.text).toContain("P2 betrayed you!");

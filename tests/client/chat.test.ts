@@ -1,7 +1,6 @@
 /** The HUD's emojis, pings, incoming-threat warning and alert sounds (GAME_DESIGN.md §3.20). */
 import { describe, expect, it } from "vitest";
 import {
-  cuesForEvents,
   CueThrottle,
   CUE_GAP_MS,
   DEFAULT_SOUND,
@@ -16,7 +15,8 @@ import {
   updateEmotes,
   visiblePings,
 } from "../../src/client/app/chat.ts";
-import { incomingThreats, newKeys } from "../../src/client/app/threats.ts";
+import { incomingThreats, type Threat } from "../../src/client/app/threats.ts";
+import { AlertPlanner, ATTACKER_QUIET_TICKS } from "../../src/client/app/alerts.ts";
 import { toastsForEvents } from "../../src/client/app/toasts.ts";
 import type { SimEvent } from "../../src/sim/events.ts";
 import type { BoatSnapshot, PingSnapshot } from "../../src/sim/frame.ts";
@@ -132,38 +132,70 @@ describe("the incoming-threat warning", () => {
       [],
     );
   });
-
-  it("new keys sound once", () => {
-    expect(newKeys(new Set(["boat:1"]), [{ key: "boat:1" }, { key: "boat:2" }])).toEqual([
-      "boat:2",
-    ]);
-  });
 });
 
 describe("alert sounds", () => {
-  it("are the attacks on us, alliance requests to us and friends' pings", () => {
+  const attack = (attacker: number, target: number, landingTile = -1): SimEvent => ({
+    type: "attackStarted",
+    attackId: attacker * 100 + target,
+    attacker,
+    target,
+    landingTile,
+  });
+  const threat = (id: number, from: number): Threat => ({
+    key: `boat:${id}`,
+    kind: "boat",
+    from,
+    troops: 100,
+    tile: 0,
+    secondsLeft: 10,
+  });
+
+  it("a land attack on us sounds once per attacker, then that attacker is quiet for 30 s", () => {
+    const alerts = new AlertPlanner();
+    expect(alerts.cues([attack(2, 1), attack(1, 2), attack(3, 4)], 1, 10, [], [])).toEqual([
+      "attacked",
+    ]);
+    expect(alerts.cues([attack(2, 1)], 1, 20, [], [])).toEqual([]);
+    expect(alerts.cues([attack(3, 1)], 1, 21, [], [])).toEqual(["attacked"]);
+    expect(alerts.cues([attack(2, 1)], 1, 10 + ATTACKER_QUIET_TICKS, [], [])).toEqual(["attacked"]);
+  });
+
+  it("pings and emojis make no sound", () => {
+    const alerts = new AlertPlanner();
     const events: SimEvent[] = [
-      { type: "attackStarted", attackId: 1, attacker: 2, target: 1, landingTile: -1 },
-      { type: "attackStarted", attackId: 2, attacker: 1, target: 2, landingTile: -1 },
-      { type: "allianceRequested", from: 3, to: 1 },
-      { type: "pinged", pingId: 1, from: 1, tile: 0, kind: "watch", target: 0 },
+      { type: "pinged", pingId: 1, from: 2, tile: 0, kind: "watch", target: 0 },
+      { type: "emoted", from: 2, to: 1, emoji: 0 },
     ];
-    expect(cuesForEvents(events, 1, new Set([2]))).toEqual(["underAttack", "alliance"]);
-    expect(
-      cuesForEvents(
-        [{ type: "pinged", pingId: 2, from: 2, tile: 0, kind: "watch", target: 0 }],
-        1,
-        new Set([2]),
-      ),
-    ).toEqual(["ping"]);
+    expect(alerts.cues(events, 1, 1, [], [])).toEqual([]);
+  });
+
+  it("each new boat heading for us sounds the horn; its landing doesn't sound again", () => {
+    const alerts = new AlertPlanner();
+    expect(alerts.cues([], 1, 1, [threat(1, 2)], [])).toEqual(["boat"]);
+    expect(alerts.cues([], 1, 2, [threat(1, 2)], [])).toEqual([]);
+    expect(alerts.cues([], 1, 3, [threat(1, 2), threat(2, 2)], [])).toEqual(["boat"]);
+    expect(alerts.cues([attack(2, 1, 7)], 1, 4, [], [])).toEqual([]);
+  });
+
+  it("alliance requests to us and new renewal prompts ring; every betrayal sounds", () => {
+    const alerts = new AlertPlanner();
+    const asked: SimEvent = { type: "allianceRequested", from: 3, to: 1 };
+    const other: SimEvent = { type: "allianceRequested", from: 3, to: 4 };
+    expect(alerts.cues([asked, other], 1, 1, [], [])).toEqual(["alliance"]);
+    expect(alerts.cues([other], 1, 2, [], [])).toEqual([]);
+    expect(alerts.cues([], 1, 3, [], [5])).toEqual(["alliance"]);
+    expect(alerts.cues([], 1, 4, [], [5])).toEqual([]);
+    const broken: SimEvent = { type: "allianceBroken", breaker: 3, victim: 4 };
+    expect(alerts.cues([broken], 1, 5, [], [5])).toEqual(["betrayal"]);
   });
 
   it("don't repeat the same alert within its gap", () => {
     const throttle = new CueThrottle();
-    expect(throttle.allow("underAttack", 0)).toBe(true);
-    expect(throttle.allow("underAttack", CUE_GAP_MS.underAttack - 1)).toBe(false);
-    expect(throttle.allow("ping", 1)).toBe(true);
-    expect(throttle.allow("underAttack", CUE_GAP_MS.underAttack)).toBe(true);
+    expect(throttle.allow("attacked", 0)).toBe(true);
+    expect(throttle.allow("attacked", CUE_GAP_MS.attacked - 1)).toBe(false);
+    expect(throttle.allow("betrayal", 1)).toBe(true);
+    expect(throttle.allow("attacked", CUE_GAP_MS.attacked)).toBe(true);
   });
 
   it("settings are remembered, and bad or missing storage falls back to the defaults", () => {

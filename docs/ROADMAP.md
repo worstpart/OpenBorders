@@ -165,14 +165,16 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.9 ✅ | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B). *As built (D-027, GAME_DESIGN §3.20): the user chose alert sounds only (synthesized) and emojis + map pings; nations act on friends' pings, ping human friends and answer emojis* | Alerts, pings and emojis verified in the browser; bots-only games unchanged |
 | 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
 
-**Milestone 2.9 result (2026-10-06).** Alert sounds (under attack · incoming threat ·
-alliance asks/renewals · friends' pings), synthesized in the browser, with volume and mute
-in the pause menu; the reusable incoming-threat list (chips, red landing rings with the
-countdown, edge arrows, alarm); map pings (right-click or **G**) seen by allies and
+**Milestone 2.9 result (2026-10-06).** Alert sounds, synthesized in the browser, with
+volume and mute in the pause menu — retuned after the user played it (attack and ping
+sounds were constant and spammable): a subtle "attacked" sound once per attacker (quiet 30
+s), the boat horn per enemy boat, alliance asks/renewals, and any betrayal (sound + toast
+for everyone); pings and emojis silent. The reusable incoming-threat list (chips, red
+landing rings with the countdown, edge arrows, horn); map pings (right-click or **G**) seen by allies and
 teammates; 14 emojis to a player or everyone. Nations act on friends' pings (×3 target
 preference, aimed at the ping), ping their human friends and answer emojis. Headless:
 bots-only games are **identical to 2.8** (18 of 18 games, 8 nations + 30 tribes, same
-winners and lengths) — everything new needs a person. 344 tests (+28). Browser: every
+winners and lengths) — everything new needs a person. 346 tests (+30). Browser: every
 alert fired (checked through the dev hook's sound log), pings via menu and G, emoji
 replies from a nation, edge arrow for an off-screen boat, no console errors.
 

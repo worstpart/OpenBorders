@@ -503,7 +503,9 @@ quick-chat phrases). OpenFront's sounds are all-rights-reserved (D-001), so ours
 own.
 
 **Decision.**
-- Four alert sounds (under attack, incoming threat, alliance asks/renewals, friends' pings),
+- Four alert sounds (as retuned the same day after the user played it: a subtle "attacked"
+  sound once per attacker, the boat horn per enemy boat, alliance asks/renewals, any
+  betrayal — pings and emojis are silent because they can be spammed),
   **synthesized with Web Audio** at play time — no audio files to make, store or license.
   Volume + mute in the pause menu, remembered per browser.
 - **Emojis** (14, by index — never text) to a player or to everyone, shown over the sender's
@@ -514,7 +516,7 @@ own.
   and answer people's emojis. Only interactions with people trigger this, so bots-only
   games are unchanged.
 - The **incoming-threat warning** is one client list (`threats.ts`) that chips, map markers,
-  edge arrows and the alarm all read; 2B adds flights and missiles to it.
+  edge arrows and the boat horn all read; 2B adds flights and missiles to it.
 
 **Consequences.** No game-length change (headless games identical to 2.8). Fuller sound
 design (effects, music) stays in Phase 4 polish. 344 tests.

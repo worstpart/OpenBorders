@@ -44,7 +44,7 @@ export function addToast(list: readonly Toast[], toast: Toast, max = MAX_TOASTS)
 
 /**
  * The toasts a tick's events produce for the local player. `isNews` decides whether
- * another player's elimination (not by us), or a betrayal between others, is worth a toast.
+ * another player's elimination (not by us) is worth a toast; every betrayal is.
  * Alliance requests to us become diplomacy cards, not toasts. `teamOf` gives a player's
  * team in team games (GAME_DESIGN.md §3.15): a teammate's elimination is always news.
  * `friends` (allies and teammates) are the players whose pings we see (§3.20).
@@ -215,7 +215,8 @@ export function toastsForEvents(
             tone: "danger",
             player: event.breaker,
           });
-        } else if (isNews(event.breaker) || isNews(event.victim)) {
+        } else {
+          // Every betrayal is news, in any lobby (the user's request after playing 2.9).
           toasts.push({
             text: `${nameOf(event.breaker)} betrayed ${nameOf(event.victim)}`,
             tone: "info",

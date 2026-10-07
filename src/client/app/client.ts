@@ -12,7 +12,8 @@ import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { coastTiles, landmassesOf, seasOf } from "../../sim/systems/naval.ts";
 import { BoatLayer } from "../render/boats.ts";
 import { MarkerLayer, type EmoteBubble, type PingMarker } from "../render/markers.ts";
-import { cuesForEvents, SoundBoard, type SettingsStore } from "../audio/sound.ts";
+import { SoundBoard, type SettingsStore } from "../audio/sound.ts";
+import { AlertPlanner } from "./alerts.ts";
 import {
   cooldownLeft,
   emoteAge,
@@ -22,7 +23,7 @@ import {
   visiblePings,
   type Emote,
 } from "./chat.ts";
-import { incomingThreats, newKeys, THREAT_ICON } from "./threats.ts";
+import { incomingThreats, THREAT_ICON } from "./threats.ts";
 import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
@@ -117,9 +118,8 @@ export class GameClient {
   private readonly markerLayer: MarkerLayer;
   /** Alert sounds (GAME_DESIGN.md §3.20). */
   private readonly sound = new SoundBoard(browserStorage());
-  /** Threats and renewal prompts already announced (each new one sounds once). */
-  private seenThreats = new Set<string>();
-  private seenRenewals = new Set<string>();
+  /** Decides which alerts a tick sounds (attackers once each, new boats, requests, betrayals). */
+  private alerts = new AlertPlanner();
   /** Emojis showing over players' land. */
   private emotes: Emote[] = [];
   /** The hovered tile the boat preview was computed for, and when (route searches cost). */
@@ -269,8 +269,7 @@ export class GameClient {
     this.placements.clear();
     this.latestFrame = initial.frame;
     this.emotes = [];
-    this.seenThreats = new Set();
-    this.seenRenewals = new Set();
+    this.alerts = new AlertPlanner();
     ui.reset();
     ui.colors = colors;
     ui.localPlayerId = initial.localPlayerId;
@@ -384,7 +383,7 @@ export class GameClient {
   /** Plays an alert once (the pause menu's "test" button). */
   testSound(): void {
     this.sound.unlock();
-    this.sound.play("threat");
+    this.sound.play("attacked");
   }
 
   /** G: a ping under the cursor — attack (enemy land), defend (ours/friends'), watch (else). */
@@ -597,8 +596,7 @@ export class GameClient {
     this.lootEffects = [];
     this.tradeEffects = [];
     this.emotes = [];
-    this.seenThreats = new Set();
-    this.seenRenewals = new Set();
+    this.alerts = new AlertPlanner();
     this.baseFlags = new Uint8Array(1);
     ui.reset();
     ui.screen = "start";
@@ -740,18 +738,18 @@ export class GameClient {
     }
     for (const toast of toasts) this.toast(toast);
     this.emotes = updateEmotes(this.emotes, frame.events, me, frame.tick, DEFAULT_RULES);
-    const cues = cuesForEvents(frame.events, me, ui.friends);
     this.publish(frame);
-    // The incoming-threat warning and renewal prompts sound once each, when they appear.
-    const threats = incomingThreats(ui.threatContext);
-    if (newKeys(this.seenThreats, threats).length > 0) cues.push("threat");
-    this.seenThreats = new Set(threats.map((t) => t.key));
-    const renewals: { key: string }[] = [];
+    const renewals: number[] = [];
     for (const card of diplomacyCards(ui.diplomacyContext)) {
-      if (card.kind === "renew") renewals.push({ key: `renew:${card.ally}` });
+      if (card.kind === "renew") renewals.push(card.ally);
     }
-    if (newKeys(this.seenRenewals, renewals).length > 0) cues.push("alliance");
-    this.seenRenewals = new Set(renewals.map((r) => r.key));
+    const cues = this.alerts.cues(
+      frame.events,
+      me,
+      frame.tick,
+      incomingThreats(ui.threatContext),
+      renewals,
+    );
     for (const cue of cues) this.sound.play(cue);
   }
 

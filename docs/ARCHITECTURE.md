@@ -604,7 +604,8 @@ involved, so bots-only games keep their random sequence). Client: `app/threats.t
 incoming-threat list — boats now; 2B adds kinds), `app/chat.ts` (visible pings, emoji
 bubbles, the G key's ping kind), `render/markers.ts` (ping rings, threat rings, edge
 arrows, emoji bubbles on the label canvas, drawn last), `audio/sound.ts`. `client.ts`
-plays cues from `cuesForEvents` plus new threat keys and new renewal cards. Dev hook:
+plays the cues `app/alerts.ts` (`AlertPlanner`: attackers once per 30 s, new boats, alliance
+asks and new renewal cards, any betrayal) picks each tick. Dev hook:
 `__openborder.sound()` returns the audio state and the cues played (the pane can't be heard).
 
 ---

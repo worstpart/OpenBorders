@@ -84,7 +84,9 @@
           />
         </div>
       </div>
-      <p class="note">Warnings only: under attack, incoming boat, alliance asks, allies' pings.</p>
+      <p class="note">
+        Warnings only: when you're attacked, enemy boats coming, alliance requests, betrayals.
+      </p>
 
       <h2>Controls</h2>
       <dl>

@@ -1,17 +1,18 @@
 /**
  * Alert sounds (GAME_DESIGN.md §3.20, milestone 2.9). The user chose "alerts only" for the
- * first sound pass: a few warnings, nothing else makes a sound. Every sound is synthesized
+ * first sound pass: a few warnings, nothing else makes a sound. When each plays is decided
+ * by app/alerts.ts. Every sound is synthesized
  * in the browser with the Web Audio API — no audio files, so nothing to license (OpenFront's
  * sounds are all-rights-reserved, D-001).
  *
  * Browsers only allow audio after the player has clicked or pressed a key, so the audio
  * context is created on the first such gesture. Volume and mute are remembered per browser.
  */
-import type { SimEvent } from "../../sim/events.ts";
-import type { PlayerId } from "../../sim/world.ts";
-
-/** The alerts: someone attacks you · something is heading for you · alliance asks · a friend's ping. */
-export type SoundCue = "underAttack" | "threat" | "alliance" | "ping";
+/**
+ * The alerts: a player starts attacking you (soft) · an enemy boat sails for your coast (the
+ * horn) · alliance asks · an alliance somewhere was broken.
+ */
+export type SoundCue = "attacked" | "boat" | "alliance" | "betrayal";
 
 export interface SoundSettings {
   /** 0–1. */
@@ -23,10 +24,10 @@ export const DEFAULT_SOUND: SoundSettings = { volume: 0.6, muted: false };
 
 /** The same alert at most this often (ms): a flurry of attacks is one warning, not ten. */
 export const CUE_GAP_MS: Readonly<Record<SoundCue, number>> = {
-  underAttack: 4_000,
-  threat: 3_000,
+  attacked: 6_000,
+  boat: 3_000,
   alliance: 1_500,
-  ping: 800,
+  betrayal: 2_000,
 };
 
 /** Lets each cue through at most once per CUE_GAP_MS. */
@@ -87,16 +88,15 @@ interface Note {
 
 /** The cues as notes. Short (≤ 0.6 s), distinct in pitch and rhythm, never shrill. */
 export const CUE_NOTES: Readonly<Record<SoundCue, readonly Note[]>> = {
-  // A low two-tone horn, falling: danger.
-  underAttack: [
+  // Two soft low tones, falling — subtle (the user: attack sounds must not nag).
+  attacked: [
+    { at: 0, freq: 392, length: 0.22, wave: "sine", gain: 0.3 },
+    { at: 0.16, freq: 294, length: 0.32, wave: "sine", gain: 0.3 },
+  ],
+  // A low two-tone horn, falling: a boat is coming for you (the user asked to keep it).
+  boat: [
     { at: 0, freq: 233, length: 0.2, wave: "sawtooth", gain: 0.55 },
     { at: 0.2, freq: 175, length: 0.32, wave: "sawtooth", gain: 0.55 },
-  ],
-  // Three quick rising pips, like a sonar contact: something is coming.
-  threat: [
-    { at: 0, freq: 620, length: 0.09, wave: "triangle", gain: 0.7 },
-    { at: 0.12, freq: 780, length: 0.09, wave: "triangle", gain: 0.7 },
-    { at: 0.24, freq: 980, length: 0.16, wave: "triangle", gain: 0.7 },
   ],
   // A soft two-note bell, rising: someone wants to talk.
   alliance: [
@@ -105,8 +105,12 @@ export const CUE_NOTES: Readonly<Record<SoundCue, readonly Note[]>> = {
     { at: 0.14, freq: 990, length: 0.5, wave: "sine", gain: 0.6 },
     { at: 0.14, freq: 1980, length: 0.25, wave: "sine", gain: 0.12 },
   ],
-  // One short upward blip: look here.
-  ping: [{ at: 0, freq: 880, to: 1320, length: 0.14, wave: "triangle", gain: 0.6 }],
+  // Three falling notes, slightly sour: someone broke an alliance.
+  betrayal: [
+    { at: 0, freq: 622, length: 0.16, wave: "triangle", gain: 0.5 },
+    { at: 0.15, freq: 523, length: 0.16, wave: "triangle", gain: 0.5 },
+    { at: 0.3, freq: 370, length: 0.4, wave: "triangle", gain: 0.55 },
+  ],
 };
 
 /** The alert player. Safe to call anywhere: without Web Audio it stays silent. */
@@ -207,19 +211,4 @@ export class SoundBoard {
     const level = this.current.muted ? 0 : 0.35 * this.current.volume * this.current.volume;
     this.master.gain.setValueAtTime(level, this.context.currentTime);
   }
-}
-
-/** The alerts a tick's events sound for the local player (threats and renewals come from the HUD's lists). */
-export function cuesForEvents(
-  events: readonly SimEvent[],
-  me: PlayerId,
-  friends: ReadonlySet<PlayerId>,
-): SoundCue[] {
-  const cues = new Set<SoundCue>();
-  for (const e of events) {
-    if (e.type === "attackStarted" && e.target === me) cues.add("underAttack");
-    else if (e.type === "allianceRequested" && e.to === me) cues.add("alliance");
-    else if (e.type === "pinged" && e.from !== me && friends.has(e.from)) cues.add("ping");
-  }
-  return [...cues];
 }

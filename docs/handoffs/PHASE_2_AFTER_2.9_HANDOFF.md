@@ -15,7 +15,7 @@
 | Next | ⬜ **2.10 Phase 2 playtest & balance** (ROADMAP row 2.10) — then the **Phase 2 handoff** |
 | Then | **Phase 2B air & strategic warfare (before multiplayer, bots first)** · Phase 3 multiplayer |
 | Parked | Real-world maps (D-026) — ask the user when to schedule |
-| Tests | 344 passing, type check clean, Prettier clean, `npm run build` OK |
+| Tests | 346 passing, type check clean, Prettier clean, `npm run build` OK |
 | Regression | Bots-only games are **identical to 2.8** (18/18 headless games compared seed by seed against a worktree of the 2.8 commit) |
 
 GitHub: `origin` = https://github.com/worstpart/OpenBorders.git (branch `main`). After every
@@ -33,6 +33,15 @@ handoff: commit, push, confirm `main` = `origin/main` to the user.
    (sent 💀, Grenholm answered 😂), pings from the menu and **G**, "no friends" toast, red
    threat ring + countdown + chip, edge arrow for an off-screen boat, mute/volume saved.
    Fixed what it showed: edge arrows now stay clear of the command bar and top chips.
+
+**After the handoff, same day:** the user hit a dead start screen (Huge → Islands) because
+I had stopped the dev server while they were in that tab → map generation now falls back to
+the main thread if its worker fails (`76e9a95`). Then the user found the attack and ping
+sounds constant and spammable → retuned (GAME_DESIGN §3.20): subtle "attacked" sound once
+per attacker (30 s quiet), **boat horn kept** at the user's request (once per enemy boat),
+alliance requests ring, **every betrayal sounds and toasts for everyone**; pings and emojis
+silent. Logic in `client/app/alerts.ts` (`AlertPlanner`). Lesson: **don't stop the dev
+server at the end of a turn** — the user keeps playing in that tab.
 
 ## 3. As built (details: GAME_DESIGN §3.20, ARCHITECTURE §6 "Alerts, pings & emojis")
 

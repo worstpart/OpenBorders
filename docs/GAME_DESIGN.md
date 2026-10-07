@@ -1053,16 +1053,20 @@ pings** for talking (no quick-chat phrases). There is still no free-text chat (m
 
 **Alert sounds.** Four short warnings, made live by the browser (Web Audio synthesis — no
 audio files, nothing to license; OpenFront's sounds are all-rights-reserved, D-001). Nothing
-else makes a sound.
+else makes a sound. *Retuned after the user played 2.9:* "the attacks and emoji noises are
+annoying because they are constant and can be spammed" → the loud attack horn and the ping
+blip are gone; attacks get a subtle sound, once per attacker; the horn stays for boats
+("keep boat horn"); every betrayal in the game sounds for everyone.
 
 | Alert | When | Sound |
 |---|---|---|
-| Under attack | someone starts an attack on you (by land, or a boat lands) | low two-tone horn, falling |
-| Incoming threat | a new boat starts sailing for your coast (2B: enemy flights, missiles) | three quick rising pips |
+| Attacked | a player starts a land attack on **you** — once per attacker; the same attacker is quiet for 30 s | two soft low tones |
+| Boat | a new enemy boat sets sail for your coast (once per boat; its landing makes no second sound). 2B: flights, missiles | low two-tone horn |
 | Alliance | someone asks you for an alliance, or one of yours enters its renewal window | soft two-note bell |
-| Ping | an ally or teammate drops a ping | one short blip |
+| Betrayal | **anyone** breaks an alliance (also a toast for everyone) | three falling notes |
 
-The same alert plays at most every 0.8–4 s (a flurry of attacks is one warning). Volume
+Pings and emojis make no sound (anyone could spam them). The same alert also plays at most
+every 1.5–6 s. Volume
 slider + mute in the pause menu (Esc), remembered by the browser; default 60%. Browsers
 start audio only after a click or key press — the Play click does it.
 
@@ -1070,13 +1074,13 @@ start audio only after a click or key press — the Play click does it.
 heading for your land — today boats, in 2B air assaults and missiles. From it: a red chip
 with the countdown ("⛵ Valdorra's boat lands in 42 s"), a pulsing red ring at the landing
 spot with the seconds left, an arrow at the screen edge pointing at it when it is off
-screen, and the "incoming" alarm once per new threat.
+screen, and the boat horn once per new boat.
 
 **Map pings.** Right-click menu → *Ping for your allies* (🎯 Attack here · 🛡️ Defend here ·
 ⚠️ Watch out), or **G** for a ping under the cursor (attack on enemy land, defend on yours or
 a friend's, watch out on open land or sea). Only your allies and teammates see them: a
 pulsing ring in the ping's colour with the sender's dot and icon, "Name: Attack here" for
-the first few seconds, an edge arrow when off screen, a toast, and the ping blip.
+the first few seconds, an edge arrow when off screen, and a toast (no sound).
 
 | Rule | Value | Why |
 |---|---|---|
