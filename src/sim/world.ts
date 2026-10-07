@@ -13,6 +13,7 @@ import {
   type Difficulty,
   type GameRules,
   type Personality,
+  type PingKind,
 } from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
 import { breakWallTile } from "./systems/walls.ts";
@@ -70,6 +71,9 @@ export interface Player {
   lastIncome: number;
   /** Gold earned from trade ships so far (GAME_DESIGN.md §3.19). */
   tradeGold: number;
+  /** Tick of this player's last emoji and last map ping, -1 = none yet (GAME_DESIGN.md §3.20). */
+  lastEmoteTick: number;
+  lastPingTick: number;
   /**
    * What this player's finished buildings add (GAME_DESIGN.md §3.17), recomputed every tick
    * from world.buildings — derived, so not hashed.
@@ -208,6 +212,21 @@ export interface TradeShip {
   readonly gold: number;
 }
 
+/**
+ * A map ping (GAME_DESIGN.md §3.20): a marker a player drops for their allies and teammates
+ * ("attack here", "defend here", "watch out"). Nations act on their friends' pings.
+ */
+export interface Ping {
+  readonly id: number;
+  readonly from: PlayerId;
+  readonly tile: number;
+  readonly kind: PingKind;
+  /** Who owned the tile when it was pinged (0 = neutral land or sea). */
+  readonly target: PlayerId;
+  readonly tick: number;
+  readonly expiresTick: number;
+}
+
 /** A bot's own state (GAME_DESIGN.md §3.11). */
 export interface BotBrain {
   readonly tier: BotTier;
@@ -258,6 +277,9 @@ export interface World {
   /** Trade ships at sea, by ascending id (GAME_DESIGN.md §3.19). */
   tradeShips: TradeShip[];
   nextTradeShipId: number;
+  /** Map pings still showing, oldest first (GAME_DESIGN.md §3.20). */
+  pings: Ping[];
+  nextPingId: number;
   /** Alliances by pairKey(a, b), in the order they were formed (GAME_DESIGN.md §3.14). */
   readonly alliances: Map<number, Alliance>;
   /** Open alliance requests, oldest first. */
@@ -407,6 +429,8 @@ export function createWorld(setup: GameSetup): World {
     gold: 0,
     lastIncome: 0,
     tradeGold: 0,
+    lastEmoteTick: -1,
+    lastPingTick: -1,
     bonus: { capacity: 0, growth: 0, income: 0, mobilizeDiscount: 0 },
     team: p.team ?? 0,
     encircleDirty: true,
@@ -430,6 +454,8 @@ export function createWorld(setup: GameSetup): World {
     nextBoatId: 1,
     tradeShips: [],
     nextTradeShipId: 1,
+    pings: [],
+    nextPingId: 1,
     alliances: new Map(),
     allianceRequests: [],
     lastRequestTick: new Map(),

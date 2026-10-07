@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps | 🟡 2.0–2.8 ✅ · next 2.9 |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | 🟡 2.0–2.9 ✅ · next 2.10 |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -162,8 +162,19 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.6 ✅ | **Border Defense I–III → drawn walls** (D-024; first built as posts fortifying the border, D-022, replaced at the user's request the same day) — originally: fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
 | 2.7 ✅ | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 ✅ | **Trade ships + more maps** *(was 2.7)* — **trade ships** between players' Ports (the user's request at the 2.8 start, D-026, GAME_DESIGN §3.19); bigger and more varied generated maps for big lobbies; `WorkerHost`; re-check building spacing and range values on bigger maps. *Real-world maps parked (D-026, see "Parked" below)* | Trade ships pay both sides and show on the map; big maps run within budget |
-| 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B) | |
+| 2.9 ✅ | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B). *As built (D-027, GAME_DESIGN §3.20): the user chose alert sounds only (synthesized) and emojis + map pings; nations act on friends' pings, ping human friends and answer emojis* | Alerts, pings and emojis verified in the browser; bots-only games unchanged |
 | 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
+
+**Milestone 2.9 result (2026-10-06).** Alert sounds (under attack · incoming threat ·
+alliance asks/renewals · friends' pings), synthesized in the browser, with volume and mute
+in the pause menu; the reusable incoming-threat list (chips, red landing rings with the
+countdown, edge arrows, alarm); map pings (right-click or **G**) seen by allies and
+teammates; 14 emojis to a player or everyone. Nations act on friends' pings (×3 target
+preference, aimed at the ping), ping their human friends and answer emojis. Headless:
+bots-only games are **identical to 2.8** (18 of 18 games, 8 nations + 30 tribes, same
+winners and lengths) — everything new needs a person. 344 tests (+28). Browser: every
+alert fired (checked through the dev hook's sound log), pings via menu and G, emoji
+replies from a nation, edge arrow for an off-screen boat, no console errors.
 
 **Parked — real-world maps (D-026).** The user said "no real maps yet" at the 2.8 start.
 For when they are scheduled: the user's picks are **World, Europe, North America, East

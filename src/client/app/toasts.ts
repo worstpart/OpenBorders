@@ -9,6 +9,7 @@ import type { PlayerId } from "../../sim/world.ts";
 import { levelRules } from "../../sim/systems/buildings.ts";
 import { formatTroops } from "../format.ts";
 import { effectLines } from "./buildings.ts";
+import { PING_INFO } from "./chat.ts";
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -46,6 +47,7 @@ export function addToast(list: readonly Toast[], toast: Toast, max = MAX_TOASTS)
  * another player's elimination (not by us), or a betrayal between others, is worth a toast.
  * Alliance requests to us become diplomacy cards, not toasts. `teamOf` gives a player's
  * team in team games (GAME_DESIGN.md §3.15): a teammate's elimination is always news.
+ * `friends` (allies and teammates) are the players whose pings we see (§3.20).
  */
 export function toastsForEvents(
   events: readonly SimEvent[],
@@ -53,6 +55,7 @@ export function toastsForEvents(
   nameOf: (id: PlayerId) => string,
   isNews: (eliminated: PlayerId) => boolean = () => true,
   teamOf: (id: PlayerId) => number = () => 0,
+  friends: ReadonlySet<PlayerId> = new Set(),
 ): ToastInput[] {
   const toasts: ToastInput[] = [];
   const myTeam = teamOf(me);
@@ -299,6 +302,28 @@ export function toastsForEvents(
             text: `You destroyed ${nameOf(event.playerId)}'s ${levelRules(DEFAULT_RULES, event.buildingType, 1).name}`,
             tone: "success",
             player: event.playerId,
+          });
+        }
+        break;
+      case "emoted":
+        // Emojis to us (GAME_DESIGN.md §3.20); the bubble also shows over their land.
+        if (event.to === me && event.from !== me) {
+          const emoji = DEFAULT_RULES.chat.emojis[event.emoji];
+          if (emoji)
+            toasts.push({
+              text: `${nameOf(event.from)}: ${emoji}`,
+              tone: "info",
+              player: event.from,
+            });
+        }
+        break;
+      case "pinged":
+        if (event.from !== me && friends.has(event.from)) {
+          const info = PING_INFO[event.kind];
+          toasts.push({
+            text: `${nameOf(event.from)}: ${info.icon} ${info.label}${event.target !== 0 && event.target !== me && event.target !== event.from ? ` — ${nameOf(event.target)}` : ""}`,
+            tone: event.kind === "watch" ? "danger" : "info",
+            player: event.from,
           });
         }
         break;

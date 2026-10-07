@@ -7,7 +7,16 @@ import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
 import { landNeighbors } from "./systems/attacks.ts";
 import type { BuildingType, Difficulty } from "./rules.ts";
-import type { Boat, BotTier, Phase, PlayerId, PlayerKind, TradeShip, World } from "./world.ts";
+import type {
+  Boat,
+  BotTier,
+  Phase,
+  Ping,
+  PlayerId,
+  PlayerKind,
+  TradeShip,
+  World,
+} from "./world.ts";
 
 export interface PlayerSnapshot {
   readonly id: PlayerId;
@@ -135,6 +144,9 @@ export interface WallSnapshot {
   readonly readyTick: number;
 }
 
+/** A map ping still showing (GAME_DESIGN.md §3.20). Clients show only their friends' pings. */
+export type PingSnapshot = Ping;
+
 export interface AllianceSnapshot {
   /** The lower player id and the higher one. */
   readonly a: PlayerId;
@@ -176,6 +188,8 @@ export interface TickFrame {
   readonly boats: readonly BoatSnapshot[];
   /** Every trade ship at sea, by ascending id. */
   readonly tradeShips: readonly TradeShipSnapshot[];
+  /** Map pings still showing, oldest first. */
+  readonly pings: readonly PingSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Team games: the team that won (0 = none). */
@@ -326,6 +340,7 @@ export function buildFrame(world: World): TickFrame {
     walls: snapshotWalls(world),
     boats: world.boats.map(snapshotBoat),
     tradeShips: world.tradeShips.map(snapshotTradeShip),
+    pings: world.pings.map((p) => ({ ...p })),
     events: world.events.slice(),
     winner: world.winner,
     winningTeam: world.winningTeam,

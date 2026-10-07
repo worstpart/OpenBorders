@@ -3,6 +3,7 @@
   import type { HintId } from "../app/hints.ts";
   import type { MapChoice } from "../app/setup.ts";
   import type { Placeable } from "../app/buildings.ts";
+  import type { PingKind } from "../../sim/rules.ts";
 
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
@@ -36,6 +37,13 @@
     /** Walls (GAME_DESIGN.md §3.17.6): drawn with the build bar's wall tool. */
     upgradeWall: (wallId: number) => void;
     cancelWall: (wallId: number) => void;
+    /** Emojis and map pings (GAME_DESIGN.md §3.20). `to` 0 = everyone. */
+    ping: (tile: number, kind: PingKind) => void;
+    emote: (to: number, emoji: number) => void;
+    /** Alert sounds: volume 0–1, mute, play one to hear the level. */
+    setVolume: (volume: number) => void;
+    setMuted: (muted: boolean) => void;
+    testSound: () => void;
     pause: () => void;
     closeMenu: () => void;
     setSpeed: (multiplier: number) => void;
@@ -109,6 +117,8 @@
     onRenewAlliance={actions.renewAlliance}
     onBreakAlliance={actions.breakAlliance}
     onDonate={actions.donate}
+    onPing={actions.ping}
+    onEmote={actions.emote}
     onClose={actions.closeMenu}
   />
   <BuildingCard
@@ -117,7 +127,14 @@
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />
-  <PauseMenu onResume={actions.closeMenu} onSpeed={actions.setSpeed} onLeave={actions.playAgain} />
+  <PauseMenu
+    onResume={actions.closeMenu}
+    onSpeed={actions.setSpeed}
+    onVolume={actions.setVolume}
+    onMute={actions.setMuted}
+    onTestSound={actions.testSound}
+    onLeave={actions.playAgain}
+  />
 {/if}
 
 <style>

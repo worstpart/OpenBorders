@@ -1046,6 +1046,67 @@ the average trip), so Ports get more attractive once others have built them.
 **Later (2B.6):** warships capture non-allied trade ships (the ship sails to the captor's
 nearest Port and its cargo is theirs); allies' and teammates' ships are immune.
 
+### 3.20 Alerts, pings & emojis (milestone 2.9 · as built · D-027)
+
+Asked at the 2.9 start, the user chose **"alerts only"** for sound and **emojis + map
+pings** for talking (no quick-chat phrases). There is still no free-text chat (moderation).
+
+**Alert sounds.** Four short warnings, made live by the browser (Web Audio synthesis — no
+audio files, nothing to license; OpenFront's sounds are all-rights-reserved, D-001). Nothing
+else makes a sound.
+
+| Alert | When | Sound |
+|---|---|---|
+| Under attack | someone starts an attack on you (by land, or a boat lands) | low two-tone horn, falling |
+| Incoming threat | a new boat starts sailing for your coast (2B: enemy flights, missiles) | three quick rising pips |
+| Alliance | someone asks you for an alliance, or one of yours enters its renewal window | soft two-note bell |
+| Ping | an ally or teammate drops a ping | one short blip |
+
+The same alert plays at most every 0.8–4 s (a flurry of attacks is one warning). Volume
+slider + mute in the pause menu (Esc), remembered by the browser; default 60%. Browsers
+start audio only after a click or key press — the Play click does it.
+
+**Incoming-threat warning (reusable).** One list (`client/app/threats.ts`) of everything
+heading for your land — today boats, in 2B air assaults and missiles. From it: a red chip
+with the countdown ("⛵ Valdorra's boat lands in 42 s"), a pulsing red ring at the landing
+spot with the seconds left, an arrow at the screen edge pointing at it when it is off
+screen, and the "incoming" alarm once per new threat.
+
+**Map pings.** Right-click menu → *Ping for your allies* (🎯 Attack here · 🛡️ Defend here ·
+⚠️ Watch out), or **G** for a ping under the cursor (attack on enemy land, defend on yours or
+a friend's, watch out on open land or sea). Only your allies and teammates see them: a
+pulsing ring in the ping's colour with the sender's dot and icon, "Name: Attack here" for
+the first few seconds, an edge arrow when off screen, a toast, and the ping blip.
+
+| Rule | Value | Why |
+|---|---|---|
+| Showing time | 10 s | long enough to read and act on |
+| Cooldown | 1 s per player; at most 3 pings each on the map (the oldest goes) | no spam |
+| No friends | the ping isn't sent; a toast says only allies and teammates see pings | otherwise a silent no-op |
+
+**Emojis.** Right-click menu → a grid of 14 (👋 🤝 👍 👎 😀 😂 😢 😠 😱 💀 🎯 🙏 ❤️ 🏳️), to the
+player whose land you clicked, or to everyone from your own or open land. The emoji pops
+up over the sender's name for 5 s (ringed in the sender's colour when it is for you); an
+emoji to you is also a toast. Cooldown 3 s. You see emojis to everyone, to you, and yours.
+
+**Nations.** They take part (tribes don't):
+- A friend's (ally's or teammate's) **"Attack here"** ping on a player makes that player
+  their preferred target (score ×3, half the usual minimum gain), aimed at the pinged spot.
+  A friend's **"Defend here"** makes whoever attacks that friend a preferred target (×3).
+  "Watch out" is for people; nations ignore it.
+- They **ping their human friends**: "Attack here" where they strike a nation or a person,
+  "Defend here" at the front when attacks on them hold over 60% of their home troops — at
+  most every 30 s.
+- They **answer people's emojis** (60% of the time): friendly back to friendly (👋, ❤️ for a
+  friend; 👎 when at war), 😂 or 😠 to rudeness (😂 if much stronger), 🤝 or 💀 to a white
+  flag. They also react to a person's betrayal (😠), a new alliance (🤝) or an attack (😠 or
+  😱).
+- All of this involves people only, so **bots-only games are exactly as before** (measured:
+  18 of 18 headless games identical to 2.8).
+
+**Multiplayer (Phase 3).** Emojis and pings are commands like any other, validated by the
+simulation; the server will forward a ping only to the pinger's friends.
+
 ---
 
 ## 4. Interaction model
@@ -1242,7 +1303,7 @@ transports prove fun.
 ### 6.4 Diplomacy (Phase 2)
 
 Alliances: **built in milestone 2.2, see §3.14.** Still to come: donate troops/gold
-with cooldowns (2.4), quick pings/emotes (2.8), mark a target for allies. No free-text
+with cooldowns (2.4), quick pings/emotes (**built in 2.9, §3.20**), mark a target for allies. No free-text
 chat in game.
 
 ### 6.5 AI (Phase 2+)

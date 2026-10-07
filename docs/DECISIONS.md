@@ -32,6 +32,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-024 | Border Defense = walls the player draws point by point (Clash of Clans style); hard tiles that hold attacks and break piece by piece | **Accepted** 2026-10-02 (user) |
 | D-025 | Islands on every generated map; boats from any coast land as beachhead attacks; Ports make them better | **Accepted** 2026-10-02 (user: islands always) |
 | D-026 | Trade ships between players' Ports (OpenFront-style) in 2.8; warships capture non-allied ones in 2B.6; real-world maps parked | **Accepted** 2026-10-06 (user) |
+| D-027 | Sound = alert sounds only, synthesized in the browser; talking = emojis + map pings (no quick chat, no free text) | **Accepted** 2026-10-06 (user) |
 
 ---
 
@@ -490,3 +491,34 @@ before the sea-route change; within the accepted 15–20 min target either way).
 **Alternatives.** Trade ships as their own milestone after 2.8 (rejected: the user wants
 Port income now and the code builds on 2.7's); keeping the flat harbour income on top
 (rejected: Ports would out-earn Factories).
+
+---
+
+## D-027 — Alerts only; emojis + map pings · Accepted 2026-10-06
+
+**Context.** Milestone 2.9 (sound & game events). Asked how much sound they want, the user
+chose **"Alerts only"** (over effects for everything, effects + music, or no sound yet).
+Asked how players talk, they chose **emojis + map pings** (over emojis only, or adding
+quick-chat phrases). OpenFront's sounds are all-rights-reserved (D-001), so ours must be our
+own.
+
+**Decision.**
+- Four alert sounds (under attack, incoming threat, alliance asks/renewals, friends' pings),
+  **synthesized with Web Audio** at play time — no audio files to make, store or license.
+  Volume + mute in the pause menu, remembered per browser.
+- **Emojis** (14, by index — never text) to a player or to everyone, shown over the sender's
+  land; **map pings** (attack / defend / watch) seen only by the pinger's allies and
+  teammates. Both are simulation commands (cooldowns validated there), so they need no
+  rework for multiplayer.
+- **Nations use them**: they act on friends' attack/defend pings, ping their human friends,
+  and answer people's emojis. Only interactions with people trigger this, so bots-only
+  games are unchanged.
+- The **incoming-threat warning** is one client list (`threats.ts`) that chips, map markers,
+  edge arrows and the alarm all read; 2B adds flights and missiles to it.
+
+**Consequences.** No game-length change (headless games identical to 2.8). Fuller sound
+design (effects, music) stays in Phase 4 polish. 344 tests.
+
+**Alternatives.** Effects for every action (rejected by the user for now); recorded sound
+files (licensing and size; synthesis is enough for alerts); pings visible to everyone
+(gives enemies the plan); quick-chat phrases (more UI, and bots would need to answer them).

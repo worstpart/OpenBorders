@@ -66,6 +66,7 @@ import { distanceSq } from "../geometry.ts";
 import { wallLevel } from "../systems/walls.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
+import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
   getPlayer,
@@ -84,6 +85,8 @@ import {
 /** Tick system (step 7): bots that are due think and queue commands for the next tick. */
 export function thinkBots(world: World): void {
   const ai = world.rules.ai;
+  // Emojis in answer to people (GAME_DESIGN.md §3.20): reacts to this tick's events.
+  nationChatter(world);
   for (const bot of world.players) {
     const brain = bot.brain;
     if (!brain || !bot.alive || bot.tiles === 0) continue;
@@ -108,7 +111,7 @@ export function thinkBots(world: World): void {
     for (const command of talk) world.pendingCommands.push({ playerId: bot.id, command });
     const decided = tribe
       ? decideTribe(world, bot, around)
-      : decide(world, bot, style, skill, brain.idleThinks, around);
+      : decide(world, bot, style, skill, brain.idleThinks, around, pingIntel(world, bot));
     const actions: readonly Command[] =
       decided === null ? [] : Array.isArray(decided) ? decided : [decided as Command];
     const gold =
@@ -118,6 +121,9 @@ export function thinkBots(world: World): void {
     for (const command of [...gold.before, ...actions, ...gold.after]) {
       world.pendingCommands.push({ playerId: bot.id, command });
     }
+    // Pings for human friends (§3.20): where it strikes, or where it needs help.
+    const ping = tribe ? null : nationPing(world, bot, actions, incomingTroops(world, bot.id));
+    if (ping) world.pendingCommands.push({ playerId: bot.id, command: ping });
     // Buildings (GAME_DESIGN.md §3.17): only with gold left over — not right before an
     // attack (the war chest goes to Mobilize) nor when giving gold away.
     const strikes = actions.some(
@@ -260,6 +266,7 @@ function decide(
   skill: DifficultyRules,
   idleThinks: number,
   around: Surroundings,
+  intel: PingIntel | null,
 ): Command | readonly Command[] | null {
   const ai = world.rules.ai;
   const mine = world.attacks.filter((a) => a.attacker === bot.id && a.retreatTick < 0);
@@ -330,8 +337,8 @@ function decide(
     return skill.reinforces ? reinforce(world, bot, style, wars[0]!, around) : null;
   }
   const choice =
-    chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars) ??
-    chooseSeaTarget(world, bot, style, around, idleThinks, wars);
+    chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars, intel) ??
+    chooseSeaTarget(world, bot, style, around, idleThinks, wars, intel);
   if (!choice) return null;
   const attack = choice.bySea
     ? boatCommand(choice.target.id, choice.focus, choice.share)
@@ -416,6 +423,7 @@ function chooseSeaTarget(
   around: Surroundings,
   idleThinks: number,
   wars: Attack[],
+  intel: PingIntel | null,
 ): Choice | null {
   const ai = world.rules.ai;
   if (around.seas.length === 0 || boatsAtSea(world, bot).striking > 0) return null;
@@ -445,10 +453,12 @@ function chooseSeaTarget(
       ),
       army / tileCostOfAll(world, bot, target),
     );
-    if (gain < minGain) continue;
+    const pinged = pingPreference(world, intel, id);
+    if (gain < minGain * (pinged > 1 ? world.rules.chat.pingMinGainFactor : 1)) continue;
     const score =
       gain *
       target.tiles *
+      pinged * // a friend asked for it (§3.20)
       ai.seaPreference *
       (isTribe(target) ? ai.tribePreference : 1) *
       (isTraitor(world, target) ? ai.traitorPreference : 1);
@@ -670,6 +680,7 @@ function chooseTarget(
   incoming: Attack[],
   idleThinks: number,
   wars: Attack[],
+  intel: PingIntel | null,
 ): Choice | null {
   const ai = world.rules.ai;
   const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
@@ -696,7 +707,8 @@ function chooseTarget(
       expectedLandShare(world.rules, army, defenders, lossFactor(world, bot, target, walls)),
       army / tileCostOfAll(world, bot, target, walls),
     );
-    if (gain < minGain) continue;
+    const pinged = pingPreference(world, intel, id);
+    if (gain < minGain * (pinged > 1 ? world.rules.chat.pingMinGainFactor : 1)) continue;
     if (alliance && gain < skill.betrayMinGain) continue;
     const busy = world.attacks.some((a) => a.attacker === id && a.retreatTick < 0);
     const grudge = (bot.brain?.grudges.get(id) ?? -1) > world.tick;
@@ -712,20 +724,25 @@ function chooseTarget(
       (isTribe(target) ? ai.tribePreference : 1) * // eat the tribes first
       (isTraitor(world, target) ? ai.traitorPreference : 1) * // punish betrayal
       (team?.attackingUs.has(id) ? ai.teamAssistPreference : 1) * // help teammates
-      (team?.ourTargets.has(id) ? ai.teamFocusPreference : 1); // gang up
+      (team?.ourTargets.has(id) ? ai.teamFocusPreference : 1) * // gang up
+      pinged; // a friend asked for it (§3.20)
     if (score > bestScore) {
       bestScore = score;
       // Aim at the heart of their land (their start) if they still hold it: it splits
       // them and cuts off pockets for encirclement.
       const heart = target.spawnTile >= 0 && world.owner[target.spawnTile] === id;
+      // A friend's "attack here" ping (still their land) says where.
+      const pingTile = intel?.attack.get(id) ?? -1;
       best = {
         target,
         focus:
-          walls > 1
-            ? aroundWalls(world, around, id, frontTile)
-            : heart
-              ? target.spawnTile
-              : frontTile,
+          pingTile >= 0
+            ? pingTile
+            : walls > 1
+              ? aroundWalls(world, around, id, frontTile)
+              : heart
+                ? target.spawnTile
+                : frontTile,
         share: army / bot.homeTroops,
         betray: alliance !== undefined,
         bySea: false,

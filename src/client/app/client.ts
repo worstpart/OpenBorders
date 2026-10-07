@@ -11,6 +11,19 @@ import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { coastTiles, landmassesOf, seasOf } from "../../sim/systems/naval.ts";
 import { BoatLayer } from "../render/boats.ts";
+import { MarkerLayer, type EmoteBubble, type PingMarker } from "../render/markers.ts";
+import { cuesForEvents, SoundBoard, type SettingsStore } from "../audio/sound.ts";
+import {
+  cooldownLeft,
+  emoteAge,
+  PING_INFO,
+  quickPingKind,
+  updateEmotes,
+  visiblePings,
+  type Emote,
+} from "./chat.ts";
+import { incomingThreats, newKeys, THREAT_ICON } from "./threats.ts";
+import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
@@ -101,6 +114,14 @@ export class GameClient {
   private readonly labels: LabelLayer;
   private readonly buildingLayer: BuildingLayer;
   private readonly boatLayer: BoatLayer;
+  private readonly markerLayer: MarkerLayer;
+  /** Alert sounds (GAME_DESIGN.md §3.20). */
+  private readonly sound = new SoundBoard(browserStorage());
+  /** Threats and renewal prompts already announced (each new one sounds once). */
+  private seenThreats = new Set<string>();
+  private seenRenewals = new Set<string>();
+  /** Emojis showing over players' land. */
+  private emotes: Emote[] = [];
   /** The hovered tile the boat preview was computed for, and when (route searches cost). */
   private boatPreviewTile = -1;
   private boatPreviewAt = 0;
@@ -139,6 +160,12 @@ export class GameClient {
     this.labels = new LabelLayer(elements.labelCanvas, elements.fontFamily);
     this.buildingLayer = new BuildingLayer(elements.labelCanvas);
     this.boatLayer = new BoatLayer(elements.labelCanvas, elements.fontFamily);
+    this.markerLayer = new MarkerLayer(elements.labelCanvas, elements.fontFamily);
+    ui.sound = this.sound.settings;
+    // Browsers start audio only after a gesture: every click or key press may unlock it.
+    const unlock = () => this.sound.unlock();
+    window.addEventListener("pointerdown", unlock, { capture: true });
+    window.addEventListener("keydown", unlock, { capture: true });
     this.perf = new PerfOverlay(elements.overlayParent);
     this.controls = new Controls(elements.mapCanvas, {
       primaryClick: (at) => this.primaryClick(at),
@@ -241,6 +268,9 @@ export class GameClient {
     this.renderer.setLocalOwner(initial.localPlayerId);
     this.placements.clear();
     this.latestFrame = initial.frame;
+    this.emotes = [];
+    this.seenThreats = new Set();
+    this.seenRenewals = new Set();
     ui.reset();
     ui.colors = colors;
     ui.localPlayerId = initial.localPlayerId;
@@ -264,6 +294,8 @@ export class GameClient {
       send: (command: Command) => this.host?.send(command),
       /** Sends a command as another player (e.g. a bot asking us for an alliance). */
       sendAs: (playerId: number, command: Command) => this.host?.sendAs(playerId, command),
+      /** Alert sounds: audio state and the cues played so far. */
+      sound: () => ({ state: this.sound.state, played: [...this.sound.played] }),
       /** Where a tile's centre is on screen (CSS pixels), for scripted clicks. */
       screenOf: (tile: number) => {
         const width = this.map?.width ?? 1;
@@ -313,6 +345,57 @@ export class GameClient {
     const dismissed = new Set(ui.dismissedRenewals);
     dismissed.add(ally);
     ui.dismissedRenewals = dismissed;
+  }
+
+  /**
+   * Drops a map ping for our allies and teammates (GAME_DESIGN.md §3.20). Without friends
+   * nobody would see it, so we say so instead.
+   */
+  ping(tile: number, kind: PingKind): void {
+    if (ui.screen !== "game" || !ui.me?.alive || ui.phase === "ended") return;
+    if (ui.friends.size === 0) {
+      this.toast({
+        text: "Pings are seen by your allies and teammates — you have none yet",
+        tone: "info",
+      });
+      return;
+    }
+    const wait = cooldownLeft(ui.myLastPingTick, DEFAULT_RULES.chat.pingCooldownTicks, ui.tick);
+    if (wait > 0) return;
+    this.host?.send({ type: "ping", tile, kind });
+  }
+
+  /** Sends an emoji to a player, or to everyone (`to` 0). */
+  emote(to: number, emoji: number): void {
+    if (ui.screen !== "game" || !ui.me?.alive || ui.phase === "ended") return;
+    this.host?.send({ type: "emote", to, emoji });
+  }
+
+  setVolume(volume: number): void {
+    this.sound.setVolume(volume);
+    ui.sound = this.sound.settings;
+  }
+
+  setMuted(muted: boolean): void {
+    this.sound.setMuted(muted);
+    ui.sound = this.sound.settings;
+  }
+
+  /** Plays an alert once (the pause menu's "test" button). */
+  testSound(): void {
+    this.sound.unlock();
+    this.sound.play("threat");
+  }
+
+  /** G: a ping under the cursor — attack (enemy land), defend (ours/friends'), watch (else). */
+  private quickPing(): void {
+    const map = this.map;
+    const point = this.hoverPoint;
+    const cell = point && map ? this.camera.tileAt(point) : null;
+    if (!map || !cell || ui.menu || ui.phase !== "playing") return;
+    const tile = tileAt(map, cell.x, cell.y);
+    const kind = quickPingKind(this.owner[tile]!, isLand(map, tile), ui.localPlayerId, ui.friends);
+    this.ping(tile, kind);
   }
 
   /** Turns gold into troops: one click buys MOBILIZE_PERCENT of the capacity. */
@@ -513,6 +596,9 @@ export class GameClient {
     this.placements.clear();
     this.lootEffects = [];
     this.tradeEffects = [];
+    this.emotes = [];
+    this.seenThreats = new Set();
+    this.seenRenewals = new Set();
     this.baseFlags = new Uint8Array(1);
     ui.reset();
     ui.screen = "start";
@@ -572,6 +658,10 @@ export class GameClient {
         this.hints.complete("build");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
         ui.eliminatedBy = event.by;
+      } else if (event.type === "emoted" && event.from === me) {
+        ui.myLastEmoteTick = frame.tick;
+      } else if (event.type === "pinged" && event.from === me) {
+        ui.myLastPingTick = frame.tick;
       }
       if (event.type === "tradeDocked" && event.gold > 0) {
         // Our ship docked somewhere (the gold shows over the Port it left from), or someone's
@@ -619,6 +709,7 @@ export class GameClient {
       (id) => ui.playerName(id),
       (id) => !bigLobby || bordered.includes(id),
       (id) => frame.players[id - 1]?.team ?? 0,
+      ui.friends,
     );
     // Team games: a team whose last member just went out (ui.players is still last tick's).
     for (const team of teamsKnockedOut(ui.players, frame.players)) {
@@ -648,7 +739,20 @@ export class GameClient {
       });
     }
     for (const toast of toasts) this.toast(toast);
+    this.emotes = updateEmotes(this.emotes, frame.events, me, frame.tick, DEFAULT_RULES);
+    const cues = cuesForEvents(frame.events, me, ui.friends);
     this.publish(frame);
+    // The incoming-threat warning and renewal prompts sound once each, when they appear.
+    const threats = incomingThreats(ui.threatContext);
+    if (newKeys(this.seenThreats, threats).length > 0) cues.push("threat");
+    this.seenThreats = new Set(threats.map((t) => t.key));
+    const renewals: { key: string }[] = [];
+    for (const card of diplomacyCards(ui.diplomacyContext)) {
+      if (card.kind === "renew") renewals.push({ key: `renew:${card.ally}` });
+    }
+    if (newKeys(this.seenRenewals, renewals).length > 0) cues.push("alliance");
+    this.seenRenewals = new Set(renewals.map((r) => r.key));
+    for (const cue of cues) this.sound.play(cue);
   }
 
   private toast(input: ToastInput): void {
@@ -670,6 +774,7 @@ export class GameClient {
     ui.walls = frame.walls;
     ui.boats = frame.boats;
     ui.tradeShips = frame.tradeShips;
+    ui.pings = visiblePings(frame.pings, ui.localPlayerId, ui.friends);
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
@@ -893,6 +998,9 @@ export class GameClient {
       case "mobilize":
         this.mobilize();
         break;
+      case "ping":
+        this.quickPing();
+        break;
       case "diplomacyYes":
       case "diplomacyNo":
         if (ui.screen === "game") this.answerTopCard(action === "diplomacyYes");
@@ -968,9 +1076,60 @@ export class GameClient {
     );
 
     this.labels.drawLoot(view, this.lootFloaters(startedAt));
+    if (this.map && ui.screen === "game") {
+      // Countdowns run smoothly between ticks.
+      const sinceTick = (tick - ui.tick) * (DEFAULT_RULES.tickMs / 1000);
+      this.markerLayer.draw(view, {
+        width: this.map.width,
+        pings: this.pingMarkers(tick),
+        threats: incomingThreats(ui.threatContext).map((t) => ({
+          tile: t.tile,
+          icon: THREAT_ICON[t.kind],
+          secondsLeft: Math.max(0, t.secondsLeft - sinceTick),
+        })),
+        emotes: this.emoteBubbles(tick),
+        time: time / 1000,
+      });
+    }
 
     this.perf.recordFrame(performance.now() - startedAt, this.renderer.lastUploadMs);
     requestAnimationFrame((next) => this.animationFrame(next));
+  }
+
+  /** Friends' pings as the map shows them (GAME_DESIGN.md §3.20). */
+  private pingMarkers(tick: number): PingMarker[] {
+    const life = DEFAULT_RULES.chat.pingTicks;
+    return ui.pings.map((p) => {
+      const info = PING_INFO[p.kind];
+      const who = p.from === ui.localPlayerId ? "You" : ui.playerName(p.from);
+      return {
+        tile: p.tile,
+        icon: info.icon,
+        label: `${who}: ${info.label}`,
+        color: info.color,
+        senderColor: ui.colorOf(p.from),
+        age: Math.min(1, Math.max(0, (tick - p.tick) / life)),
+      };
+    });
+  }
+
+  /** Emojis over their senders' land (at the name label). */
+  private emoteBubbles(tick: number): EmoteBubble[] {
+    const bubbles: EmoteBubble[] = [];
+    for (const e of this.emotes) {
+      const place = this.placements.get(e.from);
+      if (!place) continue;
+      bubbles.push({
+        x: place.x,
+        y: place.y,
+        radius: place.radius,
+        emoji: e.emoji,
+        age: emoteAge(e, tick, DEFAULT_RULES),
+        toMe: e.to === ui.localPlayerId,
+        senderColor: ui.colorOf(e.from),
+      });
+    }
+    return bubbles;
   }
 
   /** While drawing a wall: the points so far plus the tile under the mouse. */
@@ -1090,5 +1249,14 @@ export class GameClient {
     this.placements = computeLabelPlacements(this.owner, this.map.width, this.map.height);
     this.labelsDirty = false;
     this.lastLabelRefresh = now;
+  }
+}
+
+/** localStorage, if this browser allows it (private windows may not). */
+function browserStorage(): SettingsStore | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
   }
 }

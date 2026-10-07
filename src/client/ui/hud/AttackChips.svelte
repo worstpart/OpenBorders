@@ -3,6 +3,7 @@
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { troopsToSend } from "../../app/attackPercent.ts";
   import { boatChips } from "../../app/boats.ts";
+  import { incomingThreats, THREAT_ICON } from "../../app/threats.ts";
   import { lossFactorOf, ODDS_LABEL, outcomeText, THREAT_LABEL } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
@@ -46,17 +47,20 @@
   const counterTroops = $derived(me ? troopsToSend(me.homeTroops, ui.attackPercent) : 0);
   // Boats (GAME_DESIGN.md §3.18): ours at sea, and the ones sailing for our coast.
   const boats = $derived(ui.tick >= 0 ? boatChips(ui.boatContext) : []);
+  // The incoming-threat warning (GAME_DESIGN.md §3.20): boats now, flights in 2B.
+  const threats = $derived(ui.tick >= 0 ? incomingThreats(ui.threatContext) : []);
 </script>
 
-{#if outgoing.length > 0 || incoming.length > 0 || boats.length > 0}
+{#if outgoing.length > 0 || incoming.length > 0 || boats.length > 0 || threats.length > 0}
   <ul class="chips" aria-label="Active attacks">
-    {#each boats.filter((b) => !b.mine) as boat (boat.id)}
-      <li class="chip incoming" style:--player-color={ui.colorOf(boat.other)}>
+    {#each threats as threat (threat.key)}
+      <li class="chip incoming" style:--player-color={ui.colorOf(threat.from)}>
         <span class="dot" aria-hidden="true"></span>
         <span class="label"
-          >⛵ {ui.playerName(boat.other)}'s boat lands in {Math.ceil(boat.secondsLeft)} s</span
+          >{THREAT_ICON[threat.kind]}
+          {ui.playerName(threat.from)}'s boat lands in {Math.ceil(threat.secondsLeft)} s</span
         >
-        <span class="troops">{formatTroops(boat.troops)}</span>
+        <span class="troops">{formatTroops(threat.troops)}</span>
       </li>
     {/each}
     {#each incoming as attack (attack.id)}

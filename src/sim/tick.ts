@@ -28,6 +28,7 @@ import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { advanceTrade } from "./systems/trade.ts";
+import { applyEmote, applyPing, updateChat } from "./systems/chat.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -74,6 +75,8 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
   applyCommands(world, turn.commands);
 
   if (world.phase === "spawn") updateSpawnPhase(world);
+  // 1a. Map pings run out (GAME_DESIGN.md §3.20).
+  updateChat(world);
   probe?.("commands");
 
   if (world.phase === "playing") {
@@ -177,6 +180,10 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyUpgradeWall(world, player, command.wallId);
     case "cancelWall":
       return applyCancelWall(world, player, command.wallId);
+    case "emote":
+      return applyEmote(world, player, command.to, command.emoji);
+    case "ping":
+      return applyPing(world, player, command.tile, command.kind);
     default:
       return `unknown command ${(command as { type: unknown }).type}`;
   }

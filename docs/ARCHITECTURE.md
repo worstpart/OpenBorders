@@ -220,6 +220,7 @@ interface World {
 ```
 1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat,
                      alliance request/reply/renew/break, mobilize, donate)
+1a. updateChat       map pings run out (milestone 2.9)
 1b. updateDiplomacy  alliance requests and alliances run out (milestone 2.2)
 2. resolveCollisions opposing attacks cancel; same-target attacks merge
 3. advanceAttacks    each attack conquers tiles until its per-tick budget is spent
@@ -575,7 +576,7 @@ state hash. Snapshots must include buildings, walls and flights; `wallAt` and
 | `camera/` | Position/zoom state, smooth zoom-to-cursor, bounds, focus animations | — |
 | `render/` | WebGL2 passes, shaders, textures, labels, perf overlay | Read simulation internals |
 | `ui/` | Svelte components (HUD, menus), design tokens, stores updated from frames | Mutate game state (only dispatch actions) |
-| `audio/` | Phase 4 | — |
+| `audio/` | Alert sounds (2.9): `sound.ts` synthesizes four alerts with Web Audio, throttles them, keeps volume/mute in localStorage | Decide *when* to alert (the client does, from events and the threat list) |
 
 UI stores update at most once per tick; anything faster (smooth bars, counters) is done
 with CSS/Svelte tweens, not more updates. No per-frame DOM writes.
@@ -593,6 +594,18 @@ come from `sim/battle.ts`, the same estimate the bots use. Tick frames carry eac
 player's land neighbours (`PlayerSnapshot.neighbors`, null for bots to save work) so the
 HUD knows what a click can reach. While a menu is open, `input/controls.ts` passes only
 Escape to the game, so Tab / Enter / Space / arrows work on the menu's buttons.
+
+**Alerts, pings & emojis (milestone 2.9, GAME_DESIGN §3.20).** Sim: `systems/chat.ts`
+(`emote` / `ping` commands, `world.pings`, `Player.lastEmoteTick/lastPingTick` — all
+hashed; events `emoted`, `pinged`; frames carry `pings`), `ai/chat.ts` (`pingIntel` feeds
+`chooseTarget`/`chooseSeaTarget`; `nationPing` after a nation's actions; `nationChatter`
+at the start of `thinkBots`, reacting to the tick's events — RNG drawn only when a person is
+involved, so bots-only games keep their random sequence). Client: `app/threats.ts` (the
+incoming-threat list — boats now; 2B adds kinds), `app/chat.ts` (visible pings, emoji
+bubbles, the G key's ping kind), `render/markers.ts` (ping rings, threat rings, edge
+arrows, emoji bubbles on the label canvas, drawn last), `audio/sound.ts`. `client.ts`
+plays cues from `cuesForEvents` plus new threat keys and new renewal cards. Dev hook:
+`__openborder.sound()` returns the audio state and the cues played (the pane can't be heard).
 
 ---
 

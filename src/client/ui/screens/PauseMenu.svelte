@@ -4,10 +4,13 @@
   interface Props {
     onResume: () => void;
     onSpeed: (multiplier: number) => void;
+    onVolume: (volume: number) => void;
+    onMute: (muted: boolean) => void;
+    onTestSound: () => void;
     onLeave: () => void;
   }
 
-  let { onResume, onSpeed, onLeave }: Props = $props();
+  let { onResume, onSpeed, onVolume, onMute, onTestSound, onLeave }: Props = $props();
 
   const CONTROLS: readonly [string, string][] = [
     ["Click land", "Expand / attack (again: add troops)"],
@@ -18,6 +21,7 @@
     ["WASD · arrows", "Pan"],
     ["Space", "Center on your land"],
     ["K", "Ally with the player under the cursor"],
+    ["G", "Ping under the cursor for your allies"],
     ["Y / N", "Answer the top alliance card"],
     ["Esc", "Pause / close menus"],
   ];
@@ -57,6 +61,30 @@
           {/each}
         </div>
       </div>
+
+      <div class="row">
+        <span class="label" id="sound-label">Alert sounds</span>
+        <div class="sound">
+          <button
+            type="button"
+            class="mute"
+            aria-pressed={ui.sound.muted}
+            title={ui.sound.muted ? "Turn alert sounds on" : "Mute alert sounds"}
+            onclick={() => onMute(!ui.sound.muted)}>{ui.sound.muted ? "🔇" : "🔊"}</button
+          >
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            aria-labelledby="sound-label"
+            value={ui.sound.muted ? 0 : Math.round(ui.sound.volume * 100)}
+            oninput={(e) => onVolume(Number(e.currentTarget.value) / 100)}
+            onchange={onTestSound}
+          />
+        </div>
+      </div>
+      <p class="note">Warnings only: under attack, incoming boat, alliance asks, allies' pings.</p>
 
       <h2>Controls</h2>
       <dl>
@@ -183,6 +211,30 @@
   .speeds button.active {
     background: var(--accent);
     color: #fff;
+  }
+
+  .sound {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .mute {
+    width: 32px;
+    height: 28px;
+    border: none;
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .sound input {
+    width: 120px;
+    accent-color: var(--accent);
+  }
+
+  .note {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
   }
 
   dl {

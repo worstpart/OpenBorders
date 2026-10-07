@@ -12,7 +12,10 @@ import type {
   BuildingSnapshot,
   WallSnapshot,
   PlayerSnapshot,
+  PingSnapshot,
 } from "../../sim/frame.ts";
+import { DEFAULT_SOUND, type SoundSettings } from "../audio/sound.ts";
+import type { ThreatContext } from "./threats.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import type { BoatContext, BoatPreview } from "./boats.ts";
 import type { BuildContext, Placeable } from "./buildings.ts";
@@ -103,6 +106,13 @@ class UiState {
   boats = $state.raw<readonly BoatSnapshot[]>([]);
   /** Trade ships at sea (GAME_DESIGN.md §3.19). */
   tradeShips = $state.raw<readonly TradeShipSnapshot[]>([]);
+  /** Map pings the local player sees: theirs and their friends' (GAME_DESIGN.md §3.20). */
+  pings = $state.raw<readonly PingSnapshot[]>([]);
+  /** Tick of the local player's last emoji and ping (-1 = none), for the menu's cooldowns. */
+  myLastEmoteTick = $state(-1);
+  myLastPingTick = $state(-1);
+  /** Alert sound settings (kept across games, remembered by the browser). */
+  sound = $state.raw<SoundSettings>(DEFAULT_SOUND);
   /** The crossing a click on the hovered land would start (null: the click isn't a boat). */
   boatPreview = $state.raw<BoatPreview | null>(null);
   /** The building picked up from the build bar, following the mouse until placed. */
@@ -156,6 +166,9 @@ class UiState {
     this.walls = [];
     this.boats = [];
     this.tradeShips = [];
+    this.pings = [];
+    this.myLastEmoteTick = -1;
+    this.myLastPingTick = -1;
     this.boatPreview = null;
     this.placing = null;
     this.wallPoints = [];
@@ -239,6 +252,17 @@ class UiState {
       me: this.me,
       tick: this.tick,
       playing: this.phase === "playing",
+    };
+  }
+
+  /** What the incoming-threat warning needs (GAME_DESIGN.md §3.20). */
+  get threatContext(): ThreatContext {
+    return {
+      rules: DEFAULT_RULES,
+      owner: this.owner,
+      boats: this.boats,
+      me: this.me?.alive ? this.localPlayerId : 0,
+      tick: this.tick,
     };
   }
 

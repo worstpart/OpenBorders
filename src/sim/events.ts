@@ -3,7 +3,7 @@
  * toasts and effects. Events describe outcomes; they never drive the simulation.
  */
 import type { Command } from "./commands.ts";
-import type { BuildingType } from "./rules.ts";
+import type { BuildingType, PingKind } from "./rules.ts";
 import type { DonationResource, Phase, PlayerId } from "./world.ts";
 
 export type SimEvent =
@@ -236,6 +236,24 @@ export type SimEvent =
       /** The destination Port's tile. */
       readonly tile: number;
       readonly gold: number;
+    }
+  | {
+      /** An emoji (GAME_DESIGN.md §3.20): to one player, or to everyone (`to` 0). */
+      readonly type: "emoted";
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+      /** Index into rules.chat.emojis. */
+      readonly emoji: number;
+    }
+  | {
+      /** A map ping for `from`'s allies and teammates. */
+      readonly type: "pinged";
+      readonly pingId: number;
+      readonly from: PlayerId;
+      readonly tile: number;
+      readonly kind: PingKind;
+      /** Who owned the tile (0 = neutral land or sea). */
+      readonly target: PlayerId;
     }
   | {
       readonly type: "commandRejected";

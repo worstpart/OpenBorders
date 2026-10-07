@@ -8,6 +8,8 @@
   import { teamName } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
+  import { cooldownLeft, PING_INFO } from "../../app/chat.ts";
+  import { PING_KINDS, type PingKind } from "../../../sim/rules.ts";
 
   interface Props {
     onAttack: (tile: number, percent: number) => void;
@@ -17,6 +19,8 @@
     onRenewAlliance: (ally: number) => void;
     onBreakAlliance: (ally: number) => void;
     onDonate: (to: number, resource: "troops" | "gold", percent: number) => void;
+    onPing: (tile: number, kind: PingKind) => void;
+    onEmote: (to: number, emoji: number) => void;
     onClose: () => void;
   }
 
@@ -28,6 +32,8 @@
     onRenewAlliance,
     onBreakAlliance,
     onDonate,
+    onPing,
+    onEmote,
     onClose,
   }: Props = $props();
   const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
@@ -81,6 +87,16 @@
     owner && !isMe && DEFAULT_RULES.economy.enabled && ui.friends.has(owner.id)
       ? donationOptions(ui.donationContext, owner, ui.attackPercent)
       : [],
+  );
+  /** Pings (GAME_DESIGN.md §3.20) are seen by allies and teammates only. */
+  const canPing = $derived(ui.friends.size > 0);
+  const pingWait = $derived(
+    cooldownLeft(ui.myLastPingTick, DEFAULT_RULES.chat.pingCooldownTicks, ui.tick),
+  );
+  /** Emojis go to the player whose land this is; from your own or open land, to everyone. */
+  const emoteTo = $derived(menu && !isMe && owner?.alive ? menu.owner : 0);
+  const emoteWait = $derived(
+    cooldownLeft(ui.myLastEmoteTick, DEFAULT_RULES.chat.emoteCooldownTicks, ui.tick),
   );
   /** Breaking needs a second click (it makes you a traitor). */
   let confirmBreak = $state(false);
@@ -297,6 +313,45 @@
       {/each}
     {/if}
 
+    <div class="divider"></div>
+    {#if canPing}
+      <div class="group-label">Ping for your allies <span class="key">G</span></div>
+      <div class="pings">
+        {#each PING_KINDS as kind (kind)}
+          <button
+            type="button"
+            role="menuitem"
+            class="ping"
+            style:--ping-color={PING_INFO[kind].color}
+            disabled={pingWait > 0}
+            title="{PING_INFO[kind]
+              .label}: a marker your allies and teammates see for {DEFAULT_RULES.chat.pingTicks /
+              10} s"
+            onclick={() => act(() => onPing(menu.tile, kind))}
+          >
+            <span aria-hidden="true">{PING_INFO[kind].icon}</span>
+            {PING_INFO[kind].label.split(" ")[0]}
+          </button>
+        {/each}
+      </div>
+    {/if}
+    <div class="group-label">
+      {emoteTo === 0 ? "Emoji to everyone" : `Emoji to ${ui.playerName(emoteTo)}`}
+      {#if emoteWait > 0}<span class="muted">· {Math.ceil(emoteWait / 10)} s</span>{/if}
+    </div>
+    <div class="emojis">
+      {#each DEFAULT_RULES.chat.emojis as emoji, index (index)}
+        <button
+          type="button"
+          role="menuitem"
+          class="emoji"
+          disabled={emoteWait > 0}
+          aria-label="Send {emoji}"
+          onclick={() => act(() => onEmote(emoteTo, index))}>{emoji}</button
+        >
+      {/each}
+    </div>
+
     {#if myAttacks.length > 0}
       <div class="divider"></div>
       <button type="button" role="menuitem" onclick={() => act(() => onRetreatFrom(menu.owner))}>
@@ -460,6 +515,48 @@
   button.danger {
     color: var(--color-danger);
     font-weight: 600;
+  }
+
+  .key {
+    margin-left: var(--space-1);
+    padding: 0 5px;
+    border: 1px solid var(--surface-hairline);
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  .pings {
+    display: flex;
+    gap: var(--space-1);
+    padding: 0 var(--space-1) var(--space-1);
+  }
+
+  button.ping {
+    flex: 1;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 4px;
+    background: rgb(255 255 255 / 0.05);
+    color: var(--ping-color);
+    font-weight: 600;
+  }
+
+  .emojis {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    padding: 0 var(--space-1) var(--space-1);
+  }
+
+  button.emoji {
+    justify-content: center;
+    height: 30px;
+    padding: 0;
+    font-size: 18px;
+  }
+
+  button.emoji:disabled {
+    opacity: 0.4;
   }
 
   .divider {

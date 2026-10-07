@@ -49,7 +49,9 @@ export function hashWorld(world: World): number {
       .addInt(p.betrayals)
       .addInt(p.team)
       .addNumber(p.gold)
-      .addNumber(p.tradeGold);
+      .addNumber(p.tradeGold)
+      .addInt(p.lastEmoteTick)
+      .addInt(p.lastPingTick);
   }
   for (const p of world.players) {
     if (p.brain) {
@@ -116,6 +118,16 @@ export function hashWorld(world: World): number {
       .addNumber(s.tilesPerTick)
       .addInt(s.arriveTick)
       .addInt(s.gold);
+  }
+  h.addInt(world.nextPingId).addInt(world.pings.length);
+  for (const p of world.pings) {
+    h.addInt(p.id)
+      .addInt(p.from)
+      .addInt(p.tile)
+      .addString(p.kind)
+      .addInt(p.target)
+      .addInt(p.tick)
+      .addInt(p.expiresTick);
   }
   h.addInt(world.nextBuildingId).addInt(world.buildings.length);
   for (const b of world.buildings) {

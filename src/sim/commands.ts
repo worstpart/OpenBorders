@@ -4,7 +4,7 @@
  * simulation validates each one when it executes; invalid commands are rejected and
  * reported as events (they are normal in multiplayer, e.g. a stale click).
  */
-import type { BuildingType } from "./rules.ts";
+import type { BuildingType, PingKind } from "./rules.ts";
 import type { DonationResource, PlayerId } from "./world.ts";
 
 export type Command =
@@ -75,7 +75,14 @@ export type Command =
   /** Upgrade one of your walls (all of it that still stands) to its next level. */
   | { readonly type: "upgradeWall"; readonly wallId: number }
   /** Stop a wall's construction or upgrade; part of the price comes back. */
-  | { readonly type: "cancelWall"; readonly wallId: number };
+  | { readonly type: "cancelWall"; readonly wallId: number }
+  /**
+   * Send an emoji (GAME_DESIGN.md §3.20) to a player, or to everyone (`to` 0). `emoji` is an
+   * index into rules.chat.emojis — never free text.
+   */
+  | { readonly type: "emote"; readonly to: PlayerId; readonly emoji: number }
+  /** Drop a map ping on `tile` for your allies and teammates. */
+  | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

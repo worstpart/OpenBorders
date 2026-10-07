@@ -364,6 +364,43 @@ export interface TradeRules {
   readonly maxShips: number;
 }
 
+/** The kinds of map ping (GAME_DESIGN.md §3.20): "attack here", "defend here", "watch out". */
+export type PingKind = "attack" | "defend" | "watch";
+export const PING_KINDS: readonly PingKind[] = ["attack", "defend", "watch"];
+
+/**
+ * Emojis and map pings (GAME_DESIGN.md §3.20, milestone 2.9): the only way to talk in game —
+ * no free text (moderation). Both are commands, so they work the same in multiplayer.
+ */
+export interface ChatRules {
+  /** false: the emote and ping commands are rejected. */
+  readonly enabled: boolean;
+  /** The emojis a player can send, by index (commands carry the index, never text). */
+  readonly emojis: readonly string[];
+  /** Ticks between two emojis from the same player. */
+  readonly emoteCooldownTicks: number;
+  /** Ticks an emoji shows over the sender's land. */
+  readonly emoteShowTicks: number;
+  /** Ticks between two pings from the same player. */
+  readonly pingCooldownTicks: number;
+  /** Ticks a ping stays on the map (and in nations' minds). */
+  readonly pingTicks: number;
+  /** A player's pings on the map at once, at most (the oldest goes). */
+  readonly maxPingsPerPlayer: number;
+  /** Nations: target-score multiplier for a player a friend pinged "attack" on. */
+  readonly pingAttackPreference: number;
+  /** Nations: target-score multiplier for a player attacking a friend who pinged "defend". */
+  readonly pingDefendPreference: number;
+  /** Nations: the smallest land gain they accept against a pinged target, as a share of usual. */
+  readonly pingMinGainFactor: number;
+  /** Nations: ticks between their own pings to human friends. */
+  readonly nationPingCooldownTicks: number;
+  /** Nations ask human friends for help when attacks on them hold this × their home troops. */
+  readonly nationHelpThreshold: number;
+  /** Nations: chance (0–1) of answering an emoji or reacting to a human's move with one. */
+  readonly nationEmoteChance: number;
+}
+
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
 export interface BuildAiRules {
   /**
@@ -604,6 +641,7 @@ export interface GameRules {
   readonly walls: WallRules;
   readonly naval: NavalRules;
   readonly trade: TradeRules;
+  readonly chat: ChatRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -1046,6 +1084,23 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     tilesPerTick: 1,
     maxShips: 200,
   },
+  // Emojis and pings (§3.20, the user's choice at the 2.9 start: emojis + map pings, no quick
+  // chat). Cooldowns like OpenFront's order of magnitude; a ping lasts long enough to act on.
+  chat: {
+    enabled: true,
+    emojis: ["👋", "🤝", "👍", "👎", "😀", "😂", "😢", "😠", "😱", "💀", "🎯", "🙏", "❤️", "🏳️"],
+    emoteCooldownTicks: 30,
+    emoteShowTicks: 50,
+    pingCooldownTicks: 10,
+    pingTicks: 100,
+    maxPingsPerPlayer: 3,
+    pingAttackPreference: 3,
+    pingDefendPreference: 3,
+    pingMinGainFactor: 0.5,
+    nationPingCooldownTicks: 300,
+    nationHelpThreshold: 0.6,
+    nationEmoteChance: 0.6,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -1066,6 +1121,7 @@ export function makeRules(overrides: {
   walls?: Partial<WallRules>;
   naval?: Partial<NavalRules>;
   trade?: Partial<TradeRules>;
+  chat?: Partial<ChatRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -1085,6 +1141,7 @@ export function makeRules(overrides: {
     walls: { ...DEFAULT_RULES.walls, ...overrides.walls },
     naval: { ...DEFAULT_RULES.naval, ...overrides.naval },
     trade: { ...DEFAULT_RULES.trade, ...overrides.trade },
+    chat: { ...DEFAULT_RULES.chat, ...overrides.chat },
   });
 }
 
