@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | 🟡 2.0–2.9 ✅ · next 2.10 |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -144,7 +144,7 @@ machine being busy (the same games alone: ≤ 24 ms).
 
 ---
 
-## Phase 2 — Gameplay depth 🟡
+## Phase 2 — Gameplay depth ✅
 
 Each item gets a design note in `GAME_DESIGN.md` before implementation. Order set with
 the user after the Phase 1 playtest (D-016): **scale, AI tiers, alliances and teams
@@ -163,7 +163,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.7 ✅ | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 ✅ | **Trade ships + more maps** *(was 2.7)* — **trade ships** between players' Ports (the user's request at the 2.8 start, D-026, GAME_DESIGN §3.19); bigger and more varied generated maps for big lobbies; `WorkerHost`; re-check building spacing and range values on bigger maps. *Real-world maps parked (D-026, see "Parked" below)* | Trade ships pay both sides and show on the map; big maps run within budget |
 | 2.9 ✅ | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B). *As built (D-027, GAME_DESIGN §3.20): the user chose alert sounds only (synthesized) and emojis + map pings; nations act on friends' pings, ping human friends and answer emojis* | Alerts, pings and emojis verified in the browser; bots-only games unchanged |
-| 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
+| 2.10 ✅ | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
 
 **Milestone 2.9 result (2026-10-06).** Alert sounds, synthesized in the browser, with
 volume and mute in the pause menu — retuned after the user played it (attack and ping
@@ -177,6 +177,26 @@ bots-only games are **identical to 2.8** (18 of 18 games, 8 nations + 30 tribes,
 winners and lengths) — everything new needs a person. 346 tests (+30). Browser: every
 alert fired (checked through the dev hook's sound log), pings via menu and G, emoji
 replies from a nation, edge arrow for an off-screen boat, no console errors.
+
+**Milestone 2.10 result (2026-10-06) — Phase 2 complete (tag `phase-2`).** The user played
+Phase 2 as a whole (buildings, walls, boats, trade, alerts): *"I really like the way it's
+playing and feels. Everything is looking great."* — approved with **no balance changes**.
+Baseline for Phase 2B (same code as 2.9; headless, hard nations):
+
+| Headless games | Median (longest) | Wins | First L3 building (median, games with one) | Walls / trade gold per game | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 8 nations, Continent (60) | **8.9 min** (24.5) | exp 21 · turtle 20 · opp 14 · agg 5 | 7.6 min (32/60) | 30 / 2.0M | 1.3 / 12.5 ms* |
+| 8 nations, Islands (40) | **20.5 min** (35.9) | turtle 13 · exp 10 · opp 9 · agg 8 | 8.8 min (40/40) | 47 / 7.9M | 0.7 / 7.3 ms |
+| 8 nations, Two lands (40) | **12.9 min** (24.0) | agg 14 · opp 10 · exp 9 · turtle 7 | 7.0 min (30/40) | 27 / 4.8M | 0.9 / 11.0 ms |
+| 10 nations + 100 tribes, Continent (30) | **11.8 min** (18.3) | turtle 16 · exp 7 · opp 5 · agg 2 | 6.8 min (29/30) | 37 / 2.4M | 1.5 / 8.5 ms |
+| 8 nations in 2 teams, Islands (30) | **6.2 min** (15.5) | team 1: 13 · team 2: 17 | — (1/30) | 19 / 1.1M | 0.7 / 5.0 ms |
+
+\* the machine was busy (a dev server starting, other chats' servers). No errors, no
+timeouts, every game has a winner. **Carried into Phase 2B (balance pass 2B.6):**
+aggressors win few Continent games (5/60; 2/30 in tribe lobbies); Islands free-for-alls
+sit at the top of the accepted 15–20 min; team games end fast (combined land reaches the
+goal in ~6 min) — so L3 buildings rarely appear there. Air units will change all three;
+measure again with them rather than tune now.
 
 **Parked — real-world maps (D-026).** The user said "no real maps yet" at the 2.8 start.
 For when they are scheduled: the user's picks are **World, Europe, North America, East

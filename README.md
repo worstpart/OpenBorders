@@ -12,13 +12,15 @@ presentation. Not affiliated with OpenFront.
 ## Status
 
 **Phase 1 — Playable prototype: complete** (git tag `phase-1`): spawn, expand, fight bots,
-encircle, win or lose, with a full HUD. **Phase 2 — in progress:** big lobbies (up to 125
-opponents, Normal or Large map) ✅; Tribes & Nations (weak filler tribes, nations with
-Easy/Medium/Hard) ✅; alliances (timed, renewable, traitors) ✅; teams ✅; gold, Mobilize and
-gifts ✅; buildings — Housing, Factory, Port, levels I–III ✅; walls drawn point by point ✅;
-islands, boats and beachhead landings ✅; next more maps (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
+encircle, win or lose, with a full HUD. **Phase 2 — Gameplay depth: complete** (git tag
+`phase-2`): big lobbies (up to 125 opponents); Tribes & Nations (weak filler tribes,
+nations with Easy/Medium/Hard); alliances (timed, renewable, traitors); teams; gold,
+Mobilize and gifts; buildings — Housing, Factory, Port, levels I–III; walls drawn point by
+point; islands, boats and beachhead landings; trade ships; map types Continent / Islands /
+Two lands in three sizes; alert sounds, map pings and emojis. **Next: Phase 2B — air &
+strategic warfare** (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
 A new working session starts by reading the latest handoff in `docs/handoffs/`
-(currently [PHASE_2_AFTER_2.7_HANDOFF.md](docs/handoffs/PHASE_2_AFTER_2.7_HANDOFF.md)).
+(currently [PHASE_2_HANDOFF.md](docs/handoffs/PHASE_2_HANDOFF.md)).
 
 ## Running it
 
