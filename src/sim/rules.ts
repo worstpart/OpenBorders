@@ -223,10 +223,10 @@ export interface EconomyRules {
 
 /**
  * Building types built so far (GAME_DESIGN.md §3.17). The air/strategic buildings (Phase
- * 2B) join this list in their own milestones. Border Defense is not a one-tile building
- * but a drawn wall (D-024): see WallRules.
+ * 2B) join this list in their own milestones (Airport: 2B.1). Border Defense is not a
+ * one-tile building but a drawn wall (D-024): see WallRules.
  */
-export const BUILDING_TYPES = ["housing", "factory", "port"] as const;
+export const BUILDING_TYPES = ["housing", "factory", "port", "airport"] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 
 /**
@@ -260,13 +260,23 @@ export interface BuildingLevelRules {
   readonly boatLoss?: number;
   /** Ports (GAME_DESIGN.md §3.19): it sends a trade ship this often (ticks). */
   readonly tradeEveryTicks?: number;
+  /**
+   * Airports (GAME_DESIGN.md §3.17.7): an airlift carries at most this share of the owner's
+   * troop capacity, to friends' land within `range` tiles…
+   */
+  readonly liftShare?: number;
+  /** …and the Airport's missions are ready again this many ticks after a launch. */
+  readonly missionCooldownTicks?: number;
 }
 
 export interface BuildingTypeRules {
-  /** Levels I, II, III (Port: I–II so far; III comes with Phase 2B). */
+  /** Levels I, II, III (Port: I–II so far; Airport: I so far — the rest in Phase 2B). */
   readonly levels: readonly BuildingLevelRules[];
-  /** Where it can stand: any land of yours, or a coast tile (next to the sea). */
-  readonly placement: "land" | "coast";
+  /**
+   * Where it can stand: any land of yours, a coast tile (next to the sea), or flat land
+   * (plains — an Airport's runway).
+   */
+  readonly placement: "land" | "coast" | "plains";
   /**
    * When its tile is captured: the taker adopts it at its level (user, 2.5 playtest), or it
    * is destroyed outright (e.g. Border Defense, 2.6: a wall doesn't change sides).
@@ -420,6 +430,10 @@ export interface FlightRules {
    */
   readonly testFlights: boolean;
   readonly testFlightPlanes: number;
+  /** false: no Airports and no air missions (games play as before Phase 2B, headless --no-flights). */
+  readonly enabled: boolean;
+  /** Transports per airlift (GAME_DESIGN.md §3.17.7): the load is split evenly over them. */
+  readonly airliftPlanes: number;
 }
 
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
@@ -463,6 +477,11 @@ export interface BuildAiRules {
   readonly wallLength: number;
   /** A Port's boat speed bonus (×1.5 → 0.5) is worth this share of capacity per unit. */
   readonly portWorth: number;
+  /**
+   * An Airport is worth this share of capacity to a nation with a friend it can help only
+   * by air (a teammate or human ally it doesn't border); nothing otherwise.
+   */
+  readonly airportWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -909,6 +928,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // Ports (§3.18) are worth less than Housing early: harbour income plus a little for
       // faster boats — nations build one once the cheap options got dearer.
       portWorth: 0.2,
+      // An Airport is insurance for a distant friend: worth less than the economy, so a
+      // nation builds one once its cheap Housing and Factories got dearer.
+      airportWorth: 0.25,
     },
   },
   tribe: {
@@ -1045,6 +1067,23 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
           },
         ],
       },
+      // Air (§3.17.7): airlifts to friends anywhere within 250 km — the only way to send
+      // troops to a friend you don't border (D-023). Levels II–III (airborne assault, air
+      // strikes) come in 2B.3–2B.4. On plains: a runway needs flat land.
+      airport: {
+        onCapture: "adopt",
+        placement: "plains",
+        levels: [
+          {
+            name: "Airport",
+            cost: 120_000,
+            buildTicks: 150,
+            range: 250,
+            liftShare: 0.1,
+            missionCooldownTicks: 300,
+          },
+        ],
+      },
     },
   },
   // Walls (§3.17.6, D-024). Hard tiles: an attack waits at each wall tile (3 / 6 / 10 s at
@@ -1132,6 +1171,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     missileTilesPerTick: 3,
     testFlights: false,
     testFlightPlanes: 4,
+    enabled: true,
+    airliftPlanes: 4,
   },
 });
 

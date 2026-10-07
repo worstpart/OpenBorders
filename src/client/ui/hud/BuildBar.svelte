@@ -8,6 +8,8 @@
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
   import BuildingIcon from "./BuildingIcon.svelte";
+  import { DEFAULT_RULES } from "../../../sim/rules.ts";
+  import { airliftTroops } from "../../../sim/systems/flights.ts";
 
   interface Props {
     onPick: (type: Placeable) => void;
@@ -17,6 +19,19 @@
 
   const items = $derived(ui.screen === "game" ? buildBarItems(ui.buildContext) : []);
   const placing = $derived(items.find((i) => i.type === ui.placing) ?? null);
+  // Choosing where an Airport airlifts to (GAME_DESIGN.md §3.17.7).
+  const airlift = $derived.by(() => {
+    const airport = ui.buildings.find((b) => b.id === ui.airliftFrom);
+    if (!airport || !ui.me) return null;
+    return {
+      troops: airliftTroops(
+        DEFAULT_RULES,
+        airport.level,
+        ui.me,
+        Math.round(ui.attackPercent * 100),
+      ),
+    };
+  });
   // Drawing a wall (GAME_DESIGN.md §3.17.6): the points so far, their length and price.
   const draft = $derived(
     ui.placing === "wall" && ui.wallPoints.length >= 2
@@ -38,6 +53,10 @@
           build
         {/if}
         <span class="muted">· Esc to cancel</span>
+      {:else if airlift}
+        Click an ally's or teammate's land within range to airlift {formatTroops(airlift.troops)}
+        troops
+        <span class="muted">· Esc or right-click to cancel</span>
       {:else if placing}
         Click your land to place the {placing.name}
         <span class="muted">· Esc or right-click to cancel</span>
@@ -57,7 +76,7 @@
           title="{item.name} — {item.role}{item.affordable ? '' : ' (not enough gold)'}"
           onclick={() => onPick(item.type)}
         >
-          <BuildingIcon type={item.type} size={item.type === "wall" ? 22 : 30} />
+          <BuildingIcon type={item.type} size={30} />
           <span class="text">
             <span class="name">{item.name}</span>
             <span class="price">{formatTroops(item.price)}{item.unit}</span>

@@ -37,6 +37,8 @@
     /** Walls (GAME_DESIGN.md §3.17.6): drawn with the build bar's wall tool. */
     upgradeWall: (wallId: number) => void;
     cancelWall: (wallId: number) => void;
+    /** Choose where an Airport of ours airlifts to (GAME_DESIGN.md §3.17.7). */
+    startAirlift: (buildingId: number) => void;
     /** Emojis and map pings (GAME_DESIGN.md §3.20). `to` 0 = everyone. */
     ping: (tile: number, kind: PingKind) => void;
     emote: (to: number, emoji: number) => void;
@@ -124,6 +126,7 @@
   <BuildingCard
     onUpgrade={(id, wall) => (wall ? actions.upgradeWall(id) : actions.upgrade(id))}
     onCancel={(id, wall) => (wall ? actions.cancelWall(id) : actions.cancelBuild(id))}
+    onAirlift={actions.startAirlift}
     onClose={actions.closeMenu}
   />
   <EndCard onPlayAgain={actions.playAgain} />

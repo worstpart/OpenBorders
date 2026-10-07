@@ -14,6 +14,11 @@
  *     game draws: buildings 96 px, vehicles 80 px on their longest side (2× the largest CSS
  *     size, for sharp sprites on high-DPI screens).
  *
+ * The user's second sheet (`sheets/sams_walls_silos_missiles.png`, 2B.1: SAM, wall, Missile
+ * Silo art I–III and seven missiles) has a transparent background: each sprite is cut out by
+ * its box on the sheet (only the largest piece of art in the box is kept — no neighbours,
+ * headings or loose captions), then cleaned the same way.
+ *
  * Run: `node tools/iconPack.mjs [packDir] [outDir] [--preview file.png]`. Deterministic: the
  * same pack gives the same files.
  */
@@ -39,6 +44,27 @@ const SPRITES = [
   ["vehicles/trade_ships", "tradeShip", 80],
 ];
 const ERAS = ["level_1_ww1", "level_2_ww2", "level_3_modern"];
+
+/** The second sheet: sprite name → its box on the sheet [x0, y0, x1, y1] and longest side. */
+const SHEET = "sheets/sams_walls_silos_missiles.png";
+const SHEET_SPRITES = [
+  ["sam-1", [300, 30, 620, 285], 96],
+  ["sam-2", [640, 15, 980, 285], 96],
+  ["sam-3", [995, 0, 1410, 285], 96],
+  ["wall-1", [310, 300, 665, 525], 96],
+  ["wall-2", [670, 295, 1075, 525], 96],
+  ["wall-3", [1085, 285, 1515, 525], 96],
+  ["silo-1", [300, 520, 660, 778], 96],
+  ["silo-2", [662, 520, 1068, 778], 96],
+  ["silo-3", [1080, 520, 1515, 778], 96],
+  ["missile-1", [70, 830, 250, 945], 80],
+  ["missile-2", [265, 825, 455, 945], 80],
+  ["missile-3", [470, 815, 672, 945], 80],
+  ["cruiseMissile", [680, 830, 900, 950], 80],
+  ["airToAirMissile", [905, 830, 1120, 950], 80],
+  ["airToGroundMissile", [1115, 825, 1320, 950], 80],
+  ["icbm", [1320, 800, 1515, 960], 80],
+];
 
 /** Sprites whose caption covered part of the hull. */
 const HULLS = new Set(["boat", "tradeShip"]);
@@ -70,16 +96,20 @@ function markingPaint(r, g, b) {
 
 // ---------------------------------------------------------------------------------------
 
+/** Caption fill colours: the first pack's, and the second sheet's. */
+const PACK_NAVY = [16, 32, 48];
+const SHEET_NAVY = [24, 33, 42];
+
 /** The caption box: the largest blob of its navy fill, as an inclusive rectangle. */
-function findCaption(img) {
+function findCaption(img, [nr, ng, nb]) {
   const { width: w, height: h, data } = img;
   const navy = (p) => {
     const i = p * 4;
     return (
       data[i + 3] > 200 &&
-      Math.abs(data[i] - 16) <= 7 &&
-      Math.abs(data[i + 1] - 32) <= 7 &&
-      Math.abs(data[i + 2] - 48) <= 9
+      Math.abs(data[i] - nr) <= 7 &&
+      Math.abs(data[i + 1] - ng) <= 7 &&
+      Math.abs(data[i + 2] - nb) <= 9
     );
   };
   const seen = new Uint8Array(w * h);
@@ -336,6 +366,51 @@ function dropSpecks(img) {
   return dropped;
 }
 
+/** The part of `img` inside [x0, y0, x1, y1] (inclusive). */
+function crop(img, [x0, y0, x1, y1]) {
+  const out = blank(x1 - x0 + 1, y1 - y0 + 1);
+  for (let y = y0; y <= y1; y++) {
+    const from = (y * img.width + x0) * 4;
+    out.data.set(img.data.subarray(from, from + out.width * 4), (y - y0) * out.width * 4);
+  }
+  return out;
+}
+
+/** Keeps only the largest connected piece of art (8-connected, alpha > 8). */
+function keepLargest(img) {
+  const { width: w, height: h, data } = img;
+  const label = new Int32Array(w * h).fill(-1);
+  const sizes = [];
+  for (let p = 0; p < w * h; p++) {
+    if (label[p] >= 0 || data[p * 4 + 3] <= 8) continue;
+    const id = sizes.length;
+    let size = 0;
+    const stack = [p];
+    label[p] = id;
+    while (stack.length) {
+      const q = stack.pop();
+      size++;
+      const x = q % w;
+      const y = (q / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const r = ny * w + nx;
+          if (label[r] < 0 && data[r * 4 + 3] > 8) {
+            label[r] = id;
+            stack.push(r);
+          }
+        }
+      }
+    }
+    sizes.push(size);
+  }
+  const keep = sizes.indexOf(Math.max(...sizes));
+  for (let p = 0; p < w * h; p++) if (label[p] !== keep) data[p * 4 + 3] = 0;
+}
+
 /** Crops to the visible art plus a 1 px margin. */
 function trim(img) {
   const { width: w, height: h } = img;
@@ -415,33 +490,42 @@ function downscale(img, longest) {
 fs.mkdirSync(outDir, { recursive: true });
 const results = [];
 let total = 0;
+/** Cleans one sprite (see the header) and writes it as `<key>.png`. */
+function clean(img, key, name, longest, navy) {
+  const notes = [];
+  const box = findCaption(img, navy);
+  if (box) notes.push(`caption ${removeCaption(img, box, HULLS.has(name))}`);
+  if (MARKINGS[key]) notes.push(`markings ${paintOver(img, MARKINGS[key])} px`);
+  const specks = dropSpecks(img);
+  if (specks) notes.push(`${specks} speck px`);
+  const full = trim(img);
+  const small = downscale(full, longest);
+  const bytes = writePng(small);
+  fs.writeFileSync(path.join(outDir, `${key}.png`), bytes);
+  total += bytes.length;
+  results.push({ key, full, small });
+  console.log(
+    `${key.padEnd(18)} ${String(small.width).padStart(3)}×${String(small.height).padEnd(3)} ${String(bytes.length).padStart(6)} B  ${notes.join(", ")}`,
+  );
+}
+
 for (const [folder, name, longest] of SPRITES) {
   ERAS.forEach((era, k) => {
     const file = path.join(packDir, folder, era, `${path.basename(folder)}_${era}.png`);
-    const img = readPng(fs.readFileSync(file));
-    const key = `${name}-${k + 1}`;
-    const notes = [];
-    const box = findCaption(img);
-    if (box) notes.push(`caption ${removeCaption(img, box, HULLS.has(name))}`);
-    if (MARKINGS[key]) notes.push(`markings ${paintOver(img, MARKINGS[key])} px`);
-    const specks = dropSpecks(img);
-    if (specks) notes.push(`${specks} speck px`);
-    const full = trim(img);
-    const small = downscale(full, longest);
-    const bytes = writePng(small);
-    fs.writeFileSync(path.join(outDir, `${key}.png`), bytes);
-    total += bytes.length;
-    results.push({ key, full, small });
-    console.log(
-      `${key.padEnd(13)} ${String(small.width).padStart(3)}×${String(small.height).padEnd(3)} ${String(bytes.length).padStart(6)} B  ${notes.join(", ")}`,
-    );
+    clean(readPng(fs.readFileSync(file)), `${name}-${k + 1}`, name, longest, PACK_NAVY);
   });
+}
+const sheet = readPng(fs.readFileSync(path.join(packDir, SHEET)));
+for (const [key, box, longest] of SHEET_SPRITES) {
+  const img = crop(sheet, box);
+  keepLargest(img);
+  clean(img, key, key.replace(/-\d$/, ""), longest, SHEET_NAVY);
 }
 console.log(`${results.length} sprites, ${(total / 1024).toFixed(1)} KiB`);
 
 if (preview) {
   // A check sheet: every cleaned sprite at full resolution, 4 per row, on a dark checkerboard.
-  const cell = 300;
+  const cell = Math.max(...results.map(({ full }) => Math.max(full.width, full.height))) + 4;
   const sheet = blank(cell * 4, cell * Math.ceil(results.length / 4));
   for (let p = 0; p < sheet.width * sheet.height; p++) {
     const v = (((p % sheet.width) >> 4) + ((p / sheet.width) >> 4)) % 2 ? 70 : 92;

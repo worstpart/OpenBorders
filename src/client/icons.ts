@@ -153,11 +153,18 @@ const PORT_2 = [
   "M1.5 20.5H22.5V21.8H1.5Z",
 ].join("");
 
+/** Airport: a plane over a runway (only the level-I drawing so far). */
+const AIRPORT = [
+  "M12 3L13.2 9.5L21 13V14.6L13.2 12.6L12.8 16.8L15 18.4V19.6L12 18.8L9 19.6V18.4L11.2 16.8L10.8 12.6L3 14.6V13L10.8 9.5Z",
+  rect(2, 21, 20, 1.5), // runway
+].join("");
+
 export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, string, string]>> = {
   housing: [HOUSE_1, HOUSE_2, HOUSE_3],
   factory: [FACTORY_1, FACTORY_2, FACTORY_3],
   // Level III (Naval Base) comes with Phase 2B; until then nothing reaches it.
   port: [PORT_1, PORT_2, PORT_2],
+  airport: [AIRPORT, AIRPORT, AIRPORT],
 };
 
 /** The wall tool and wall cards (GAME_DESIGN.md §3.17.6). */

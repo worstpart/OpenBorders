@@ -81,6 +81,16 @@ export type Command =
    * index into rules.chat.emojis — never free text.
    */
   | { readonly type: "emote"; readonly to: PlayerId; readonly emoji: number }
+  /**
+   * Airlift (GAME_DESIGN.md §3.17.7): fly a share (basis points) of your home troops from
+   * your Airport `buildingId` to an ally's or teammate's land at `tile`, within its range.
+   */
+  | {
+      readonly type: "airlift";
+      readonly buildingId: number;
+      readonly tile: number;
+      readonly percentBp: number;
+    }
   /** Drop a map ping on `tile` for your allies and teammates. */
   | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
   /**

@@ -27,6 +27,7 @@ import {
 import { incomingThreats, THREAT_ICON } from "./threats.ts";
 import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
+import { AIRLIFT_PREVIEW_TEXT, airliftPreview, type AirliftPreview } from "./flights.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
 import {
@@ -426,9 +427,73 @@ export class GameClient {
    */
   pickBuilding(type: Placeable): void {
     if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
+    ui.airliftFrom = null;
     ui.placing = ui.placing === type ? null : type;
     ui.wallPoints = [];
     if (ui.placing) ui.menu = null;
+  }
+
+  /**
+   * The Airport card's Airlift button (GAME_DESIGN.md §3.17.7): the card closes and the next
+   * click on a friend's land in range sends the airlift (the attack % sets the share);
+   * right-click or Esc puts it back.
+   */
+  startAirlift(buildingId: number): void {
+    if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
+    ui.menu = null;
+    ui.placing = null;
+    ui.wallPoints = [];
+    ui.airliftFrom = buildingId;
+  }
+
+  /** Sends the airlift being aimed to `tile`, if it may go there. */
+  private sendAirlift(tile: number): void {
+    const preview = this.airliftAt(tile);
+    if (!preview || !this.host) {
+      ui.airliftFrom = null;
+      return;
+    }
+    if (preview.problem) {
+      this.toast({
+        text: `Can't airlift there: ${AIRLIFT_PREVIEW_TEXT[preview.problem]}`,
+        tone: "info",
+      });
+      return;
+    }
+    this.host.send({
+      type: "airlift",
+      buildingId: preview.airport.id,
+      tile,
+      percentBp: Math.round(ui.attackPercent * 100),
+    });
+    ui.airliftFrom = null;
+  }
+
+  /** The airlift being aimed, to `tile` (null: no target yet). */
+  private airliftAt(tile: number | null): AirliftPreview | null {
+    const map = this.map;
+    const me = ui.me;
+    const airport = ui.buildings.find((b) => b.id === ui.airliftFrom);
+    if (!map || !me || !airport) return null;
+    return airliftPreview(
+      DEFAULT_RULES,
+      map,
+      airport,
+      me,
+      this.owner,
+      ui.friends,
+      this.latestFrame?.tick ?? 0,
+      tile,
+      ui.attackPercent,
+    );
+  }
+
+  /** While aiming an airlift: the one the tile under the mouse would get. */
+  private airliftDraft(): AirliftPreview | null {
+    const map = this.map;
+    if (ui.airliftFrom === null || !map) return null;
+    const cell = this.hoverPoint ? this.camera.tileAt(this.hoverPoint) : null;
+    return this.airliftAt(cell ? tileAt(map, cell.x, cell.y) : null);
   }
 
   upgrade(buildingId: number): void {
@@ -789,6 +854,15 @@ export class GameClient {
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
+    // Aiming an airlift stops when the Airport is gone (or no longer ours) or the game is.
+    const aiming = ui.airliftFrom;
+    if (
+      aiming !== null &&
+      (frame.phase !== "playing" ||
+        !frame.buildings.some((b) => b.id === aiming && b.owner === ui.localPlayerId))
+    ) {
+      ui.airliftFrom = null;
+    }
     // A building card whose building is gone closes.
     const menu = ui.menu;
     if (
@@ -894,6 +968,10 @@ export class GameClient {
       this.host.send({ type: "spawn", tile: index });
       return;
     }
+    if (ui.airliftFrom !== null) {
+      this.sendAirlift(index);
+      return;
+    }
     if (ui.placing === "wall") {
       this.addWallPoint(index);
       return;
@@ -934,6 +1012,10 @@ export class GameClient {
 
   /** Right click: the context menu for the land under the cursor (or put a building back). */
   private secondaryClick(at: ScreenPoint): void {
+    if (ui.airliftFrom !== null) {
+      ui.airliftFrom = null;
+      return;
+    }
     if (ui.placing === "wall") {
       this.finishWall();
       return;
@@ -984,7 +1066,8 @@ export class GameClient {
         else this.confirmSpawn();
         break;
       case "escape":
-        if (ui.placing) {
+        if (ui.airliftFrom !== null) ui.airliftFrom = null;
+        else if (ui.placing) {
           ui.placing = null;
           ui.wallPoints = [];
         } else if (ui.menu) this.closeMenu();
@@ -1083,6 +1166,7 @@ export class GameClient {
         colorOf: (id) => ui.colorOf(id),
         owner: this.owner,
         buildings: ui.buildings,
+        airlift: this.airliftDraft(),
       });
     }
     this.labels.draw(

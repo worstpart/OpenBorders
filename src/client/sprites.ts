@@ -1,16 +1,38 @@
 /**
- * The painted sprites (D-028): the user's icon pack, cleaned by `tools/iconPack.mjs` into
- * `assets/icons/<kind>-<level>.png` — buildings and vehicles, one per level, the eras WW1 →
- * WW2 → Modern standing for levels I → III. The map draws them on Canvas2D (render/), the
- * HUD as plain images (BuildingIcon.svelte). Things without art yet (SAM, Missile Silo,
- * walls, warships, missiles) keep their drawings in icons.ts.
+ * The painted sprites (D-028): the user's icon pack and second sheet, cleaned by
+ * `tools/iconPack.mjs` into `assets/icons/<kind>-<level>.png` — buildings, walls and vehicles,
+ * one per level, the eras WW1 → WW2 → Modern standing for levels I → III — and four single
+ * missiles (`<kind>.png`). The map draws them on Canvas2D (render/), the HUD as plain images
+ * (BuildingIcon.svelte). SAM, Silo and missile art waits for those features (2B.2, 2B.5);
+ * walls are drawn as lines on the map and use their art in the HUD; warships have no art yet.
  *
  * The isometric art does not rotate well, so vehicles are mirrored left/right by heading
  * instead. Each image is loaded once; for the map it is also kept pre-shrunk to the sizes
  * drawn (halving step by step: one big shrink in drawImage blurs fine detail away).
  */
 export type SpriteKind =
-  "housing" | "factory" | "port" | "airport" | "plane" | "helicopter" | "boat" | "tradeShip";
+  | "housing"
+  | "factory"
+  | "port"
+  | "airport"
+  | "sam"
+  | "silo"
+  | "wall"
+  | "plane"
+  | "helicopter"
+  | "boat"
+  | "tradeShip"
+  | "missile"
+  | SingleSprite;
+
+/** Sprites with one image, not one per level. */
+export type SingleSprite = "cruiseMissile" | "airToAirMissile" | "airToGroundMissile" | "icbm";
+const SINGLE: ReadonlySet<string> = new Set([
+  "cruiseMissile",
+  "airToAirMissile",
+  "airToGroundMissile",
+  "icbm",
+]);
 
 /** Which way each vehicle's art faces (its nose or bow), so it can be mirrored to match. */
 export const FACES_LEFT: Readonly<Partial<Record<SpriteKind, boolean>>> = {
@@ -18,6 +40,11 @@ export const FACES_LEFT: Readonly<Partial<Record<SpriteKind, boolean>>> = {
   tradeShip: true,
   plane: false,
   helicopter: false,
+  missile: false,
+  cruiseMissile: false,
+  airToAirMissile: false,
+  airToGroundMissile: false,
+  icbm: false,
 };
 
 const URLS = import.meta.glob<string>("./assets/icons/*.png", {
@@ -28,9 +55,14 @@ const URLS = import.meta.glob<string>("./assets/icons/*.png", {
 
 const clampLevel = (level: number) => Math.min(3, Math.max(1, Math.round(level)));
 
+/** A sprite's file name (without .png): `<kind>-<level>`, or `<kind>` for a single one. */
+function spriteKey(kind: SpriteKind, level: number): string {
+  return SINGLE.has(kind) ? kind : `${kind}-${clampLevel(level)}`;
+}
+
 /** The image URL of a sprite (a building under construction, level 0, shows level I). */
-export function spriteUrl(kind: SpriteKind, level: number): string {
-  const url = URLS[`./assets/icons/${kind}-${clampLevel(level)}.png`];
+export function spriteUrl(kind: SpriteKind, level = 1): string {
+  const url = URLS[`./assets/icons/${spriteKey(kind, level)}.png`];
   if (url === undefined) throw new Error(`No sprite ${kind}-${level}`);
   return url;
 }
@@ -66,7 +98,7 @@ class SpriteCache {
    * copies), or null while it is still loading.
    */
   get(kind: SpriteKind, level: number, width: number): HTMLImageElement | HTMLCanvasElement | null {
-    const key = `${kind}-${clampLevel(level)}`;
+    const key = spriteKey(kind, level);
     const image = this.image(key);
     if (!image) return null;
     const w = Math.max(2, Math.round(width / 2) * 2);

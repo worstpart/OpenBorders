@@ -64,6 +64,7 @@ import { bordersTarget } from "../systems/attacks.ts";
 import { coastTiles, seasOf, touchesSea } from "../systems/naval.ts";
 import { distanceSq } from "../geometry.ts";
 import { wallLevel } from "../systems/walls.ts";
+import { airliftCooldownLeft, airliftSite } from "../systems/flights.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
 import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
@@ -77,6 +78,7 @@ import {
   sameTeam,
   type Alliance,
   type Attack,
+  type Building,
   type Player,
   type PlayerId,
   type World,
@@ -129,7 +131,11 @@ export function thinkBots(world: World): void {
     const strikes = actions.some(
       (c) => (c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL,
     );
-    if (!tribe && !strikes && !gold.after.some((c) => c.type === "donate")) {
+    if (
+      !tribe &&
+      !strikes &&
+      !gold.after.some((c) => c.type === "donate" || c.type === "airlift")
+    ) {
       const build = decideBuild(world, bot, incomingTroops(world, bot.id));
       if (build) world.pendingCommands.push({ playerId: bot.id, command: build });
     }
@@ -146,7 +152,9 @@ export function thinkBots(world: World): void {
  * version — made every nation harder to beat and stretched big lobbies from 13 to 18 min.)
  *
  * Gifts, after the action, when it isn't under attack itself: troops to the teammate or
- * human ally losing a war worst, if it has troops to spare; half its gold to the one with
+ * human ally losing a war worst, if it has troops to spare — over a shared border, or by
+ * airlift from its Airport when the friend is beyond its land but within range (D-023,
+ * GAME_DESIGN.md §3.17.7); half its gold to the one with
  * the emptiest army while its own army sits at the cap. Never to allied nations: two
  * nations propping each other up stalled wars (milestone 2.4 headless runs).
  */
@@ -180,7 +188,9 @@ function economy(
   if (incomingTroops(world, bot.id) > 0) return { before, after };
 
   let needy: Player | null = null;
+  let needySite = -1; // where an airlift lands (-1: a gift over the border)
   let worst = 0;
+  const airport = readyAirport(world, bot);
   let poorest: Player | null = null;
   let poorestFill = ai.giftGoldBelow;
   for (const friend of world.players) {
@@ -189,13 +199,23 @@ function economy(
     const humanAlly = friend.kind === "human" && isAllied(world, bot.id, friend.id);
     if (!teammate && !humanAlly) continue;
     const deficit = incomingTroops(world, friend.id) - friend.homeTroops;
-    if (
-      deficit > worst &&
-      donationCooldownLeft(world, bot.id, friend.id, "troops") === 0 &&
-      bordersTarget(world, bot, friend.id) // D-023: troops only over a shared border
-    ) {
-      worst = deficit;
-      needy = friend;
+    if (deficit > worst) {
+      // D-023: troops only over a shared border, or by air.
+      if (
+        donationCooldownLeft(world, bot.id, friend.id, "troops") === 0 &&
+        bordersTarget(world, bot, friend.id)
+      ) {
+        worst = deficit;
+        needy = friend;
+        needySite = -1;
+      } else if (airport && !bordersTarget(world, bot, friend.id)) {
+        const site = airliftSite(world, airport, friend);
+        if (site >= 0) {
+          worst = deficit;
+          needy = friend;
+          needySite = site;
+        }
+      }
     }
     const fill = friend.homeTroops / Math.max(1, friend.capacity);
     if (fill < poorestFill && donationCooldownLeft(world, bot.id, friend.id, "gold") === 0) {
@@ -204,12 +224,21 @@ function economy(
     }
   }
   if (needy && home >= style.attackAt * capacity) {
-    after.push({
-      type: "donate",
-      to: needy.id,
-      resource: "troops",
-      percentBp: bps(ai.donateTroopsShare),
-    });
+    after.push(
+      needySite >= 0
+        ? {
+            type: "airlift",
+            buildingId: airport!.id,
+            tile: needySite,
+            percentBp: bps(ai.donateTroopsShare),
+          }
+        : {
+            type: "donate",
+            to: needy.id,
+            resource: "troops",
+            percentBp: bps(ai.donateTroopsShare),
+          },
+    );
   }
   const atCap = bot.homeTroops + bot.fieldTroops >= ai.wastingAt * capacity;
   if (poorest && atCap && gold >= ai.mobilizeMinShare * capacity) {
@@ -221,6 +250,17 @@ function economy(
     });
   }
   return { before, after };
+}
+
+/** The bot's Airport if one is working and off cooldown, or null (GAME_DESIGN.md §3.17.7). */
+function readyAirport(world: World, bot: Player): Building | null {
+  if (!world.rules.flights.enabled) return null;
+  for (const b of world.buildings) {
+    if (b.owner === bot.id && b.type === "airport" && b.level >= 1) {
+      if (airliftCooldownLeft(b, world.tick) === 0) return b;
+    }
+  }
+  return null;
 }
 
 /** Troops in the armies attacking this player. */

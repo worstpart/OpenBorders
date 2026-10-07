@@ -278,6 +278,18 @@ export type SimEvent =
       readonly troopsLost: number;
     }
   | {
+      /**
+       * An airlift (GAME_DESIGN.md §3.17.7) reached `to`: `troops` joined their home troops;
+       * `returning` didn't fit (or `to` is no longer a friend) and fly back to `from`.
+       */
+      readonly type: "airliftDelivered";
+      readonly flightId: number;
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+      readonly troops: number;
+      readonly returning: number;
+    }
+  | {
       /** The flight's owner was eliminated: it is lost with everything aboard. */
       readonly type: "flightLost";
       readonly flightId: number;

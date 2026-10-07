@@ -10,10 +10,14 @@ const KINDS: SpriteKind[] = [
   "factory",
   "port",
   "airport",
+  "sam",
+  "silo",
+  "wall",
   "plane",
   "helicopter",
   "boat",
   "tradeShip",
+  "missile",
 ];
 
 const WIDTH = 200;
@@ -40,6 +44,16 @@ describe("sprites", () => {
       for (const level of [1, 2, 3]) expect(spriteUrl(kind, level)).toMatch(/\.png/);
     }
     for (const type of BUILDING_TYPES) expect(KINDS).toContain(type);
+    // The second sheet's single missiles (2B.1).
+    for (const kind of [
+      "cruiseMissile",
+      "airToAirMissile",
+      "airToGroundMissile",
+      "icbm",
+    ] as const) {
+      expect(spriteUrl(kind)).toMatch(/\.png/);
+      expect(spriteUrl(kind, 3)).toBe(spriteUrl(kind));
+    }
   });
 
   it("show a building under construction (level 0) as level I", () => {

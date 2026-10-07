@@ -2,8 +2,9 @@
   /**
    * A building's card (GAME_DESIGN.md §3.17.13): opened by clicking its icon. Name, level
    * pips, what it gives; for your own: construction progress (with Cancel) and the next
-   * level's price and gains (Upgrade). Small, next to the building, closes with Esc or a
-   * click elsewhere.
+   * level's price and gains (Upgrade); your Airport's Airlift button (GAME_DESIGN.md
+   * §3.17.7) with its capacity and cooldown. Small, next to the building, closes with Esc or
+   * a click elsewhere.
    */
   import { buildingCard, wallCard } from "../../app/buildings.ts";
   import { ui } from "../../app/uiState.svelte.ts";
@@ -15,10 +16,12 @@
     /** `wall`: the card is a wall's (GAME_DESIGN.md §3.17.6). */
     onUpgrade: (id: number, wall: boolean) => void;
     onCancel: (id: number, wall: boolean) => void;
+    /** Start choosing where this Airport airlifts to. */
+    onAirlift: (id: number) => void;
     onClose: () => void;
   }
 
-  let { onUpgrade, onCancel, onClose }: Props = $props();
+  let { onUpgrade, onCancel, onAirlift, onClose }: Props = $props();
 
   const WIDTH = 270;
   const REFUND = Math.round(DEFAULT_RULES.buildings.cancelRefund * 100);
@@ -26,6 +29,7 @@
     housing: "Housing",
     factory: "Factory",
     port: "Port",
+    airport: "Airport",
     wall: "Wall",
   } as const;
   let cardElement = $state<HTMLElement | null>(null);
@@ -80,21 +84,15 @@
     oncontextmenu={(e) => e.preventDefault()}
   >
     <div class="head">
-      <span class="type"
-        >{#if card.type === "wall"}<span class="glyph"
-            ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={18} /></span
-          >{/if}{TYPE_LABEL[card.type]}</span
-      >
+      <span class="type">{TYPE_LABEL[card.type]}</span>
       <span class="pips" aria-label="Level {card.level} of 3">
         {#each [1, 2, 3] as k (k)}<span class="pip" class:on={k <= card.level}></span>{/each}
       </span>
     </div>
     <div class="title">
-      {#if card.type !== "wall"}
-        <span class="art"
-          ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={44} /></span
-        >
-      {/if}
+      <span class="art"
+        ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={44} /></span
+      >
       <span class="name">{card.name}</span>
       {#if card.level > 0}<span class="muted">Level {card.level}</span>{/if}
     </div>
@@ -126,6 +124,26 @@
       </div>
     {/if}
 
+    {#if card.airlift}
+      <div class="divider"></div>
+      <button
+        type="button"
+        class="upgrade"
+        disabled={card.airlift.secondsLeft > 0}
+        onclick={() => onAirlift(card.id)}
+      >
+        <span>✈ Airlift troops</span>
+        <span class="muted"
+          >{card.airlift.secondsLeft > 0
+            ? `ready in ${Math.ceil(card.airlift.secondsLeft)} s`
+            : `up to ${formatTroops(card.airlift.capacity)}`}</span
+        >
+      </button>
+      <div class="muted hint">
+        To an ally's or teammate's land in range; what they can't hold flies back
+      </div>
+    {/if}
+
     {#if card.upgrade}
       <div class="divider"></div>
       <button
@@ -145,9 +163,9 @@
     {:else if card.mine && !card.work && card.level >= 3}
       <div class="divider"></div>
       <div class="muted top">Top level</div>
-    {:else if card.mine && !card.work && card.type === "port" && card.level === 2}
+    {:else if card.laterLevel}
       <div class="divider"></div>
-      <div class="muted top">Level III (Naval Base) comes in a later update</div>
+      <div class="muted top">{card.laterLevel}</div>
     {/if}
   </div>
 {/if}
@@ -189,10 +207,6 @@
     gap: var(--space-2);
   }
 
-  .glyph {
-    color: #f6f1e4;
-  }
-
   .pips {
     display: flex;
     gap: 4px;
@@ -215,6 +229,11 @@
     align-items: baseline;
     gap: var(--space-2);
     margin-top: 2px;
+  }
+
+  .hint {
+    margin-top: 4px;
+    font-size: 11px;
   }
 
   .art {

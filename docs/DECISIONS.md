@@ -568,7 +568,12 @@ the milestone that adds or reworks the thing (SAM + walls 2B.2, Silo + missiles 
 warships 2B.6). Open: how — options are 3D models rendered isometrically in Blender (the
 Blender bridge is installed but Blender was not running), or prompts I write for the same
 image tool the user made the pack with (closest match to the style); to settle with the
-user before 2B.2.
+user before 2B.2. **Settled during 2B.1:** the user sent a second sheet in the same style
+(SAM I–III, walls I–III, Missile Silo I–III, missiles I–III plus cruise, air-to-air,
+air-to-ground and ICBM), kept as `openborder_icon_pack_final/sheets/` and cut into sprites
+by `tools/iconPack.mjs` (taken to be the user's own work, like the first pack). Walls use
+their art in the HUD (on the map they stay drawn lines); SAM, Silo and missiles use theirs
+when those features land (2B.2, 2B.5). Still without art: warships (2B.6) — ask the user.
 
 **Alternatives.** Phase 4 polish (the art would wait months, and 2B would build Airport
 and plane drawings only to replace them); inside 2B.1 (mixes an art pass into a gameplay

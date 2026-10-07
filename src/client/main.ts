@@ -76,6 +76,7 @@ mount(App, {
       cancelBuild: (buildingId) => client?.cancelBuild(buildingId),
       upgradeWall: (wallId) => client?.upgradeWall(wallId),
       cancelWall: (wallId) => client?.cancelWall(wallId),
+      startAirlift: (buildingId) => client?.startAirlift(buildingId),
       ping: (tile, kind) => client?.ping(tile, kind),
       emote: (to, emoji) => client?.emote(to, emoji),
       setVolume: (volume) => client?.setVolume(volume),

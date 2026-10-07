@@ -224,11 +224,11 @@ export interface TradeShip {
 }
 
 /**
- * What a flight is (GAME_DESIGN.md §3.17.7). 2B.0 has only "test" (a debug flight of empty
- * transports, until Airports exist); 2B.1 adds airlifts, 2B.3 assaults, 2B.4 strikes, 2B.5
- * missiles.
+ * What a flight is (GAME_DESIGN.md §3.17.7): "test" (a debug flight of empty transports,
+ * 2B.0), "airlift" (troops to a friend, 2B.1) and "return" (an airlift's troops that didn't
+ * fit, flying home); 2B.3 adds assaults, 2B.4 strikes, 2B.5 missiles.
  */
-export type FlightKind = "test";
+export type FlightKind = "test" | "airlift" | "return";
 
 /**
  * A flight (GAME_DESIGN.md §3.17.7, ARCHITECTURE.md §5.7): a group of planes flying in a

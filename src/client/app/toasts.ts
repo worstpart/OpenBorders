@@ -87,6 +87,13 @@ export function toastsForEvents(
       case "flightLaunched": {
         // Hostile flights join the incoming-threat warning (GAME_DESIGN.md §3.17.7).
         const info = FLIGHT_INFO[event.kind];
+        if (event.kind === "airlift" && event.target === me && event.owner !== me) {
+          toasts.push({
+            text: `✈ ${nameOf(event.owner)} is airlifting ${formatTroops(event.troops)} troops to you`,
+            tone: "success",
+            player: event.owner,
+          });
+        }
         if (
           event.target === me &&
           event.owner !== me &&
@@ -101,6 +108,33 @@ export function toastsForEvents(
         }
         break;
       }
+      case "airliftDelivered":
+        if (event.from === me) {
+          const back =
+            event.returning >= 1
+              ? ` — ${formatTroops(event.returning)} didn't fit and fly back`
+              : "";
+          toasts.push(
+            event.troops >= 1
+              ? {
+                  text: `✈ Airlift landed: ${formatTroops(event.troops)} troops joined ${nameOf(event.to)}${back}`,
+                  tone: "success",
+                  player: event.to,
+                }
+              : {
+                  text: `✈ ${nameOf(event.to)} couldn't take your airlift — it flies back`,
+                  tone: "info",
+                  player: event.to,
+                },
+          );
+        } else if (event.to === me && event.troops >= 1) {
+          toasts.push({
+            text: `✈ ${nameOf(event.from)}'s airlift landed: +${formatTroops(event.troops)} troops`,
+            tone: "success",
+            player: event.from,
+          });
+        }
+        break;
       case "boatLanded":
         if (event.owner === me && event.attackId < 0) {
           toasts.push({

@@ -13,6 +13,11 @@
  *  - a wall level counts as `wallWorth` × capacity × the personality's `fortifyWeight`,
  *    in proportion to its length (a rough "defenders it is worth"), and only while it
  *    faces a threat.
+ * An Airport (§3.17.7) counts as `airportWorth` × capacity, and only while a friend it could
+ * help only by air (a teammate or human ally it doesn't border) is losing a war — more
+ * troops attacking it than it has at home, the same need that makes it airlift (bot.ts) — and
+ * close enough for an Airport in the middle of its land to reach; one is enough. (Valued for any distant friend, nations built 3–7 per team game and airlifted
+ * almost never: 2B.1 headless runs.) It stands on plains, deep inside like the rest.
  * Escalating prices make the next new building dearer, so upgrades win in time. Gold is
  * also its war chest (§3.16, Mobilize right before attacking a player); while saving, it
  * keeps part of the goal's price out of the chest (`saving`, by personality), and builds
@@ -46,12 +51,14 @@ import {
   maxLevel,
   placementProblem,
 } from "../systems/buildings.ts";
-import { distanceSq } from "../geometry.ts";
-import { areFriendly } from "../systems/diplomacy.ts";
+import { distanceSq, withinRange } from "../geometry.ts";
+import { bordersTarget } from "../systems/attacks.ts";
+import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
 import {
   isTribe,
+  sameTeam,
   NEUTRAL,
   type Building,
   type Player,
@@ -127,8 +134,17 @@ function buildingGoal(world: World, bot: Player): Goal | null {
       // One Port is enough (its speed doesn't stack); it needs a coast.
       const coast = type === "port" ? anyCoast(world, bot) : -1;
       if (type === "port" && (mine.some((b) => b.type === "port") || coast < 0)) continue;
+      // One Airport, and only for a friend it can't reach over land.
+      if (
+        type === "airport" &&
+        (mine.some((b) => b.type === "airport") || !friendInNeed(world, bot))
+      )
+        continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
-      const value = worth(world, bot, levelRules(rules, type, 1), coast);
+      const value =
+        type === "airport"
+          ? ai.airportWorth * bot.capacity
+          : worth(world, bot, levelRules(rules, type, 1), coast);
       consider(price, value, { ...none, newType: type });
     }
   }
@@ -172,7 +188,7 @@ export function decideBuild(world: World, bot: Player, incoming: number): Comman
   const tile =
     world.rules.buildings.types[type].placement === "coast"
       ? portSite(world, bot)
-      : buildSite(world, bot);
+      : buildSite(world, bot, type);
   return tile < 0 ? null : { type: "build", buildingType: type, tile };
 }
 
@@ -372,6 +388,44 @@ function worth(world: World, bot: Player, effect: BuildingLevelRules, tile = -1)
   );
 }
 
+/**
+ * True when a friend the bot can help only by air — a living teammate or human ally (the
+ * friends nations give troops to) it doesn't border — is losing a war: more troops are
+ * attacking it than it has at home — within reach of an Airport near the middle of the bot's
+ * land (9/10 of Airport I's range: the site lands somewhere around there).
+ */
+function friendInNeed(world: World, bot: Player): boolean {
+  const middle = landMiddle(world, bot);
+  if (middle < 0) return false;
+  const reach = Math.floor(levelRules(world.rules, "airport", 1).range! * 0.9);
+  for (const friend of world.players) {
+    if (!friend.alive || friend.id === bot.id) continue;
+    const teammate = sameTeam(world, bot.id, friend.id);
+    const humanAlly = friend.kind === "human" && isAllied(world, bot.id, friend.id);
+    if (!teammate && !humanAlly) continue;
+    let incoming = 0;
+    for (const a of world.attacks) {
+      if (a.target === friend.id && a.retreatTick < 0) incoming += a.troops;
+    }
+    if (incoming <= friend.homeTroops || bordersTarget(world, bot, friend.id)) continue;
+    for (const tile of friend.border) if (withinRange(world.map, middle, tile, reach)) return true;
+  }
+  return false;
+}
+
+/** The tile in the middle of the bot's border (roughly the middle of its land), or -1. */
+function landMiddle(world: World, bot: Player): number {
+  const { map } = world;
+  let sumX = 0;
+  let sumY = 0;
+  for (const tile of bot.border) {
+    sumX += tile % map.width;
+    sumY += Math.floor(tile / map.width);
+  }
+  const count = bot.border.size;
+  return count === 0 ? -1 : tileAt(map, Math.round(sumX / count), Math.round(sumY / count));
+}
+
 /** One of the bot's coast tiles (a Port could stand there), or -1. */
 function anyCoast(world: World, bot: Player): number {
   for (const tile of bot.border) if (isCoast(world.map, tile)) return tile;
@@ -430,7 +484,7 @@ function landDepth(world: World, bot: Player, tile: number): number {
  * sampled around the middle of its border (roughly the middle of its land) and around its
  * spawn; the deepest valid one wins.
  */
-function buildSite(world: World, bot: Player): number {
+function buildSite(world: World, bot: Player, type: BuildingType): number {
   const { map } = world;
   let sumX = 0;
   let sumY = 0;
@@ -457,7 +511,7 @@ function buildSite(world: World, bot: Player): number {
     const tile = tileAt(map, x, y);
     if (world.owner[tile] !== bot.id || !isLand(map, tile)) continue;
     if (world.wallAt[tile]! >= 0) continue;
-    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile, "housing"))
+    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile, type))
       continue;
     const depth = depthOf(world, bot, x, y);
     if (depth > bestDepth) {

@@ -8,7 +8,7 @@
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
  *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
- *                          [--no-boats] [--no-trade] [--continent]
+ *                          [--no-boats] [--no-trade] [--no-flights] [--continent]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -35,6 +35,8 @@
  * D-025): together they reproduce 2.6. --style picks a map type (2.8: continent,
  * archipelago, twin) and --size a start-screen size (sets --width/--height).
  * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
+ * --no-flights turns Airports and air missions off (Phase 2B); each game reports Airports
+ * built, airlifts flown and the troops they carried (delivered / flown back).
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -108,6 +110,8 @@ export interface GameReport {
   eliminations: number;
   attacks: number;
   rejected: number;
+  /** Rejected commands by reason (a bot sending commands the rules refuse is a bug). */
+  rejectedReasons: Record<string, number>;
   /** Alliance activity (GAME_DESIGN §3.14); nationAlliances = between two non-tribes. */
   diplomacy: {
     requests: number;
@@ -172,6 +176,13 @@ export interface GameReport {
     tradeGold: number;
     tradeLost: number;
   };
+  /** Air (GAME_DESIGN §3.17.7), totals over all players. */
+  air: {
+    airports: number;
+    airlifts: number;
+    troopsDelivered: number;
+    troopsReturned: number;
+  };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
   /** The slowest tick: when it happened and what each step took. */
@@ -208,6 +219,7 @@ async function main(): Promise<void> {
       "no-buildings": { type: "boolean", default: false },
       "no-boats": { type: "boolean", default: false },
       "no-trade": { type: "boolean", default: false },
+      "no-flights": { type: "boolean", default: false },
       continent: { type: "boolean", default: false },
       style: { type: "string", default: "continent" },
       size: { type: "string" },
@@ -223,9 +235,12 @@ async function main(): Promise<void> {
   const withBoats = args["no-boats"]
     ? { ...withBuildings, naval: { ...withBuildings.naval, enabled: false } }
     : withBuildings;
-  const rules = args["no-trade"]
+  const withTrade = args["no-trade"]
     ? { ...withBoats, trade: { ...withBoats.trade, enabled: false } }
     : withBoats;
+  const rules = args["no-flights"]
+    ? { ...withTrade, flights: { ...withTrade.flights, enabled: false } }
+    : withTrade;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -335,6 +350,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   let eliminations = 0;
   let attacks = 0;
   let rejected = 0;
+  const rejectedReasons: Record<string, number> = {};
   let teammateAttacks = 0;
   const diplomacy = {
     requests: 0,
@@ -391,6 +407,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     tradeGold: 0,
     tradeLost: 0,
   };
+  const air: GameReport["air"] = {
+    airports: 0,
+    airlifts: 0,
+    troopsDelivered: 0,
+    troopsReturned: 0,
+  };
   let reason = "timeout";
   let error: string | null = null;
 
@@ -409,8 +431,10 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
           attacks++;
           const team = world.players[event.attacker - 1]!.team;
           if (team > 0 && world.players[event.target - 1]?.team === team) teammateAttacks++;
-        } else if (event.type === "commandRejected") rejected++;
-        else if (event.type === "gameOver") reason = event.reason;
+        } else if (event.type === "commandRejected") {
+          rejected++;
+          rejectedReasons[event.reason] = (rejectedReasons[event.reason] ?? 0) + 1;
+        } else if (event.type === "gameOver") reason = event.reason;
         else if (event.type === "allianceRequested") diplomacy.requests++;
         else if (event.type === "allianceRequestEnded" && event.reason === "declined") {
           diplomacy.declined++;
@@ -448,6 +472,13 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         else if (event.type === "buildingStarted" && event.buildingType === "port") {
           if (event.level === 1) naval.ports++;
           else naval.portUpgrades++;
+        }
+        if (event.type === "buildingStarted" && event.buildingType === "airport") {
+          if (event.level === 1) air.airports++;
+        } else if (event.type === "flightLaunched" && event.kind === "airlift") air.airlifts++;
+        else if (event.type === "airliftDelivered") {
+          air.troopsDelivered += event.troops;
+          air.troopsReturned += event.returning;
         }
         if (event.type === "eliminated") economy.looted += event.loot;
         else if (event.type === "buildingStarted") {
@@ -535,10 +566,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     eliminations,
     attacks,
     rejected,
+    rejectedReasons,
     diplomacy,
     economy,
     buildings,
     naval,
+    air,
     tickMs: {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
@@ -643,6 +676,10 @@ function summarize(
         }
       : {}),
     rejectedCommands: reports.reduce((s, r) => s + r.rejected, 0),
+    rejectedReasons: reports.reduce<Record<string, number>>((all, r) => {
+      for (const [k, v] of Object.entries(r.rejectedReasons)) all[k] = (all[k] ?? 0) + v;
+      return all;
+    }, {}),
     diplomacyPerGame: Object.fromEntries(
       (Object.keys(reports[0]?.diplomacy ?? {}) as (keyof GameReport["diplomacy"])[]).map((key) => [
         key,
@@ -685,6 +722,12 @@ function summarize(
       (Object.keys(reports[0]?.naval ?? {}) as (keyof GameReport["naval"])[]).map((key) => [
         key,
         round(reports.reduce((s, r) => s + r.naval[key], 0) / Math.max(1, reports.length)),
+      ]),
+    ),
+    airPerGame: Object.fromEntries(
+      (Object.keys(reports[0]?.air ?? {}) as (keyof GameReport["air"])[]).map((key) => [
+        key,
+        round(reports.reduce((s, r) => s + r.air[key], 0) / Math.max(1, reports.length)),
       ]),
     ),
     tickMs: {

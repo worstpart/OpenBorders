@@ -535,6 +535,27 @@ everyone else's faint), hostile flights in `threats.ts` (kind "flight": chips, t
 ring + countdown, edge arrows), a toast at launch, and the boat horn once per sender per 30 s
 (`alerts.ts`). Range rings in action mode come with the first action (Airport card, 2B.1).
 
+**Airport and airlift (2B.1 — as built).** `rules.buildings.types.airport` (placement
+`plains`; level fields `range`, `liftShare`, `missionCooldownTicks`), `rules.flights.enabled`
+(false = Airports and missions off, games replay 2B.0b exactly) and `airliftPlanes`. In
+`systems/flights.ts`: `airliftProblem` / `airliftTroops` / `airliftCapacity` /
+`airliftCooldownLeft` / `airportRange` take an `AirportLike` (a building or its snapshot), so
+the HUD preview and the nations use the sim's own checks; `applyAirlift` (command `airlift
+{buildingId, tile, percentBp}`) takes the troops from home, launches kind `airlift` and
+starts cooldown slot 0 (`AIRLIFT_SLOT`); `advanceFlights` delivers (`deliverAirlift`: the
+friend at launch takes `troopRoom`, event `airliftDelivered`, the rest launches as kind
+`return` to the take-off tile → the owner's home troops). `airliftSite` (a friend's border
+tile nearest the Airport, ties to the lower tile) is where nations land. AI: `bot.ts`
+`economy()` picks the friend losing worst among bordered ones (gift) and, with a ready
+Airport, unbordered ones in range (airlift); `build.ts` values one Airport
+(`airportWorth` × capacity) only while such a friend is in need and within 9/10 of Airport
+I's range of the middle of the bot's land. `FlightSnapshot.source` (the Airport, for the
+era of the plane sprite). **Client:** `app/flights.ts` `airliftPreview` +
+`AIRLIFT_PREVIEW_TEXT`, `ui.airliftFrom` (aiming mode; cleared when the Airport goes or the
+game ends), `client.ts` `startAirlift` / `sendAirlift`, `render/flights.ts` draws the range
+ring, line, landing ring and "✈ troops · s"; the building card's `airlift` field and
+`laterLevel` note; toasts for `flightLaunched` (airlift to me) and `airliftDelivered`.
+
 **Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
 (one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army
 (`launchAttack` finds it by attacker + target), and every front starts from the attacker's

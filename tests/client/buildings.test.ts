@@ -91,6 +91,7 @@ describe("build options", () => {
       ["housing", "Housing", 40_000, null],
       ["factory", "Factory", 60_000, null],
       ["port", "Port", 50_000, "notCoast"], // an all-land test map: no coast anywhere
+      ["airport", "Airport", 120_000, "noGold"], // on plains; the test player has 100k
     ]);
   });
 

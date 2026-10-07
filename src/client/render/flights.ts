@@ -12,7 +12,14 @@
  */
 import type { BuildingSnapshot, FlightSnapshot } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
-import { FLIGHT_INFO, flightPosition, flightSecondsLeft } from "../app/flights.ts";
+import {
+  AIRLIFT_PREVIEW_TEXT,
+  FLIGHT_INFO,
+  flightPosition,
+  flightSecondsLeft,
+  type AirliftPreview,
+} from "../app/flights.ts";
+import { formatTroops } from "../format.ts";
 import { drawSprite, FACES_LEFT, spriteHeight } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
@@ -30,11 +37,15 @@ export interface FlightDrawInput {
   readonly owner: Uint16Array;
   /** Airports decide each flight's era (D-028). */
   readonly buildings: readonly BuildingSnapshot[];
+  /** The airlift being aimed (GAME_DESIGN.md §3.17.7): its range ring, line and ETA. */
+  readonly airlift: AirliftPreview | null;
 }
 
 const MINE = "rgba(246, 241, 228, 0.8)";
 const THREAT = "rgba(255, 110, 90, 0.9)";
 const OTHER = "rgba(246, 241, 228, 0.28)";
+const OK = "rgba(140, 240, 190, 0.95)";
+const BAD = "rgba(255, 120, 100, 0.95)";
 
 export class FlightLayer {
   private readonly canvas: HTMLCanvasElement;
@@ -50,7 +61,7 @@ export class FlightLayer {
   }
 
   draw(view: MapView, input: FlightDrawInput): void {
-    if (input.flights.length === 0) return;
+    if (input.flights.length === 0 && !input.airlift) return;
     const ctx = this.context;
     const ratio = window.devicePixelRatio || 1;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -66,6 +77,8 @@ export class FlightLayer {
     const me = input.localPlayerId;
     const size = Math.max(26, Math.min(44, view.zoom * 5));
 
+    if (input.airlift) this.aim(input.airlift, tileScreen, view.zoom);
+
     // Routes first, so every aircraft sits on top of every line.
     const labels: { x: number; y: number; text: string }[] = [];
     for (const flight of input.flights) {
@@ -73,12 +86,17 @@ export class FlightLayer {
       const here = toScreen(at.x, at.y);
       const target = tileScreen(flight.toTile);
       const mine = flight.owner === me;
+      const atMe = input.owner[flight.toTile] === me;
       const incoming =
-        !mine &&
-        !input.friends.has(flight.owner) &&
-        FLIGHT_INFO[flight.kind].hostile &&
-        input.owner[flight.toTile] === me;
-      this.route(here, target, mine ? MINE : incoming ? THREAT : OTHER, mine || incoming ? 1.5 : 1);
+        !mine && !input.friends.has(flight.owner) && FLIGHT_INFO[flight.kind].hostile && atMe;
+      // A friend's airlift to us is drawn like our own flights.
+      const welcome = !mine && atMe && !FLIGHT_INFO[flight.kind].hostile;
+      this.route(
+        here,
+        target,
+        mine || welcome ? MINE : incoming ? THREAT : OTHER,
+        mine || incoming || welcome ? 1.5 : 1,
+      );
       if (mine || incoming) {
         // Incoming flights also get the threat marker's ring and countdown (render/markers.ts).
         if (mine) this.ring(target.x, target.y, Math.max(5, view.zoom * 1.2), MINE);
@@ -107,8 +125,13 @@ export class FlightLayer {
         this.aircraft(p.x, p.y, at.dx, at.dy, size * 0.7, color);
       }
       if (view.zoom >= 1.5 || flight.owner === me) {
-        const what = flight.kind === "test" ? "test" : "";
-        labels.push({ x: p.x, y: p.y - height / 2 - 7, text: `${what} ×${flight.planes}`.trim() });
+        const text =
+          flight.kind === "test"
+            ? `test ×${flight.planes}`
+            : flight.troops >= 1
+              ? `${formatTroops(flight.troops)}`
+              : `×${flight.planes}`;
+        labels.push({ x: p.x, y: p.y - height / 2 - 7, text });
       }
     }
     for (const label of labels) this.label(label.x, label.y, label.text);
@@ -145,6 +168,39 @@ export class FlightLayer {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  /**
+   * The airlift being aimed: the Airport's range ring, and to the tile under the mouse a
+   * line, a landing ring and the troops and flight time — green where it may go, red with the
+   * reason where it may not.
+   */
+  private aim(
+    aim: AirliftPreview,
+    tileScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+  ): void {
+    const ctx = this.context;
+    const from = tileScreen(aim.airport.tile);
+    ctx.save();
+    ctx.setLineDash([8, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(246, 241, 228, 0.7)";
+    ctx.fillStyle = "rgba(246, 241, 228, 0.05)";
+    ctx.beginPath();
+    ctx.arc(from.x, from.y, aim.range * zoom, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    if (aim.tile === null) return;
+    const to = tileScreen(aim.tile);
+    const color = aim.problem ? BAD : OK;
+    this.route(from, to, color, 2);
+    this.ring(to.x, to.y, Math.max(6, zoom * 1.5), color);
+    const text = aim.problem
+      ? AIRLIFT_PREVIEW_TEXT[aim.problem]
+      : `✈ ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
+    this.label(to.x, to.y - Math.max(10, zoom * 1.5) - 8, text);
   }
 
   /** The flight's shadow on the ground, in its owner's colour. */

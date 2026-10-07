@@ -26,6 +26,7 @@ import {
   type WallProblem,
 } from "../../sim/systems/walls.ts";
 import { tradeEnabled, tradePartners } from "../../sim/systems/trade.ts";
+import { airliftCapacity, airliftCooldownLeft } from "../../sim/systems/flights.ts";
 import { formatTroops } from "../format.ts";
 
 /** What the build bar can pick up: a building, or the wall tool (D-024). */
@@ -47,6 +48,7 @@ export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
   port: "Trade & faster boats",
+  airport: "Airlift troops to friends",
   wall: "Draw a defence line",
 };
 
@@ -76,6 +78,15 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   }
   if (effect.tradeEveryTicks && tradeEnabled(rules)) {
     lines.push(`A trade ship every ${(effect.tradeEveryTicks * rules.tickMs) / 1000} s`);
+  }
+  if (effect.liftShare) {
+    lines.push(`Airlift: up to ${Math.round(effect.liftShare * 100)}% of your troop capacity`);
+    lines.push(`To friends within ${effect.range ?? 0} km`);
+  }
+  if (effect.missionCooldownTicks) {
+    lines.push(
+      `Ready again ${(effect.missionCooldownTicks * rules.tickMs) / 1000} s after each flight`,
+    );
   }
   return lines;
 }
@@ -223,6 +234,7 @@ export const BUILD_BLOCK_TEXT: Record<BuildBlock, string> = {
   notYourLand: "not your land",
   water: "not on water",
   notCoast: "a port must stand on the coast",
+  notPlains: "an airport needs flat land (plains)",
   tooClose: "too close to another building",
   noGold: "not enough gold",
   notPlaying: "after the match starts",
@@ -323,6 +335,15 @@ export interface BuildingCard {
     readonly lines: readonly string[];
     readonly affordable: boolean;
   } | null;
+  /** Your working Airport (GAME_DESIGN.md §3.17.7): the airlift it can fly now. */
+  readonly airlift: {
+    /** The most troops one airlift carries (a share of your capacity). */
+    readonly capacity: number;
+    /** Seconds until it can fly again (0 = ready). */
+    readonly secondsLeft: number;
+  } | null;
+  /** A level the game doesn't have yet (shown instead of an upgrade). */
+  readonly laterLevel: string | null;
 }
 
 function workOf(
@@ -369,8 +390,25 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
     effects: [...effectLines(rules, building.type, building.level), ...tradeLines(ctx, building)],
     work: workOf(ctx, building),
     upgrade,
+    airlift:
+      mine && building.type === "airport" && building.level >= 1 && ctx.me
+        ? {
+            capacity: airliftCapacity(rules, building.level, ctx.me.capacity),
+            secondsLeft: (airliftCooldownLeft(building, ctx.tick) * rules.tickMs) / 1000,
+          }
+        : null,
+    laterLevel:
+      mine && !working && building.level === maxLevel(rules, building.type)
+        ? (LATER_LEVELS[building.type] ?? null)
+        : null,
   };
 }
+
+/** Levels that come in later updates (Phase 2B), by type, after the top level built so far. */
+const LATER_LEVELS: Partial<Record<BuildingType, string>> = {
+  port: "Level III (Naval Base) comes in a later update",
+  airport: "Level II (Military Airport: airborne assault) comes in a later update",
+};
 
 /** A working Port's trade (GAME_DESIGN.md §3.19): its partners, and your trade so far. */
 function tradeLines(ctx: BuildContext, building: BuildingSnapshot): string[] {
@@ -422,6 +460,8 @@ export function wallCard(ctx: BuildContext, wall: WallSnapshot): BuildingCard {
     effects: [`${tiles} tiles standing`, ...(wall.level > 0 ? wallLines(rules, wall.level) : [])],
     work: workOf(ctx, wall),
     upgrade,
+    airlift: null,
+    laterLevel: null,
   };
 }
 

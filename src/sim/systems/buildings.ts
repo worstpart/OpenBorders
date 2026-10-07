@@ -17,7 +17,7 @@
  * economy) nothing here runs and games play as in 2.4.
  */
 import { withinRange } from "../geometry.ts";
-import { isCoast, isLand, type GameMap } from "../map/gameMap.ts";
+import { isCoast, isLand, Terrain, type GameMap } from "../map/gameMap.ts";
 import {
   BUILDING_TYPES,
   type BuildingLevelRules,
@@ -39,9 +39,14 @@ export function buildingsEnabled(rules: GameRules): boolean {
   return rules.buildings.enabled && rules.economy.enabled;
 }
 
-/** Building types this game offers: Ports only come with boats (GAME_DESIGN.md §3.18). */
+/**
+ * Building types this game offers: Ports only come with boats (GAME_DESIGN.md §3.18),
+ * Airports with flights (§3.17.7).
+ */
 export function buildingAvailable(rules: GameRules, type: BuildingType): boolean {
-  return type !== "port" || rules.naval.enabled;
+  if (type === "port") return rules.naval.enabled;
+  if (type === "airport") return rules.flights.enabled;
+  return true;
 }
 
 export function isBuildingType(value: unknown): value is BuildingType {
@@ -90,7 +95,7 @@ export function buildingPrice(
 }
 
 /** Why a building can't go on `tile` (gold aside), or null. Shared with the HUD. */
-export type PlacementProblem = "notYourLand" | "water" | "notCoast" | "tooClose";
+export type PlacementProblem = "notYourLand" | "water" | "notCoast" | "notPlains" | "tooClose";
 
 export function placementProblem(
   rules: GameRules,
@@ -104,8 +109,9 @@ export function placementProblem(
   if (!Number.isInteger(tile) || tile < 0 || tile >= owner.length) return "notYourLand";
   if (!isLand(map, tile)) return "water";
   if (owner[tile] !== playerId) return "notYourLand";
-  if (type && rules.buildings.types[type].placement === "coast" && !isCoast(map, tile))
-    return "notCoast";
+  const placement = type ? rules.buildings.types[type].placement : "land";
+  if (placement === "coast" && !isCoast(map, tile)) return "notCoast";
+  if (placement === "plains" && map.terrain[tile] !== Terrain.Plains) return "notPlains";
   const spacing = rules.buildings.minSpacing;
   for (const b of buildings) {
     if (withinRange(map, b.tile, tile, spacing - 1)) return "tooClose";
@@ -117,6 +123,7 @@ const PLACEMENT_REASON: Record<PlacementProblem, string> = {
   notYourLand: "you can only build on your own land",
   water: "you can only build on land",
   notCoast: "a port must stand on the coast",
+  notPlains: "an airport needs flat land (plains)",
   tooClose: "too close to another building",
 };
 
@@ -135,7 +142,11 @@ export function applyBuild(
   if (!buildingsEnabled(rules)) return "there are no buildings in this game";
   if (world.phase !== "playing") return "the match hasn't started";
   if (!isBuildingType(type)) return "unknown building";
-  if (!buildingAvailable(rules, type)) return "there are no boats in this game";
+  if (!buildingAvailable(rules, type)) {
+    return type === "port"
+      ? "there are no boats in this game"
+      : "there are no flights in this game";
+  }
   const problem = placementProblem(
     rules,
     world.map,

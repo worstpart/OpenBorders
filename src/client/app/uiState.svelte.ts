@@ -120,6 +120,8 @@ class UiState {
   boatPreview = $state.raw<BoatPreview | null>(null);
   /** The building picked up from the build bar, following the mouse until placed. */
   placing = $state<Placeable | null>(null);
+  /** The Airport whose airlift target is being chosen (GAME_DESIGN.md §3.17.7), or null. */
+  airliftFrom = $state<number | null>(null);
   /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */
   wallPoints = $state.raw<readonly number[]>([]);
   /**
@@ -175,6 +177,7 @@ class UiState {
     this.myLastPingTick = -1;
     this.boatPreview = null;
     this.placing = null;
+    this.airliftFrom = null;
     this.wallPoints = [];
     this.myRequests = new Map();
     this.myDonations = new Map();

@@ -781,6 +781,15 @@ land joins the incoming-threat warning (§3.20: chip, red ring and countdown, ed
 toast, the horn once per sender per 30 s). Until Airports exist (2B.1) flights can only be
 launched with a debug test command in development builds. Art: the user's icon pack
 (airplanes by Airport level, helicopters for airborne assault) arrives in 2B.0b (D-028).
+*As built (2B.1):* **Airport I** (120k, 15 s, on plains) and the **airlift**: your Airport's
+card has "✈ Airlift troops — up to N" (10% of your troop capacity); click it, then a
+friend's land within the dashed 250 km ring (a green line shows the troops and the flight
+time; red with the reason elsewhere). The send % sets the share of your home troops. Four
+transports fly it; on arrival the troops join the friend's home troops, and what doesn't
+fit under their capacity flies back to you (all of it if they are no longer your friend).
+Then the Airport needs 30 s. Toasts tell both sides. Nations airlift to a teammate or human
+ally losing a war beyond their border, and build an Airport only while such a friend is in
+need and within reach.
 
 | Flight | Planes | Speed | Carries |
 |---|---|---|---|
@@ -862,7 +871,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Missile Silo | I | 250k (250k) | 15 s | strike missile (75k per launch) | — | 250 | 1 slot | 30 | SAM II+, capture (destroyed) | hatch in the ground |
 | Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
 | Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
-| Airport | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
+| Airport ✅ | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
 | Airport | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
 | Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
 

@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -508,7 +508,7 @@ bot games before anyone has to play them.
 |---|---|---|---|
 | 2B.0 ✅ | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
 | 2B.0b ✅ | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
-| 2B.1 | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
+| 2B.1 ✅ | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
 | 2B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
@@ -561,7 +561,46 @@ screen; build OK (JS bundle unchanged, sprites are separate cached files). Tests
 The user also asked me to **make art in the same style** for what the pack lacks (SAM,
 Missile Silo, walls, warships, missiles) — placed with each thing's own milestone (SAM +
 walls in 2B.2, Silo + missiles in 2B.5, warships in 2B.6); how to make it is the open
-question (D-028).
+question (D-028). **Answered during 2B.1:** the user sent a second sheet in the same style
+(SAM, wall, Missile Silo I–III and seven missiles) — cut out by the same tool (below).
+
+**Milestone 2B.1 result (2026-10-07)** — Airport I and the airlift (GAME_DESIGN §3.17.7
+"as built", ARCHITECTURE §5.7). **Rules:** `airport` building (120k, 15 s, **plains only** —
+new placement `plains`, "an airport needs flat land"), level I only for now (II–III with
+2B.3–2B.4; the card says so). Command `airlift {buildingId, tile, percentBp}`: the send share
+of your home troops, capped at **10% of your troop capacity**, flies as 4 transports (2
+tiles/tick) to any land of a living ally or teammate within **250 km**; the Airport then
+cools down **30 s** (mission slot 0). On arrival the friend takes what fits under their
+capacity, the rest flies back as a `return` flight to the owner's home troops (also all of
+it if the friend died or stopped being a friend). Event `airliftDelivered`. Switch
+`rules.flights.enabled` (headless `--no-flights`). **Nations:** airlift to a teammate or
+human ally losing a war (more troops attacking them than they have at home) that they
+don't border, when their Airport is ready and the friend is in range — the same gift rule
+as over a border; they build an Airport (one) only while such a friend is in need **and
+within reach** of their land. The first version valued an Airport for any distant friend:
+3–7 Airports per team game, 0.2 airlifts, games 6.1 → 9.2 min median; the debug trace
+showed the friends in need were out of range. Now: Twin-lands teams 0.3 Airports/game,
+median 6.0 min (6.1 without flights); Continent teams 0.4, median 5.1 (5.4); no rejected
+commands (headless now records rejection reasons). Airlifts by nations stay rare (0.1 per
+game) — teammates mostly border each other or are far apart; the Airport is mainly a human
+tool. **Regression:** the 18 seed-by-seed games with flights off are identical to 2B.0b
+every tick; with flights on, free-for-all games are identical too (nations only build
+Airports for teammates/human allies) and team games differ (`tools/hashDigest.mjs` now
+takes rule overrides). **Client:** Airport in the build bar (painted art), the Airport card
+with **"✈ Airlift troops — up to N"** (or "ready in N s"), then aiming: the Airport's range
+ring, a green line, landing ring and "✈ 2.03K · 10 s" over a friend's land in range, red
+with the reason elsewhere; click sends (the send % sets the share), right-click/Esc cancels;
+toasts for the sender ("Airlift landed: … joined X", overflow flying back), the receiver
+("X is airlifting … to you", "X's airlift landed: +…"); a friend's airlift to you is drawn
+like your own flights; flights carrying troops show the troops. **Art:** the user's second
+sheet (`openborder_icon_pack_final/sheets/`) → 16 more sprites (`sam-1..3`, `wall-1..3`,
+`silo-1..3`, `missile-1..3`, `cruiseMissile`, `airToAirMissile`, `airToGroundMissile`,
+`icbm`); transparent background, so each is cut out by its box and the same caption
+cleanup runs (first pack byte-identical). Walls now use their art in the build bar and wall
+cards; SAM/Silo/missile art waits for 2B.2/2B.5. Browser (own tab, Teams on Islands): gold
+gifted by teammates (`sendAs`), Airport placed from the build bar, built, card, aimed (ring,
+line, ETA), sent 2.03K to a teammate 185 km away, plane flew and landed, both toasts, card
+cooldown "ready in 20 s", clean console. Tests: 376 (7 new airlift tests, sprites).
 
 **Dependency map** (what must exist first):
 
