@@ -24,7 +24,14 @@ import { DEFAULT_ATTACK_PERCENT } from "./attackPercent.ts";
 import type { HintId } from "./hints.ts";
 import type { PreviewContext } from "./preview.ts";
 import type { Difficulty } from "../../sim/rules.ts";
-import { DEFAULT_DIFFICULTY, DEFAULT_NATIONS, DEFAULT_TRIBES, type MapSize } from "./setup.ts";
+import {
+  CLASSIC_MAP_SEED,
+  DEFAULT_DIFFICULTY,
+  DEFAULT_NATIONS,
+  DEFAULT_TRIBES,
+  type MapSize,
+  type MapStyle,
+} from "./setup.ts";
 import { DEFAULT_TEAMS, type GameMode } from "./teams.ts";
 import type { Toast } from "./toasts.ts";
 
@@ -70,6 +77,11 @@ class UiState {
   tribes = $state(DEFAULT_TRIBES);
   difficulty = $state<Difficulty>(DEFAULT_DIFFICULTY);
   mapSize = $state<MapSize>("normal");
+  /** Map type and which map (2.8): the classic map until 🎲 rolls another. */
+  mapStyle = $state<MapStyle>("continent");
+  mapSeed = $state(CLASSIC_MAP_SEED);
+  /** A new map is being generated (the start screen waits to offer Play). */
+  mapLoading = $state(false);
   /** Free-for-all or teams, and how many teams (GAME_DESIGN.md §3.15). */
   mode = $state<GameMode>("ffa");
   teams = $state(DEFAULT_TEAMS);

@@ -3,9 +3,12 @@
     clampLobby,
     landPerPlayer,
     MAP_SIZES,
+    MAP_STYLE_LABELS,
+    MAP_STYLES,
     MAX_NATIONS,
     MAX_OPPONENTS,
     TRIBE_PRESETS,
+    type MapChoice,
     type MapSize,
   } from "../../app/setup.ts";
   import { clampTeams, describeSplit, maxTeams, type GameMode } from "../../app/teams.ts";
@@ -14,14 +17,21 @@
 
   interface Props {
     onPlay: () => void;
-    onSelectMap: (size: MapSize) => void;
+    onSelectMap: (choice: MapChoice) => void;
   }
 
   let { onPlay, onSelectMap }: Props = $props();
   let starting = $state(false);
   const opponents = $derived(ui.nations + ui.tribes);
   const perPlayer = $derived(landPerPlayer(ui.landTiles, opponents));
-  const crowded = $derived(ui.mapSize === "normal" && opponents >= 50);
+  /** A bigger map would give this lobby more room (Normal from 50 opponents, Large from 100). */
+  const roomier = $derived(
+    ui.mapSize === "normal" && opponents >= 50
+      ? "Large"
+      : ui.mapSize === "large" && opponents >= 100
+        ? "Huge"
+        : null,
+  );
 
   const teamGame = $derived(ui.mode === "teams");
 
@@ -139,22 +149,43 @@
   <div class="row">
     <span id="map-label">Map</span>
     <div class="segmented" role="group" aria-labelledby="map-label">
-      {#each Object.entries(MAP_SIZES) as [size, info] (size)}
+      {#each MAP_STYLES as style (style)}
         <button
           type="button"
-          aria-pressed={ui.mapSize === size}
-          onclick={() => onSelectMap(size as MapSize)}>{info.label}</button
+          aria-pressed={ui.mapStyle === style}
+          onclick={() => onSelectMap({ style })}>{MAP_STYLE_LABELS[style]}</button
         >
       {/each}
     </div>
   </div>
-  <p class="info" class:warn={crowded}>
-    {opponents} opponents · ≈ {perPlayer.toLocaleString("en-US")} tiles of land each{#if crowded}&nbsp;·
-      a Large map gives big lobbies more room{/if}
+  <div class="row">
+    <span id="size-label">Size</span>
+    <div class="segmented" role="group" aria-labelledby="size-label">
+      {#each Object.entries(MAP_SIZES) as [size, info] (size)}
+        <button
+          type="button"
+          aria-pressed={ui.mapSize === size}
+          onclick={() => onSelectMap({ size: size as MapSize })}>{info.label}</button
+        >
+      {/each}
+    </div>
+  </div>
+  <div class="row seed">
+    <span>Map #{ui.mapSeed}</span>
+    <button
+      type="button"
+      class="reroll"
+      title="Generate a different map of this type"
+      onclick={() => onSelectMap({ newSeed: true })}>🎲 New map</button
+    >
+  </div>
+  <p class="info" class:warn={roomier !== null}>
+    {opponents} opponents · ≈ {perPlayer.toLocaleString("en-US")} tiles of land each{#if roomier}&nbsp;·
+      a {roomier} map gives big lobbies more room{/if}
   </p>
 
-  <button type="button" class="play" onclick={play} disabled={starting}>
-    {starting ? "Starting…" : "Play"}
+  <button type="button" class="play" onclick={play} disabled={starting || ui.mapLoading}>
+    {starting ? "Starting…" : ui.mapLoading ? "Generating map…" : "Play"}
   </button>
   <p class="note">Phase 2 prototype</p>
 </section>
@@ -224,6 +255,25 @@
     background: rgb(255 255 255 / 0.16);
     color: var(--text-primary);
     font-weight: 600;
+  }
+
+  .seed span {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .reroll {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--surface-hairline);
+    border-radius: var(--radius-control, 8px);
+    background: transparent;
+    color: var(--text-primary, inherit);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .reroll:hover {
+    background: var(--surface-hover, rgba(255, 255, 255, 0.06));
   }
 
   .presets {

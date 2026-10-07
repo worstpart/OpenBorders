@@ -3,11 +3,12 @@
  * animation-frame loop. Rules live in the simulation; this file only translates.
  */
 import { LocalHost } from "../../host/localHost.ts";
+import { generateMapOffThread } from "../../host/mapGeneration.ts";
+import { WorkerHost } from "../../host/workerHost.ts";
 import type { FrameTiming } from "../../host/host.ts";
 import type { Command } from "../../sim/commands.ts";
 import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
-import { generateContinent } from "../../sim/map/generate.ts";
 import { coastTiles, landmassesOf, seasOf } from "../../sim/systems/naval.ts";
 import { BoatLayer } from "../render/boats.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
@@ -48,7 +49,7 @@ import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, pickNationNames, playerColors, teamPlayerColors } from "./players.ts";
 import { protectionSecondsLeft } from "./preview.ts";
-import { MAP_SIZES, type MapSize } from "./setup.ts";
+import { MAP_SIZES, type MapSize, type MapStyle } from "./setup.ts";
 import {
   addToast,
   BIG_LOBBY_PLAYERS,
@@ -60,7 +61,6 @@ import { dealTeam, teamName, teamsKnockedOut, type GameMode } from "./teams.ts";
 import { ui } from "./uiState.svelte.ts";
 
 /** One fixed procedural continent, in two sizes (setup.ts). */
-export const MAP_SEED = 2;
 const LOCAL_PLAYER_ID = 1;
 /** Label positions are recomputed at most this often while territory changes. */
 const LABEL_REFRESH_MS = 250;
@@ -113,7 +113,8 @@ export class GameClient {
   private readonly mapCanvas: HTMLCanvasElement;
 
   private map: GameMap | null = null;
-  private host: LocalHost | null = null;
+  /** The simulation: in a Web Worker (2.8), or on this thread where workers are missing. */
+  private host: LocalHost | WorkerHost | null = null;
   /** Client-side copy of tile ownership, updated from tick frames. */
   private owner = new Uint16Array(0);
   private placements = new Map<number, LabelPlacement>();
@@ -128,6 +129,9 @@ export class GameClient {
   private baseFlags: Uint8Array = new Uint8Array(1);
   private lootEffects: LootEffect[] = [];
   private tradeEffects: TradeEffect[] = [];
+  /** Which map is loaded, and the latest load asked for (older results are dropped). */
+  private mapKey = "";
+  private mapRequest = 0;
 
   constructor(elements: ClientElements) {
     this.mapCanvas = elements.mapCanvas;
@@ -151,14 +155,21 @@ export class GameClient {
     requestAnimationFrame((time) => this.animationFrame(time));
   }
 
-  /** Generates the map of the chosen size and shows it behind the start screen. */
-  loadMap(size: MapSize): void {
-    const { width, height } = MAP_SIZES[size];
+  /**
+   * Generates the chosen map (off the main thread: a Huge map takes seconds) and shows it
+   * behind the start screen. A newer choice made meanwhile wins.
+   */
+  async loadMap(choice: { size: MapSize; style: MapStyle; seed: number }): Promise<void> {
+    const { width, height } = MAP_SIZES[choice.size];
+    const key = `${choice.style}:${choice.seed}:${width}x${height}`;
+    const request = ++this.mapRequest;
     const map =
-      this.map?.width === width && this.map.height === height
+      this.map && this.mapKey === key
         ? this.map
-        : generateContinent({ seed: MAP_SEED, width, height });
+        : await generateMapOffThread({ seed: choice.seed, width, height, style: choice.style });
+    if (request !== this.mapRequest) return;
     this.map = map;
+    this.mapKey = key;
     // The sea data boats need, computed now rather than at the first boat (a short hitch).
     seasOf(map);
     coastTiles(map);
@@ -172,6 +183,7 @@ export class GameClient {
     this.camera.setMap(map.width, map.height);
     this.placements.clear();
     ui.landTiles = map.landTiles;
+    ui.mapLoading = false;
     ui.screen = "start";
   }
 
@@ -212,7 +224,10 @@ export class GameClient {
       teams > 0
         ? teamPlayerColors(players.map((p, k) => ({ tier: tiers[k]!, team: p.team ?? 0 })))
         : playerColors(tiers);
-    const host = new LocalHost({ localPlayerId: LOCAL_PLAYER_ID });
+    const host =
+      typeof Worker === "undefined"
+        ? new LocalHost({ localPlayerId: LOCAL_PLAYER_ID })
+        : new WorkerHost({ localPlayerId: LOCAL_PLAYER_ID, onError: (m) => this.onSimError(m) });
     this.host = host;
     host.onFrame((frame, timing) => this.onFrame(frame, timing));
     const initial = await host.start({ seed: Math.floor(random() * 2 ** 32), map, players });
@@ -268,6 +283,12 @@ export class GameClient {
         this.camera.zoomAt(factor, { x: size.x / 2, y: size.y / 2 });
       },
     };
+  }
+
+  /** The simulation worker failed mid-game: show it like any fatal error. */
+  private onSimError(message: string): void {
+    console.error(message);
+    ui.fatalError = message.split("\n")[0] ?? message;
   }
 
   /** Asks `target` for an alliance (or accepts their request). */

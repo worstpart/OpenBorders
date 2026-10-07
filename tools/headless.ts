@@ -3,7 +3,8 @@
  *
  *   node tools/headless.ts [--games 20] [--bots 8] [--tribes 0] [--difficulty hard]
  *                          [--seed 1] [--map-seed 2]
- *                          [--width 1100 --height 700] [--max-minutes 60]
+ *                          [--width 1100 --height 700 | --size normal|large|huge]
+ *                          [--style continent|archipelago|twin] [--max-minutes 60]
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
  *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
@@ -29,8 +30,10 @@
  * game reports builds, upgrades, gold spent on them, captures, and when the first level
  * I / II / III building was finished.
  *
- * --no-trade turns trade ships off (GAME_DESIGN §3.19); --no-boats turns boats off (§3.18) and --continent plays on the single-
- * continent map of milestones 1.1–2.6 (no islands, D-025): together they reproduce 2.6.
+ * --no-trade turns trade ships off (GAME_DESIGN §3.19); --no-boats turns boats off (§3.18)
+ * and --continent plays on the single-continent map of milestones 1.1–2.6 (no islands,
+ * D-025): together they reproduce 2.6. --style picks a map type (2.8: continent,
+ * archipelago, twin) and --size a start-screen size (sets --width/--height).
  * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
@@ -41,7 +44,14 @@ import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import type { GameMap } from "../src/sim/map/gameMap.ts";
-import { generateContinent } from "../src/sim/map/generate.ts";
+import {
+  generateContinent,
+  generateMap,
+  MAP_DIMENSIONS,
+  MAP_STYLES,
+  type MapSize,
+  type MapStyle,
+} from "../src/sim/map/generate.ts";
 import {
   DIFFICULTIES,
   PERSONALITIES,
@@ -69,6 +79,8 @@ interface Options {
   teams: number;
   /** The single-continent map of 1.1–2.6 (no islands). */
   continent: boolean;
+  /** Map type (2.8). */
+  style: MapStyle;
 }
 
 export interface GameReport {
@@ -197,6 +209,8 @@ async function main(): Promise<void> {
       "no-boats": { type: "boolean", default: false },
       "no-trade": { type: "boolean", default: false },
       continent: { type: "boolean", default: false },
+      style: { type: "string", default: "continent" },
+      size: { type: "string" },
     },
   });
   const loaded = loadRules(args.rules);
@@ -219,8 +233,9 @@ async function main(): Promise<void> {
     difficulty: parseDifficulty(args.difficulty!),
     firstSeed: Number(args.seed),
     mapSeed: Number(args["map-seed"]),
-    width: Number(args.width),
-    height: Number(args.height),
+    width: args.size ? sizeOf(args.size)[0] : Number(args.width),
+    height: args.size ? sizeOf(args.size)[1] : Number(args.height),
+    style: parseStyle(args.style!),
     maxTicks: Number(args["max-minutes"]) * 60 * TICKS_PER_SECOND,
     rules: args["no-alliances"]
       ? { ...rules, diplomacy: { ...rules.diplomacy, enabled: false } }
@@ -262,12 +277,19 @@ async function main(): Promise<void> {
 }
 
 function runWorker({ options, seeds }: { options: Options; seeds: number[] }): void {
-  const map = generateContinent({
-    seed: options.mapSeed,
-    width: options.width,
-    height: options.height,
-    islands: !options.continent,
-  });
+  const map = options.continent
+    ? generateContinent({
+        seed: options.mapSeed,
+        width: options.width,
+        height: options.height,
+        islands: false,
+      })
+    : generateMap({
+        seed: options.mapSeed,
+        width: options.width,
+        height: options.height,
+        style: options.style,
+      });
   for (const seed of seeds) parentPort!.postMessage(playOne(map, options, seed));
 }
 
@@ -594,7 +616,7 @@ function summarize(
     tribes: options.tribes,
     teams: options.teams,
     difficulty: options.difficulty,
-    map: `${options.width}x${options.height} seed ${options.mapSeed}${options.continent ? " continent" : ""}`,
+    map: `${options.width}x${options.height} seed ${options.mapSeed} ${options.continent ? "continent (no islands)" : options.style}`,
     finishedWithWinner: finished.length,
     errors: reports.filter((r) => r.error).length,
     timeouts: reports.filter((r) => r.reason === "timeout").length,
@@ -730,4 +752,18 @@ function parsePersonality(value: string | undefined): Personality | undefined {
 function round(value: number, digits = 1): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
+}
+
+/** Start-screen map sizes (sim/map/generate.ts MAP_DIMENSIONS). */
+function sizeOf(name: string): [number, number] {
+  const size = MAP_DIMENSIONS[name as MapSize];
+  if (!size) throw new Error(`unknown --size ${name} (normal, large, huge)`);
+  return [size.width, size.height];
+}
+
+function parseStyle(value: string): MapStyle {
+  if (!(MAP_STYLES as readonly string[]).includes(value)) {
+    throw new Error(`unknown --style ${value} (${MAP_STYLES.join(", ")})`);
+  }
+  return value as MapStyle;
 }

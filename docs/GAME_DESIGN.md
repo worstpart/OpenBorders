@@ -77,6 +77,16 @@ All numbers live in one rules config (`GameRules`) — none are hard-coded in sy
   coast; islets under 400 tiles are sunk. On the reference map: a continent of ~320k tiles
   and islands of ~1k–45k. `islands: false` still makes the old single continent exactly
   (regression runs).
+- **Map types, sizes and a new map each game (milestone 2.8).** The start screen picks a
+  type — **Continent** (the map above), **Islands** (an archipelago: the map cut into cells a
+  third of its height wide, most holding an island, ~38% land, 11–15 islands of 13k–60k
+  tiles on Normal) or **Two lands** (two continents of similar size across open sea, ~48%
+  land, a few islets) — and a size: **Normal** 1100×700, **Large** 1560×990 (~2×), **Huge**
+  2200×1400 (~4×, for 100+ players). "Map #N" names the map; **🎲 New map** rolls another
+  seed (the classic map is #2). Landmasses on the two new types are kept apart by straits
+  (14 tiles between islands, 22 between continents) cut wherever land of two centres meets,
+  along a wandering line, so boats and trade always have water to cross. Maps are generated
+  in a worker (Huge takes ~2.5 s) while the start screen says "Generating map…".
 - Tiles are 4-connected (N/S/W/E) for ownership and combat.
 - Terrain classes: **Plains** (fast, cheap), **Highland** (slower, costlier),
   **Mountain** (slowest, costliest), **Water** (impassable in Phase 1).

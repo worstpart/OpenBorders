@@ -1,14 +1,14 @@
 <script lang="ts" module>
   /** What the UI may ask the game to do (it never changes game state itself). */
   import type { HintId } from "../app/hints.ts";
-  import type { MapSize } from "../app/setup.ts";
+  import type { MapChoice } from "../app/setup.ts";
   import type { Placeable } from "../app/buildings.ts";
 
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
     play: () => void;
-    /** Generate the map of this size (shows the loading screen meanwhile). */
-    selectMap: (size: MapSize) => void;
+    /** Change the map's size or type, or roll a new one (shows the loading screen meanwhile). */
+    selectMap: (choice: MapChoice) => void;
     confirmSpawn: () => void;
     retreat: (attackId: number) => void;
     /** Retreat every attack on this player (0 = stop expanding). */

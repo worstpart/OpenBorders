@@ -49,6 +49,7 @@ import {
 } from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isCoast, isLand, tileAt, Terrain } from "../map/gameMap.ts";
+import { REFERENCE_MAP_HEIGHT, REFERENCE_MAP_WIDTH } from "../map/generate.ts";
 import { mix32 } from "../math/hash.ts";
 import { terrainValue, type DifficultyRules, type PersonalityRules } from "../rules.ts";
 import {
@@ -362,6 +363,16 @@ function boatsAtSea(world: World, bot: Player): { settling: number; striking: nu
 }
 
 /**
+ * How far a nation looks across the sea (2.8): `seaReach` on the reference map, growing with
+ * the map's linear size on bigger ones (Large ×1.4, Huge ×2), so a big nation's centre isn't
+ * already out of reach of its own coast.
+ */
+function seaReach(world: World): number {
+  const scale = Math.sqrt(world.map.terrain.length / (REFERENCE_MAP_WIDTH * REFERENCE_MAP_HEIGHT));
+  return world.rules.ai.seaReach * Math.max(1, scale);
+}
+
+/**
  * A boat to the nearest unclaimed coast across the bot's seas (GAME_DESIGN.md §3.18), when no
  * open land touches its own and no settling boat is already out. Null if there is none
  * within `seaReach`.
@@ -377,7 +388,7 @@ function seaExpansion(
   const { map } = world;
   const { body } = seasOf(map);
   const center = tileAt(map, Math.round(around.centerX), Math.round(around.centerY));
-  const reach = world.rules.ai.seaReach;
+  const reach = seaReach(world);
   let best = -1;
   let bestDistance = reach * reach;
   for (const tile of coastTiles(map)) {
@@ -444,7 +455,8 @@ function chooseSeaTarget(
     if (score <= bestScore) continue;
     // Their coast nearest us, on one of our seas.
     let landing = -1;
-    let nearest = ai.seaReach * ai.seaReach;
+    const reach = seaReach(world);
+    let nearest = reach * reach;
     for (const tile of target.border) {
       const d = distanceSq(map, tile, center);
       if (d >= nearest || !isCoast(map, tile) || !touchesSea(map, body, tile, around.seas))

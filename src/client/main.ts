@@ -1,5 +1,6 @@
 import { mount } from "svelte";
 import { GameClient } from "./app/client.ts";
+import { rollMapSeed } from "./app/setup.ts";
 import { ui } from "./app/uiState.svelte.ts";
 import App from "./ui/App.svelte";
 import "./ui/tokens.css";
@@ -45,9 +46,15 @@ mount(App, {
             teams: ui.teams,
           })
           .catch(reportFatal),
-      selectMap: (size) => {
-        if (size === ui.mapSize) return;
-        ui.mapSize = size;
+      selectMap: (choice) => {
+        if (!choice.newSeed && (choice.size ?? ui.mapSize) === ui.mapSize) {
+          if ((choice.style ?? ui.mapStyle) === ui.mapStyle) return;
+        }
+        if (choice.size) ui.mapSize = choice.size;
+        if (choice.style) ui.mapStyle = choice.style;
+        if (choice.newSeed) {
+          ui.mapSeed = rollMapSeed(() => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32);
+        }
         loadMap();
       },
       confirmSpawn: () => client?.confirmSpawn(),
@@ -78,18 +85,12 @@ mount(App, {
   },
 });
 
-/** Generating a map blocks for 0.5–1 s, so the loading screen paints first. */
+/** Maps are generated in a worker (0.5–2.5 s); the loading screen shows meanwhile. */
 function loadMap(): void {
-  ui.screen = "loading";
-  requestAnimationFrame(() =>
-    setTimeout(() => {
-      try {
-        client?.loadMap(ui.mapSize);
-      } catch (error) {
-        reportFatal(error);
-      }
-    }, 0),
-  );
+  // The first map shows the loading screen; later ones keep the start screen up.
+  if (ui.screen !== "start") ui.screen = "loading";
+  ui.mapLoading = true;
+  client?.loadMap({ size: ui.mapSize, style: ui.mapStyle, seed: ui.mapSeed }).catch(reportFatal);
 }
 
 loadMap();

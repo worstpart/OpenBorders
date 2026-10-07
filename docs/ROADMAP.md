@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, more maps | 🟡 2.0–2.7 ✅ · 2.8 in progress |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps | 🟡 2.0–2.8 ✅ · next 2.9 |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -161,7 +161,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.5 ✅ | **Building framework + Housing & Factory (levels I–III)** — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
 | 2.6 ✅ | **Border Defense I–III → drawn walls** (D-024; first built as posts fortifying the border, D-022, replaced at the user's request the same day) — originally: fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
 | 2.7 ✅ | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
-| 2.8 | **Trade ships + more maps** *(was 2.7)* — **trade ships** between players' Ports (the user's request at the 2.8 start, D-026, GAME_DESIGN §3.19); bigger and more varied generated maps for big lobbies; `WorkerHost`; re-check building spacing and range values on bigger maps. *Real-world maps parked (D-026, see "Parked" below)* | Trade ships pay both sides and show on the map; big maps run within budget |
+| 2.8 ✅ | **Trade ships + more maps** *(was 2.7)* — **trade ships** between players' Ports (the user's request at the 2.8 start, D-026, GAME_DESIGN §3.19); bigger and more varied generated maps for big lobbies; `WorkerHost`; re-check building spacing and range values on bigger maps. *Real-world maps parked (D-026, see "Parked" below)* | Trade ships pay both sides and show on the map; big maps run within budget |
 | 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B) | |
 | 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
 
@@ -416,6 +416,44 @@ faster (2.5 s → 1.7 s), Port card with the Naval Port upgrade; an enemy boat �
 an island by boat, built Ports and eliminated me with a 25.8K landing. Clean console.
 Found and fixed in the browser: neutral land on another island was offered as a land
 expansion; the attack chips hid behind the command bar; route search hitches.
+
+**Milestone 2.8 result (2026-10-06)** — trade ships and more maps (GAME_DESIGN §3.19 and
+§3.2, D-026). Asked at the start how boats feel: "sending ships to invade islands feels
+good" — and the user asked for OpenFront-style **trade ships** (built here) with warship
+piracy later (2B.6); real-world maps: **"no real maps yet"** (parked above, with their picks).
+Built: trade ships; map types **Continent / Islands / Two lands**, sizes **Normal / Large /
+Huge**, "Map #N" and 🎲 New map; maps generated in a worker; **`WorkerHost`** (the game's
+simulation in a Web Worker); sea routes guided by a coarse distance field (big maps); nations'
+sea reach grows with the map (Large ×1.4, Huge ×2).
+
+| Headless games | Median (longest) | 2.7 | Trade trips / gold per game (both sides) | Wins | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 8 nations, `--no-boats --continent` (100) | 7.7 min — identical to 2.6/2.7 | 7.7 | — | turtle 35 · exp 28 · agg 19 · opp 18 (=) | — |
+| 8 nations (100) | **8.5 min** (24.5) | 8.4 | 191 / 1.9M (~22% of all gold) | turtle 31 · exp 29 · opp 27 · agg 13 | 0.94 / 9.0 ms |
+| 10 nations + 100 tribes, Medium (50) | **12.7 min** (20.2) | 13.4 | 334 / 3.2M | turtle 19 · exp 16 · opp 10 · agg 5 | 1.04 / 7.0 ms |
+| 8 nations, **Islands** (50) | **20.5 min** (35.9) | — | 771 / 7.5M | opp 14 · turtle 13 · exp 12 · agg 11 | 0.57 / 6.6 ms |
+| 8 nations, **Two lands** (50) | **14.7 min** (24.0) | — | 485 / 5.0M | agg 17 · opp 12 · exp 11 · turtle 10 | 0.63 / 7.6 ms |
+| 15 nations + 110 tribes, **Large** (30) | **17.0 min** (25.1) | — | 799 / 8.5M | turtle 14 · exp 7 · opp 7 · agg 2 | 2.1 / 17 ms* |
+| 25 nations + 100 tribes, **Huge** (4, 2 at a time) | **25.2 min** (34.7) | — | — | — | **2.8 / 18 ms** |
+
+\* 7 games in parallel. No errors, no timeouts, every game has a winner (also 14 Huge games
+run 7 at a time: median 20.2 min). The worst ticks (80–130 ms) are each worker's first bot
+think (per-map sea data, built once) — in the browser that work happens at map load; a
+first-time trade route on Huge takes up to ~40 ms (then cached). Sea routes: a coarse
+block-distance estimate plus an exact same-sea check took Huge-map searches from median 9.9
+/ p95 162 / max 218 ms to 3.6 / 17.6 / 25 ms. **Islands games run long (20.5 min, every
+war is a landing)** — for 2.10 balance. Browser (own tab, port 5178): trade ships sail
+between nations' Ports (small hulls with a gold dot and a light rim — enlarged after the first
+look: they were specks on dark water); my Port's card "A trade ship every 20 s · Trades with
+7 other Ports · Your trade so far: 2.8K gold", Naval Port upgrade "Trade ships every 10 s";
+"+1.4K" floats up over my Port when trade pays; the start screen's Map / Size / Map #N / 🎲
+rows; Islands, Two lands and Huge maps generate while the card says "Generating map…" (the
+card used to vanish — fixed); a game runs from `simWorker.ts` at 10× with a clean console;
+Huge with 126 players at 4×: 165 fps, 1.5 ms CPU per frame, ticks 5.9 ms avg in the worker;
+a boat preview across 900 tiles of a Huge map ("lands in 86 s") with its route drawn.
+Range re-check: building spacing (8) and Port range (30) are about local density, so they
+stay; boat speed stays (crossings on Huge take longer — that is the map's size); the trade
+cap (6,000 at 560 tiles) keeps Huge routes from overpaying; nations' sea reach now scales.
 
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 

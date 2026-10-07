@@ -747,7 +747,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     teamAssistPreference: 2,
     teamFocusPreference: 1.5,
     maxTribeWars: 3,
-    // Boats (§3.18): ~30 s of sailing at most; a landing is worth 70% of a land war.
+    // Boats (§3.18): ~30 s of sailing at most on the reference map (bigger maps scale it,
+    // ai/bot.ts seaReach); a landing is worth 70% of a land war.
     seaReach: 300,
     seaPreference: 0.7,
     counterAbove: 1.1,

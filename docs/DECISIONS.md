@@ -483,8 +483,9 @@ nations, for when they come.
   `WorkerHost` and the range re-check.
 
 **Consequences.** Games with Ports have a second gold source (~20% of all gold in headless
-games); tribe lobbies run ~1.6 min longer (13.4 → 15.0 min median), within the accepted
-15–20 min target.
+games: ~190 trips per 8-nation game); game lengths stay about the same (8 nations 8.5 min
+median, 2.7: 8.4; 10 nations + 100 tribes 12.7 min, 2.7: 13.4 — one earlier run had 15.0,
+before the sea-route change; within the accepted 15–20 min target either way).
 
 **Alternatives.** Trade ships as their own milestone after 2.8 (rejected: the user wants
 Port income now and the code builds on 2.7's); keeping the flat harbour income on top

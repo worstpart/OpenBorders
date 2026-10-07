@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isMapEdge, Terrain, type GameMap } from "../../../src/sim/map/gameMap.ts";
-import { generateContinent } from "../../../src/sim/map/generate.ts";
+import { generateContinent, generateMap } from "../../../src/sim/map/generate.ts";
 import { Hasher } from "../../../src/sim/math/hash.ts";
 
 function hashMap(map: GameMap): number {
@@ -154,5 +154,42 @@ describe("procedural continent", () => {
       expect(landShareOf(Terrain.Highland)).toBeCloseTo(0.22, 2);
       expect(landShareOf(Terrain.Mountain)).toBeCloseTo(0.1, 2);
     });
+  });
+});
+
+describe("map types (milestone 2.8)", () => {
+  const spec = { seed: 5, width: 550, height: 350 };
+
+  it("continent is the 2.7 generator, unchanged", () => {
+    const map = generateMap({ ...spec, style: "continent" });
+    expect(hashMap(map)).toBe(hashMap(generateContinent(spec)));
+  });
+
+  it("are the same map for the same spec and differ by seed", () => {
+    for (const style of ["archipelago", "twin"] as const) {
+      const a = generateMap({ ...spec, style });
+      expect(hashMap(a)).toBe(hashMap(generateMap({ ...spec, style })));
+      expect(hashMap(a)).not.toBe(hashMap(generateMap({ ...spec, seed: 6, style })));
+    }
+  });
+
+  it("archipelago: many separate islands, none of them dominant", () => {
+    for (const seed of [2, 11, 23]) {
+      const masses = landmasses(
+        generateMap({ seed, width: 1100, height: 700, style: "archipelago" }),
+      );
+      const land = masses.reduce((a, b) => a + b, 0);
+      expect(masses.length).toBeGreaterThanOrEqual(8);
+      expect(masses[0]! / land).toBeLessThan(0.25);
+    }
+  });
+
+  it("twin: two continents of similar size across the sea", () => {
+    for (const seed of [2, 11, 23]) {
+      const masses = landmasses(generateMap({ seed, width: 1100, height: 700, style: "twin" }));
+      const land = masses.reduce((a, b) => a + b, 0);
+      expect(masses[0]! + masses[1]!).toBeGreaterThan(0.9 * land);
+      expect(masses[1]! / masses[0]!).toBeGreaterThan(0.7);
+    }
   });
 });

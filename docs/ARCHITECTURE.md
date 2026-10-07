@@ -370,11 +370,25 @@ interface SimHost {
 | Implementation | When | What it does |
 |---|---|---|
 | `LocalHost` | Phase 1 | Turn scheduler + simulation on the main thread (simplest to debug) |
-| `WorkerHost` | when profiling says so (likely Phase 2, larger maps) | Same, inside a Web Worker; frames posted as transferable typed arrays |
+| `WorkerHost` | ✅ milestone 2.8 (the game's host whenever workers exist) | A LocalHost inside a Web Worker (`host/simWorker.ts`); see below |
 | `NetworkHost` | Phase 3 | Commands go to the server; turns come back; local sim in a worker |
 
 Because the renderer and UI only ever consume `TickFrame`s, swapping hosts doesn't
 touch them.
+
+**WorkerHost as built (2.8).** The main thread keeps the map (rendering, HUD, boat
+previews — its derived sea data is cached against that object) and posts the worker a copy
+of its terrain and relief with the setup; the worker runs a realtime LocalHost (its own
+turn timer) and posts every frame. Frames are slimmed on the way (`workerProtocol.ts`,
+`FrameSlimmer`/`FrameRestorer`, round-trip tested): a boat's or trade ship's route goes
+once, with the first frame that has the ship; walls only when they changed; the four
+per-tick arrays are transferred, not copied. WorkerHost restores routes and walls and reuses
+an unchanged ship's snapshot, so listeners get the same frames a LocalHost would give.
+`paused`/`tickMs` are mirrored locally; `lastFrameTime` is the main thread's receive
+time (for interpolation). Worker errors surface as the fatal-error screen. Maps are
+generated in a short-lived worker too (`host/mapGeneration.ts`), falling back to the main
+thread where `Worker` is missing (as LocalHost is used then). Tests and the headless
+runner keep using LocalHost with a manual clock.
 
 ---
 
@@ -707,6 +721,14 @@ pass everything.
 | Memory | < 150 MB |
 
 Later stress target: 4096×2048 map, 100 players, tick < 20 ms (in a worker).
+
+**Milestone 2.8 (Huge map 2200×1400, 126 players, in a worker):** headless, 2 games at a
+time: tick 2.8 ms avg, p99 18 ms; the worst ticks are each game's one-time sea data (~80 ms,
+first bot think) and a first-time trade route (~40 ms, then cached). Browser at 4×: 165 fps,
+1.5 ms CPU per frame — the main thread no longer waits for ticks. Sea routes got a coarse
+guide for big maps (`naval.ts`: 8×8-tile blocks, a cached block-distance field per
+destination as the A* estimate, and an exact same-sea check first): on Huge, route searches
+went from median 9.9 / p95 162 / max 218 ms to 3.6 / 17.6 / 25 ms.
 
 **Milestone 2.0 (126 players), measured with the headless runner, game alone:** reference
 map tick 0.8–1.1 ms avg, p99 ≤ 4.2 ms — within budget. Large map (1560×990): 1.4–1.7 ms avg,

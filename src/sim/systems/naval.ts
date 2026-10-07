@@ -374,6 +374,88 @@ const DIAGONAL = 14;
 const HEURISTIC_WEIGHT = 2;
 
 /**
+ * The coarse sea (milestone 2.8, for big maps): the map in blocks of COARSE × COARSE tiles,
+ * a block open if any of its tiles is water. A breadth-first search over blocks from the
+ * destination gives every block its distance in blocks — a cheap, nearly exact estimate of
+ * the sea distance that steers the tile search around continents (on a Huge map long
+ * crossings went from up to ~400 ms to a few ms), and an instant "no route" when the
+ * destination's water can't be reached at all. Static, per map; not game state.
+ */
+const COARSE = 8;
+const COARSE_FIELDS_KEPT = 64;
+const UNREACHED = 0xffff;
+
+interface CoarseSea {
+  readonly cols: number;
+  readonly rows: number;
+  readonly open: Uint8Array;
+  /** Distance fields by destination block, most recently used last. */
+  readonly fields: Map<number, Uint16Array>;
+  readonly queue: Int32Array;
+}
+
+const coarseCache = new WeakMap<GameMap, CoarseSea>();
+
+function coarseSea(map: GameMap): CoarseSea {
+  let sea = coarseCache.get(map);
+  if (sea) return sea;
+  const cols = Math.ceil(map.width / COARSE);
+  const rows = Math.ceil(map.height / COARSE);
+  const open = new Uint8Array(cols * rows);
+  for (let tile = 0; tile < map.terrain.length; tile++) {
+    if (map.terrain[tile] !== Terrain.Water) continue;
+    const x = tile % map.width;
+    const y = (tile - x) / map.width;
+    open[((y / COARSE) | 0) * cols + ((x / COARSE) | 0)] = 1;
+  }
+  sea = { cols, rows, open, fields: new Map(), queue: new Int32Array(cols * rows) };
+  coarseCache.set(map, sea);
+  return sea;
+}
+
+/** Block distances (8-connected, in blocks) to the block of `tile`. */
+function coarseField(map: GameMap, sea: CoarseSea, tile: number): Uint16Array {
+  const x = tile % map.width;
+  const target = (((tile - x) / map.width / COARSE) | 0) * sea.cols + ((x / COARSE) | 0);
+  let field = sea.fields.get(target);
+  if (field) {
+    sea.fields.delete(target); // most recently used goes last
+    sea.fields.set(target, field);
+    return field;
+  }
+  const { cols, rows, open, queue } = sea;
+  field = new Uint16Array(cols * rows).fill(UNREACHED);
+  field[target] = 0;
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = target;
+  while (head < tail) {
+    const cell = queue[head++]!;
+    const cx = cell % cols;
+    const cy = (cell - cx) / cols;
+    const next = field[cell]! + 1;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ny = cy + dy;
+      if (ny < 0 || ny >= rows) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = cx + dx;
+        if ((dx === 0 && dy === 0) || nx < 0 || nx >= cols) continue;
+        const n = ny * cols + nx;
+        if (open[n] && field[n] === UNREACHED) {
+          field[n] = next;
+          queue[tail++] = n;
+        }
+      }
+    }
+  }
+  sea.fields.set(target, field);
+  if (sea.fields.size > COARSE_FIELDS_KEPT) {
+    sea.fields.delete(sea.fields.keys().next().value!);
+  }
+  return field;
+}
+
+/**
  * A near-shortest sea route (weighted A*, integer costs: 10 straight, 14 diagonal) from the water next
  * to coast tile `from` to the water next to coast tile `to`; null if there is none or the
  * search visits more than `maxNodes` sea tiles. Deterministic: ties pop in insertion order.
@@ -388,21 +470,35 @@ export function seaRoute(
   const scratch = routeScratch(map);
   const { cost, parent, seen } = scratch;
   const stamp = scratch.stamp; // seen = stamp: reached; seen = -stamp: done
+  // Different seas (e.g. the ocean and a lake): no route, and no need to search for one.
+  // Moves never cut a corner of land, so the 4-connected seas are exactly what's reachable.
+  const { body } = seasOf(map);
+  const toSeas = seasAt(map, body, to);
+  if (!seasAt(map, body, from).some((id) => toSeas.includes(id))) return null;
   const tx = to % width;
   const ty = Math.floor(to / width);
+  const sea = coarseSea(map);
+  const field = coarseField(map, sea, to);
+  const blocksAway = (tile: number) => {
+    const x = tile % width;
+    return field[(((tile - x) / width / COARSE) | 0) * sea.cols + ((x / COARSE) | 0)]!;
+  };
   const estimate = (tile: number) => {
     const dx = Math.abs((tile % width) - tx);
     const dy = Math.abs(Math.floor(tile / width) - ty);
-    // Octile distance to the landing tile, minus the last step onto it, weighted.
-    return (
-      HEURISTIC_WEIGHT *
-      Math.max(0, STRAIGHT * Math.max(dx, dy) + (DIAGONAL - STRAIGHT) * Math.min(dx, dy) - STRAIGHT)
-    );
+    // Octile distance to the landing tile, minus the last step onto it — or, when the sea
+    // goes around land, the coarse sea distance (each block crossed is ≥ COARSE tiles).
+    const octile =
+      STRAIGHT * Math.max(dx, dy) + (DIAGONAL - STRAIGHT) * Math.min(dx, dy) - STRAIGHT;
+    const around = (blocksAway(tile) - 1) * COARSE * STRAIGHT;
+    return HEURISTIC_WEIGHT * Math.max(0, octile, around);
   };
   const water = (tile: number) => terrain[tile] === Terrain.Water;
   const open = new TileQueue();
   const reach = (tile: number, g: number, from: number) => {
     if ((seen[tile] === stamp && cost[tile]! <= g) || seen[tile] === -stamp) return;
+    // Water whose block can't reach the destination's is never on a route.
+    if (blocksAway(tile) === UNREACHED) return;
     seen[tile] = stamp;
     cost[tile] = g;
     parent[tile] = from;

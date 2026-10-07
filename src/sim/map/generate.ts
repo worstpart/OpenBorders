@@ -144,6 +144,222 @@ export function generateContinent(options: ContinentOptions): GameMap {
   fillSmallLakes(land, width, height, minLakeTiles);
 
   // 4. Classify land by a mix of height above the sea and ridged noise.
+  return classifyTerrain(
+    width,
+    height,
+    land,
+    elevation,
+    seaLevel,
+    ridgeSeed,
+    mountainShare,
+    highlandShare,
+  );
+}
+
+/**
+ * Map types on the start screen (milestone 2.8, GAME_DESIGN §3.2): the continent of
+ * milestones 1.1–2.7, an archipelago of many islands, or two continents across a strait.
+ */
+export const MAP_STYLES = ["continent", "archipelago", "twin"] as const;
+export type MapStyle = (typeof MAP_STYLES)[number];
+
+/**
+ * Map sizes on the start screen. Large has ~2× the reference map's tiles, Huge ~4× (for
+ * lobbies of 100+ players, milestone 2.8).
+ */
+export const MAP_SIZE_NAMES = ["normal", "large", "huge"] as const;
+export type MapSize = (typeof MAP_SIZE_NAMES)[number];
+export const MAP_DIMENSIONS: Readonly<Record<MapSize, { width: number; height: number }>> = {
+  normal: { width: REFERENCE_MAP_WIDTH, height: REFERENCE_MAP_HEIGHT },
+  large: { width: 1560, height: 990 },
+  huge: { width: 2200, height: 1400 },
+};
+
+export interface MapSpec {
+  readonly seed: number;
+  readonly width: number;
+  readonly height: number;
+  readonly style: MapStyle;
+}
+
+/** The map for a start-screen choice (the same spec makes the same map everywhere). */
+export function generateMap(spec: MapSpec): GameMap {
+  if (spec.style === "continent") {
+    return generateContinent({ seed: spec.seed, width: spec.width, height: spec.height });
+  }
+  return generateLandmasses(spec);
+}
+
+// Archipelago: the map is cut into cells about a third of its height wide; most cells hold
+// an island centre (jittered), a few stay open sea.
+const ARCHIPELAGO_LAND_SHARE = 0.38;
+const ARCHIPELAGO_OPEN_SEA = 0.25;
+// Straits wander: the "which centre" boundary is pushed around by noise of this many tiles.
+const SEAM_WIGGLE_TILES = 45;
+const SEAM_SCALE = 1 / 70;
+const ARCHIPELAGO_STRAIT_TILES = 14;
+// Two continents: their land share, and the strait kept open between landmasses.
+const TWIN_LAND_SHARE = 0.48;
+const TWIN_STRAIT_TILES = 22;
+
+/** An elliptical landmass centre: position and radii in tiles. */
+interface Centre {
+  readonly x: number;
+  readonly y: number;
+  readonly rx: number;
+  readonly ry: number;
+}
+
+/**
+ * Archipelagos and twin continents: the continent's noise and warp, but the falloff is
+ * measured to the nearest of several centres, so land gathers into separate masses.
+ */
+function generateLandmasses(spec: MapSpec): GameMap {
+  const { width, height, style } = spec;
+  const tileCount = width * height;
+  const rng = new Rng(spec.seed);
+  const shapeSeed = rng.nextUint32();
+  const warpSeedX = rng.nextUint32();
+  const warpSeedY = rng.nextUint32();
+  const ridgeSeed = rng.nextUint32();
+  const seamSeedX = rng.nextUint32();
+  const seamSeedY = rng.nextUint32();
+  const centres =
+    style === "twin" ? twinCentres(rng, width, height) : archipelago(rng, width, height);
+  const landShare = style === "twin" ? TWIN_LAND_SHARE : ARCHIPELAGO_LAND_SHARE;
+
+  const elevation = new Float64Array(tileCount);
+  // Which centre each tile belongs to (its nearest): where two meet, a strait is cut.
+  const nearest = new Uint16Array(tileCount);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const sx = x * FEATURE_SCALE;
+      const sy = y * FEATURE_SCALE;
+      const wx = sx + WARP_STRENGTH * fractalNoise(warpSeedX, sx, sy, 3);
+      const wy = sy + WARP_STRENGTH * fractalNoise(warpSeedY, sx, sy, 3);
+      const qx = x + SEAM_WIGGLE_TILES * fractalNoise(seamSeedX, x * SEAM_SCALE, y * SEAM_SCALE, 2);
+      const qy = y + SEAM_WIGGLE_TILES * fractalNoise(seamSeedY, x * SEAM_SCALE, y * SEAM_SCALE, 2);
+      let falloff = Infinity;
+      let closest = Infinity;
+      for (let k = 0; k < centres.length; k++) {
+        const c = centres[k]!;
+        const dx = (wx / FEATURE_SCALE - c.x) / c.rx;
+        const dy = (wy / FEATURE_SCALE - c.y) / c.ry;
+        falloff = Math.min(falloff, dx * dx + dy * dy);
+        const ex = (qx - c.x) / c.rx;
+        const ey = (qy - c.y) / c.ry;
+        if (ex * ex + ey * ey < closest) {
+          closest = ex * ex + ey * ey;
+          nearest[y * width + x] = k;
+        }
+      }
+      const edgeDistance = Math.min(x, y, width - 1 - x, height - 1 - y);
+      const edgeFade = Math.max(0, 1 - edgeDistance / EDGE_FADE_TILES);
+      const relief =
+        NOISE_AMPLITUDE * fractalNoise(shapeSeed, wx, wy, 6) -
+        EDGE_FADE_DEPTH * edgeFade * edgeFade;
+      elevation[y * width + x] = relief - FALLOFF * falloff;
+    }
+  }
+
+  const seaLevel = valueAt(sortedCopy(elevation), 1 - landShare);
+  const land = new Uint8Array(tileCount);
+  for (let y = EDGE_MARGIN; y < height - EDGE_MARGIN; y++) {
+    for (let x = EDGE_MARGIN; x < width - EDGE_MARGIN; x++) {
+      const i = y * width + x;
+      if (elevation[i]! > seaLevel) land[i] = 1;
+    }
+  }
+  // Straits: where land of two centres meets, the sea cuts through, so every landmass stays
+  // its own (boats cross; trade ships sail between them).
+  const seam = new Uint8Array(tileCount);
+  for (let i = 0; i < tileCount; i++) {
+    if (!land[i]) continue;
+    const x = i % width;
+    if (
+      (x < width - 1 && land[i + 1] && nearest[i + 1] !== nearest[i]) ||
+      (i + width < tileCount && land[i + width] && nearest[i + width] !== nearest[i])
+    ) {
+      seam[i] = 1;
+    }
+  }
+  const strait = style === "twin" ? TWIN_STRAIT_TILES : ARCHIPELAGO_STRAIT_TILES;
+  const cut = withinTiles(seam, width, height, Math.floor(strait / 2));
+  for (let i = 0; i < tileCount; i++) if (cut[i]) land[i] = 0;
+  sinkSmallComponents(land, width, height, 400);
+  fillSmallLakes(land, width, height, 80);
+  return classifyTerrain(width, height, land, elevation, seaLevel, ridgeSeed, 0.1, 0.22);
+}
+
+/** Island centres for an archipelago: one per grid cell (jittered), some cells left as sea. */
+function archipelago(rng: Rng, width: number, height: number): Centre[] {
+  const cell = height / 3;
+  const cols = Math.max(2, Math.round(width / cell));
+  const rows = 3;
+  const cw = width / cols;
+  const centres: Centre[] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (rng.nextFloat() < ARCHIPELAGO_OPEN_SEA) continue;
+      const r = cell * (0.28 + 0.14 * rng.nextFloat());
+      centres.push({
+        x: (col + 0.5 + 0.4 * (rng.nextFloat() - 0.5)) * cw,
+        y: (row + 0.5 + 0.4 * (rng.nextFloat() - 0.5)) * cell,
+        rx: r * (0.8 + 0.4 * rng.nextFloat()),
+        ry: r * (0.8 + 0.4 * rng.nextFloat()),
+      });
+    }
+  }
+  return centres;
+}
+
+/** Two big continents left and right, and 3–5 islands where there's room. */
+function twinCentres(rng: Rng, width: number, height: number): Centre[] {
+  const centres: Centre[] = [
+    {
+      x: width * (0.23 + 0.03 * rng.nextFloat()),
+      y: height * (0.45 + 0.1 * rng.nextFloat()),
+      rx: width * 0.19,
+      ry: height * 0.4,
+    },
+    {
+      x: width * (0.74 + 0.03 * rng.nextFloat()),
+      y: height * (0.45 + 0.1 * rng.nextFloat()),
+      rx: width * 0.19,
+      ry: height * 0.4,
+    },
+  ];
+  const wanted = 3 + rng.nextInt(3);
+  for (let attempt = 0; attempt < 100 && centres.length < 2 + wanted; attempt++) {
+    const x = width * (0.08 + 0.84 * rng.nextFloat());
+    const y = height * (0.08 + 0.84 * rng.nextFloat());
+    const r = height * (0.06 + 0.05 * rng.nextFloat());
+    // Islands sit in open water: outside both continents' ellipses (with a margin).
+    const clear = centres.every((c) => {
+      const dx = (x - c.x) / (c.rx + r * 2.5);
+      const dy = (y - c.y) / (c.ry + r * 2.5);
+      return dx * dx + dy * dy > 1;
+    });
+    if (clear) centres.push({ x, y, rx: r, ry: r });
+  }
+  return centres;
+}
+
+/**
+ * Step 4 of every generator: land becomes plains / highland / mountain by a mix of height
+ * above the sea and ridged noise (mountains form chains); relief for shading.
+ */
+function classifyTerrain(
+  width: number,
+  height: number,
+  land: Uint8Array,
+  elevation: Float64Array,
+  seaLevel: number,
+  ridgeSeed: number,
+  mountainShare: number,
+  highlandShare: number,
+): GameMap {
+  const tileCount = width * height;
   let maxElevation = seaLevel;
   let minElevation = seaLevel;
   for (let i = 0; i < tileCount; i++) {
