@@ -24,10 +24,20 @@
   );
   const perSecond = $derived(me ? (me.growthPerTick * 1000) / DEFAULT_RULES.tickMs : 0);
   const pct = (share: number) => `${(share * 100).toFixed(2)}%`;
+
+  // The attack chips sit just above this card, whose height grew with the gold and build
+  // rows: publish the real height instead of a fixed guess (they hid behind it).
+  let height = $state(0);
+  $effect(() => {
+    if (height > 0) {
+      document.documentElement.style.setProperty("--command-bar-height", `${height}px`);
+    }
+  });
 </script>
 
 {#if me?.alive && me.spawned && bar}
   <section
+    bind:clientHeight={height}
     class="bar-card"
     class:full={bar.state === "full"}
     style:--player-color={ui.colorOf(ui.localPlayerId)}

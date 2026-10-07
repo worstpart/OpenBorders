@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
+  import { ATTACK_PRESETS, troopsToSend } from "../../app/attackPercent.ts";
+  import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "../../app/boats.ts";
   import { allianceStatus, formatCountdown } from "../../app/diplomacy.ts";
   import { donationOptions } from "../../app/economy.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
@@ -10,6 +11,7 @@
 
   interface Props {
     onAttack: (tile: number, percent: number) => void;
+    onBoat: (tile: number, percent: number) => void;
     onRetreatFrom: (target: number) => void;
     onRequestAlliance: (target: number) => void;
     onRenewAlliance: (ally: number) => void;
@@ -20,6 +22,7 @@
 
   let {
     onAttack,
+    onBoat,
     onRetreatFrom,
     onRequestAlliance,
     onRenewAlliance,
@@ -48,8 +51,10 @@
   );
   /** Why no attack option is available, if none is. */
   const blocked = $derived(options[0]?.preview);
+  /** Land across the sea: a click (and these options) would send a boat, so offer only that. */
+  const overSea = $derived(menu ? needsBoat(ui.boatContext, menu.tile) : false);
   const canAct = $derived(
-    options.some((o) => o.preview.kind === "expand" || o.preview.kind === "attack"),
+    !overSea && options.some((o) => o.preview.kind === "expand" || o.preview.kind === "attack"),
   );
   const myAttacks = $derived(
     menu
@@ -59,6 +64,18 @@
       : [],
   );
   const alliance = $derived(menu ? allianceStatus(ui.diplomacyContext, menu.owner) : null);
+  /**
+   * A boat to this land (GAME_DESIGN.md §3.18), when one could go: not ours, not a friend's,
+   * and a coast of theirs near the click on a sea we touch. Planned once, when the menu opens.
+   */
+  const boat = $derived.by(() => {
+    if (!menu || isMe || ui.friends.has(menu.owner)) return null;
+    const me = ui.me;
+    if (!me) return null;
+    const preview = boatPreview({ ...ui.boatContext, me: { ...me, neighbors: [] } }, menu.tile);
+    return preview?.plan ? preview : null;
+  });
+  const boatTroops = $derived(ui.me ? troopsToSend(ui.me.homeTroops, ui.attackPercent) : 0);
   /** Gifts to an ally or teammate (GAME_DESIGN.md §3.16). */
   const gifts = $derived(
     owner && !isMe && DEFAULT_RULES.economy.enabled && ui.friends.has(owner.id)
@@ -149,7 +166,7 @@
           </button>
         {/if}
       {/each}
-    {:else if blocked && !isMe}
+    {:else if blocked && !isMe && !(overSea && boat)}
       <div class="info">
         {#if blocked.kind === "teammate"}
           Your teammate{#if owner?.team}&nbsp;· {teamName(owner.team)}{/if}. Teammates can't attack
@@ -157,7 +174,9 @@
         {:else if blocked.kind === "allied"}
           Allies can't attack each other.
         {:else if blocked.kind === "notReachable"}
-          You don't border {menu.owner === 0 ? "this land" : "them"} yet.
+          You don't border {menu.owner === 0 ? "this land" : "them"}{boat
+            ? " by land — send a boat"
+            : " yet"}.
         {:else if blocked.kind === "protected"}
           Spawn protection: {Math.ceil(blocked.seconds)} s.
         {:else if blocked.kind === "noTroops"}
@@ -171,6 +190,25 @@
         {formatTroops(ui.me?.homeTroops ?? 0)} troops at home defend it. Click neutral or enemy land to
         act.
       </div>
+    {/if}
+
+    {#if boat}
+      <div class="divider"></div>
+      <button
+        type="button"
+        role="menuitem"
+        disabled={boat.problem !== null || boatTroops < 1}
+        title="Sail for their coast nearest this spot; the troops land and attack from there"
+        onclick={() => act(() => onBoat(menu.tile, ui.attackPercent))}
+      >
+        ⛵ Boat with {ui.attackPercent}%
+        <span class="troops">{formatTroops(boatTroops)}</span>
+        <span class="muted"
+          >{boat.problem
+            ? BOAT_PREVIEW_TEXT[boat.problem]
+            : `lands in ${Math.ceil(boat.seconds)} s`}</span
+        >
+      </button>
     {/if}
 
     {#if alliance && alliance.kind !== "none" && alliance.kind !== "teammate"}

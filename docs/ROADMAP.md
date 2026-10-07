@@ -7,7 +7,7 @@
 |---|---|---|
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
-| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, more maps | 🟡 2.0–2.6 ✅ · next 2.7 |
+| **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, more maps | 🟡 2.0–2.7 ✅ · next 2.8 |
 | **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
@@ -160,7 +160,7 @@ each ends with headless metrics + a browser check, like Phase 1.
 | 2.4 ✅ | **Economy** — gold (model E2 + Mobilize prototype, see `GAME_DESIGN.md` §6.1); donations between allies/teammates | Gold earned, mobilized, given and looted in the browser; games no longer than before |
 | 2.5 ✅ | **Building framework + Housing & Factory (levels I–III)** — design GAME_DESIGN §3.17. Foundation first: building data + `rules.buildings` definitions (costs, times, levels, ranges, effects — all in one place), the **unified range module** (`distance` / `withinRange` / `travelTicks`), a building spatial grid, `build` / `upgrade` / `cancelBuild` commands, construction & upgrade timers, levels I–III, spacing, capture (−1 level) and destruction, "level = health" (`damageBuilding` used later by strikes/missiles), price escalation; Housing (capacity, growth, Metropolis gold) and Factory (gold, Mobilize discount); building icons with level pips and construction/upgrade effects; build list (right-click own land, key B) with ghost placement and spacing ring; building card with upgrade preview; **troop gifts only to friends you share a border with** (D-023; airlifts add the second way in 2B.1); nations build and upgrade (tribes don't); headless metrics (buildings per game, gold split building vs Mobilize, game length vs 2.4) and `--no-buildings` regression | `--no-buildings` games identical to 2.4; every flow verified in the browser; nations build believably; game length change measured and reported |
 | 2.6 ✅ | **Border Defense I–III → drawn walls** (D-024; first built as posts fortifying the border, D-022, replaced at the user's request the same day) — originally: fortification zones on the existing ownership/border data (no parallel map): per-tile fortification level derived from posts + ownership, wall rendering on fortified border segments by level, attack loss/speed modifiers in `attacks.ts` **and** `battle.ts` (odds stay true), post destroyed on capture, all §3.17.6 edge cases as ASCII-map tests; a generic **zone-modifier** hook that suppression (2B) plugs into; AI: where to fortify (fronts under threat), and attacking around zones / aiming at posts | Turtle wins in tribe lobbies not worse than 2.4 (24/50) — or a documented decision; frontal attacks on an L3 line cost ~1.6× the troops; walls readable at every zoom |
-| 2.7 | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
+| 2.7 ✅ | **Naval transport + Port I–II** *(was 2.6)* — boats from any coast, routes, ETA, beachheads, recall; boat troops count toward the cap. **Builds the generic "attack from a landing tile" (beachhead attack) and landing-pocket encirclement protection that airborne assaults reuse in 2B.** Port I–II (faster boats, extra boat slots, harbour income, Marines). Port III waits for 2B/naval follow-up | Boats land and fight via the normal attack system; Port levels change boat speed/slots measurably; AI uses boats |
 | 2.8 | **More maps** *(was 2.7)* — bigger maps for big lobbies; real-world maps via our own pipeline (public-domain data) and/or CC BY-SA maps; `WorkerHost`; re-check building spacing and range values on bigger maps | |
 | 2.9 | **Sound & game events** *(was 2.8)* — first pass; pings & emotes; a reusable "incoming threat" warning (used by boats now, flights/missiles in 2B) | |
 | 2.10 | **Phase 2 playtest & balance** *(new)* — the user plays buildings, Border Defense and boats together; tune with headless runs; check the game-length target (longer games accepted by the user, §3.17.12) | The user approves the feel; Phase 2 handoff |
@@ -382,6 +382,34 @@ under attack), wall worth 0.10 / 0.18 / 0.26. Every nation now starts with a Hou
 28 · agg 19 · opp 18; 10 nations + 100 tribes (50): 12.6 min, turtle 19 · exp 17 · opp 9 ·
 agg 5; ~31 walls per game.
 
+**Milestone 2.7 result (2026-10-02)** — islands, boats, beachheads and Ports I–II (GAME_DESIGN
+§3.2 and §3.18, D-025). Asked at the start: walls "feel good, move on"; and how boats get
+something to cross — the user chose **islands always** (the generated map is now a continent
+plus 5–7 islands, 50% land; `islands: false` makes the old map exactly).
+
+| Headless games | Median (longest) | 2.6 | Boats per game: settling / attacking / landed as beachheads / Ports built + upgraded | Wins | Tick avg / worst p99 |
+|---|---|---|---|---|---|
+| 8 nations, `--no-boats --continent` (100) | 7.7 min — identical to 2.6 | 7.7 | — | turtle 35 · exp 28 · agg 19 · opp 18 (= 2.6) | — |
+| 8 nations (100) | **8.4 min** (24.5) | 7.7 | 13.1 / 6.9 / 18.0 / 8.2 + 4.3 | opp 29 · turtle 26 · exp 25 · agg 20 | 0.82 / 9.0 ms |
+| 10 nations + 100 tribes, Medium, `--no-boats --continent` (50) | 12.6 min — identical to 2.6 | 12.6 | — | turtle 19 · exp 17 · opp 9 · agg 5 (= 2.6) | 0.97 / 7.7 ms |
+| 10 nations + 100 tribes, Medium (50) | **13.4 min** (23.5) | 12.6 | 12.2 / 19.0 / 27.9 / 10.0 + 6.9 | exp 20 · turtle 20 · opp 7 · agg 3 | 0.89 / 7.3 ms |
+
+No errors, no timeouts, every game has a winner; no boat command was ever rejected (the
+~0.6 rejections per game are the old alliance-timing ones). Games are a little longer (the
+islands are settled late and crossings take time); wins are more even in 8-nation games
+(turtles 26, 2.6: 35). The worst single tick (~90–110 ms) is each worker's first bot think,
+when the per-map sea data is built once (the browser builds it at map load). Long route
+searches take ~10 ms (weighted A*). Browser (own tab, port 5181): hover over another island
+→ "Click: ⛵ boat … lands in N s" with a dashed route and landing ring; inland start → "No
+boat: you have no coast on that sea"; boat sent, landed, beachhead chip "⛵ Settling";
+a 989-tile crossing (99 s) drawn round the north coast, recalled with ↩ ("Home in 4 s",
+troops back); Port ghost red inland and green on the coast, placed, built, crossings ×1.5
+faster (2.5 s → 1.7 s), Port card with the Naval Port upgrade; an enemy boat → red toast
+"⛵ Grenholm's boat is heading for your coast", red countdown chip and route; nations took
+an island by boat, built Ports and eliminated me with a 25.8K landing. Clean console.
+Found and fixed in the browser: neutral land on another island was offered as a land
+expansion; the attack chips hid behind the command bar; route search hitches.
+
 ## Phase 2B — Air & strategic warfare *(PLANNED)*
 
 Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before
@@ -490,10 +518,10 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Flat gold + trade/trains | E2 + Mobilize (to be decided) | — | P2 | M | |
 | City (+max troops) | **Housing** I–III | — | 2.5 | M | Planned 2026-10-02 (§3.17) |
 | Defense Post | **Border Defense** I–III: fortified border zones drawn as walls | — | 2.6 | H | Planned (D-022) |
-| Port | **Port** I–II (2.7), III (2B.6) | — | 2.7 / 2B | M | |
+| Port | **Port** I–II (2.7), III (2B.6) | ✅ I–II | 2.7 / 2B | M | |
 | Factory + trains/railroads | **Factory** I–III: plain gold income + Mobilize discount (no trains) | — | 2.5 | M | Trains stay out (opaque) |
 | Structure levels/upgrades | **Exactly 3 named levels**, level = health | — | 2.5 | M | Planned (D-021) |
-| Transport ships | Same + route/ETA preview | — | 2.7 | H | Water pathfinding; builds the beachhead attack |
+| Transport ships | Same + route/ETA preview | ✅ | 2.7 | H | Weighted A* over sea tiles; the beachhead attack is generic (2B reuses it) |
 | Trade ships | Maybe | — | P3 | M | Depends on economy model |
 | Warships & naval combat | Naval Base patrol (Port III) | — | 2B.6+ | H | Only if transports are fun |
 | Silos, SAMs | **Missile Silo** I–III (conventional missiles, one strategic warhead at III), **SAM** I–III | — | 2B | VH | User's direction 2026-10-02 (D-021) replaces "not planned" |

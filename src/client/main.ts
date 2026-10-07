@@ -54,6 +54,8 @@ mount(App, {
       retreat: (attackId) => client?.retreat(attackId),
       retreatFrom: (target) => client?.retreatFrom(target),
       attackTile: (tile, percent) => client?.attackTile(tile, percent),
+      sendBoat: (tile, percent) => client?.sendBoat(tile, percent),
+      recallBoat: (boatId) => client?.recallBoat(boatId),
       counter: (attackId) => client?.counter(attackId),
       requestAlliance: (target) => client?.requestAlliance(target),
       replyAlliance: (from, accept) => client?.replyAlliance(from, accept),

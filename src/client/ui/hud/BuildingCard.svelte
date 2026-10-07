@@ -25,6 +25,7 @@
   const TYPE_LABEL = {
     housing: "Housing",
     factory: "Factory",
+    port: "Port",
     wall: "Wall",
   } as const;
   let cardElement = $state<HTMLElement | null>(null);
@@ -139,6 +140,9 @@
     {:else if card.mine && !card.work && card.level >= 3}
       <div class="divider"></div>
       <div class="muted top">Top level</div>
+    {:else if card.mine && !card.work && card.type === "port" && card.level === 2}
+      <div class="divider"></div>
+      <div class="muted top">Level III (Naval Base) comes in a later update</div>
     {/if}
   </div>
 {/if}

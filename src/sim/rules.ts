@@ -222,11 +222,11 @@ export interface EconomyRules {
 }
 
 /**
- * Building types built so far (GAME_DESIGN.md §3.17). Port (2.7) and the air/strategic
- * buildings (Phase 2B) join this list in their own milestones. Border Defense is not a
- * one-tile building but a drawn wall (D-024): see WallRules.
+ * Building types built so far (GAME_DESIGN.md §3.17). The air/strategic buildings (Phase
+ * 2B) join this list in their own milestones. Border Defense is not a one-tile building
+ * but a drawn wall (D-024): see WallRules.
  */
-export const BUILDING_TYPES = ["housing", "factory"] as const;
+export const BUILDING_TYPES = ["housing", "factory", "port"] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 
 /**
@@ -248,11 +248,23 @@ export interface BuildingLevelRules {
   readonly income?: number;
   /** Mobilize costs this share less (the player's best building counts; no stacking). */
   readonly mobilizeDiscount?: number;
+  /**
+   * Ports (GAME_DESIGN.md §3.18): boats launched within `range` tiles of it sail this many
+   * times faster…
+   */
+  readonly boatSpeed?: number;
+  readonly range?: number;
+  /** …the owner may have this many more boats at sea… */
+  readonly boatSlots?: number;
+  /** …and landings from it pay this share of the normal losses per tile (Marines). */
+  readonly boatLoss?: number;
 }
 
 export interface BuildingTypeRules {
-  /** Levels I, II, III. */
-  readonly levels: readonly [BuildingLevelRules, BuildingLevelRules, BuildingLevelRules];
+  /** Levels I, II, III (Port: I–II so far; III comes with Phase 2B). */
+  readonly levels: readonly BuildingLevelRules[];
+  /** Where it can stand: any land of yours, or a coast tile (next to the sea). */
+  readonly placement: "land" | "coast";
   /**
    * When its tile is captured: the taker adopts it at its level (user, 2.5 playtest), or it
    * is destroyed outright (e.g. Border Defense, 2.6: a wall doesn't change sides).
@@ -314,6 +326,25 @@ export interface WallRules {
   readonly escalationTiles: number;
 }
 
+/**
+ * Boats (GAME_DESIGN.md §3.18, milestone 2.7): troops sail from any coast of yours to a
+ * coast across the water and land as a beachhead attack.
+ */
+export interface NavalRules {
+  /** false: no boats (games play as before milestone 2.7). */
+  readonly enabled: boolean;
+  /** Boats a player may have at sea at once, before Ports… */
+  readonly maxBoats: number;
+  /** …and at most this many with them. */
+  readonly maxBoatsWithPorts: number;
+  /** Sea tiles a boat sails per tick (before a Port's speed). */
+  readonly tilesPerTick: number;
+  /** A landing goes to the target's coast nearest the click, searched this far around it. */
+  readonly landingSearchTiles: number;
+  /** Route search gives up after visiting this many sea tiles ("no sea route"). */
+  readonly maxRouteNodes: number;
+}
+
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
 export interface BuildAiRules {
   /**
@@ -353,6 +384,8 @@ export interface BuildAiRules {
   /** …drawn this many tiles behind the threatened border, at most this long. */
   readonly wallDepth: number;
   readonly wallLength: number;
+  /** A Port's boat speed bonus (×1.5 → 0.5) is worth this share of capacity per unit. */
+  readonly portWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -454,6 +487,13 @@ export interface AiRules {
   readonly teamAssistPreference: number;
   /** …and an enemy a teammate is already attacking this many times higher ("gang up"). */
   readonly teamFocusPreference: number;
+  /**
+   * Boats (GAME_DESIGN.md §3.18): nations look this far (tiles, straight line) across the
+   * sea for unclaimed coast and for targets…
+   */
+  readonly seaReach: number;
+  /** …and weigh a target across the sea this much (the crossing is slow and seen coming). */
+  readonly seaPreference: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -543,6 +583,7 @@ export interface GameRules {
   readonly economy: EconomyRules;
   readonly buildings: BuildingRules;
   readonly walls: WallRules;
+  readonly naval: NavalRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -686,6 +727,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     teamAssistPreference: 2,
     teamFocusPreference: 1.5,
     maxTribeWars: 3,
+    // Boats (§3.18): ~30 s of sailing at most; a landing is worth 70% of a land war.
+    seaReach: 300,
+    seaPreference: 0.7,
     counterAbove: 1.1,
     counterSize: 1.3,
     retreatBelow: 0.3,
@@ -781,6 +825,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       fortifyWeight: { expander: 1, aggressor: 0.6, turtle: 1.3, opportunist: 1 },
       wallDepth: 5,
       wallLength: 40,
+      // Ports (§3.18) are worth less than Housing early: harbour income plus a little for
+      // faster boats — nations build one once the cheap options got dearer.
+      portWorth: 0.2,
     },
   },
   tribe: {
@@ -845,6 +892,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // The gold → army engine (OpenFront's City). A fixed bonus: small players gain the most.
       housing: {
         onCapture: "adopt",
+        placement: "land",
         levels: [
           { name: "Housing", cost: 40_000, buildTicks: 50, capacity: 30_000 },
           {
@@ -867,6 +915,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // Gold, and cheaper Mobilize. Each step pays for itself in ~3.5 min.
       factory: {
         onCapture: "adopt",
+        placement: "land",
         levels: [
           { name: "Factory", cost: 60_000, buildTicks: 50, income: 30 },
           {
@@ -882,6 +931,34 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             buildTicks: 200,
             income: 220,
             mobilizeDiscount: 0.2,
+          },
+        ],
+      },
+      // Better boats (§3.18): faster crossings and more boats at once from its stretch of
+      // coast, a little harbour income, and at level II Marines (cheaper landings). Level
+      // III (Naval Base) waits for Phase 2B.
+      port: {
+        onCapture: "adopt",
+        placement: "coast",
+        levels: [
+          {
+            name: "Port",
+            cost: 50_000,
+            buildTicks: 100,
+            income: 15,
+            boatSpeed: 1.5,
+            range: 30,
+            boatSlots: 1,
+          },
+          {
+            name: "Naval Port",
+            cost: 120_000,
+            buildTicks: 150,
+            income: 40,
+            boatSpeed: 2,
+            range: 30,
+            boatSlots: 2,
+            boatLoss: 0.8,
           },
         ],
       },
@@ -925,8 +1002,23 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
     ],
   },
+  // Boats (§3.18): three at sea at once like OpenFront; 10 tiles/s, so a 100-tile crossing
+  // takes 10 s — long enough to see it coming, short enough to matter. Ports add speed and
+  // boats, up to 6 at sea.
+  naval: {
+    enabled: true,
+    maxBoats: 3,
+    maxBoatsWithPorts: 6,
+    tilesPerTick: 1,
+    landingSearchTiles: 60,
+    maxRouteNodes: 600_000,
+  },
 });
 
+/**
+ * Boats (§3.18). Three at sea at once like OpenFront, 10 tiles/s (a 100-tile crossing takes
+ * 10 s: long enough to see it coming, short enough to matter).
+ */
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
 export function makeRules(overrides: {
   troops?: Partial<TroopRules>;
@@ -943,6 +1035,7 @@ export function makeRules(overrides: {
   economy?: Partial<EconomyRules>;
   buildings?: Partial<BuildingRules>;
   walls?: Partial<WallRules>;
+  naval?: Partial<NavalRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -960,6 +1053,7 @@ export function makeRules(overrides: {
     economy: { ...DEFAULT_RULES.economy, ...overrides.economy },
     buildings: { ...DEFAULT_RULES.buildings, ...overrides.buildings },
     walls: { ...DEFAULT_RULES.walls, ...overrides.walls },
+    naval: { ...DEFAULT_RULES.naval, ...overrides.naval },
   });
 }
 

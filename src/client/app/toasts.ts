@@ -61,9 +61,30 @@ export function toastsForEvents(
       case "attackStarted":
         if (event.target === me) {
           toasts.push({
-            text: `${nameOf(event.attacker)} is attacking you`,
+            text:
+              event.landingTile >= 0
+                ? `${nameOf(event.attacker)} landed on your coast`
+                : `${nameOf(event.attacker)} is attacking you`,
             tone: "danger",
             player: event.attacker,
+          });
+        }
+        break;
+      case "boatLaunched":
+        // The incoming-threat warning (GAME_DESIGN.md §3.18); the chip counts down.
+        if (event.target === me) {
+          toasts.push({
+            text: `⛵ ${nameOf(event.owner)}'s boat is heading for your coast`,
+            tone: "danger",
+            player: event.owner,
+          });
+        }
+        break;
+      case "boatLanded":
+        if (event.owner === me && event.attackId < 0) {
+          toasts.push({
+            text: "Your boat's landing spot is friendly now — its troops came home",
+            tone: "info",
           });
         }
         break;

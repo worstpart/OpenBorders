@@ -7,6 +7,7 @@
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
  *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
+ *                          [--no-boats] [--continent]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -27,6 +28,10 @@
  * --no-buildings turns buildings off (GAME_DESIGN §3.17): games then play as in 2.4. Each
  * game reports builds, upgrades, gold spent on them, captures, and when the first level
  * I / II / III building was finished.
+ *
+ * --no-boats turns boats off (GAME_DESIGN §3.18) and --continent plays on the single-
+ * continent map of milestones 1.1–2.6 (no islands, D-025): together they reproduce 2.6.
+ * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -62,6 +67,8 @@ interface Options {
   personality: Personality | undefined;
   /** 0 = free-for-all. */
   teams: number;
+  /** The single-continent map of 1.1–2.6 (no islands). */
+  continent: boolean;
 }
 
 export interface GameReport {
@@ -138,6 +145,17 @@ export interface GameReport {
     wallsDestroyed: number;
   };
   tickMs: { avg: number; p99: number; max: number };
+  /** Boats (GAME_DESIGN §3.18), totals over all players. */
+  naval: {
+    settle: number;
+    strike: number;
+    beachheads: number;
+    landedHome: number;
+    recalled: number;
+    sunk: number;
+    ports: number;
+    portUpgrades: number;
+  };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
   /** The slowest tick: when it happened and what each step took. */
@@ -172,15 +190,20 @@ async function main(): Promise<void> {
       teams: { type: "string", default: "0" },
       "no-economy": { type: "boolean", default: false },
       "no-buildings": { type: "boolean", default: false },
+      "no-boats": { type: "boolean", default: false },
+      continent: { type: "boolean", default: false },
     },
   });
   const loaded = loadRules(args.rules);
   const withEconomy = args["no-economy"]
     ? { ...loaded, economy: { ...loaded.economy, enabled: false } }
     : loaded;
-  const rules = args["no-buildings"]
+  const withBuildings = args["no-buildings"]
     ? { ...withEconomy, buildings: { ...withEconomy.buildings, enabled: false } }
     : withEconomy;
+  const rules = args["no-boats"]
+    ? { ...withBuildings, naval: { ...withBuildings.naval, enabled: false } }
+    : withBuildings;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -196,6 +219,7 @@ async function main(): Promise<void> {
       : rules,
     personality: parsePersonality(args.personality),
     teams: Number(args.teams),
+    continent: args.continent === true,
   };
   if (!Number.isInteger(options.teams) || options.teams < 0 || options.teams === 1) {
     throw new Error("--teams must be 0 (free-for-all) or at least 2");
@@ -234,6 +258,7 @@ function runWorker({ options, seeds }: { options: Options; seeds: number[] }): v
     seed: options.mapSeed,
     width: options.width,
     height: options.height,
+    islands: !options.continent,
   });
   for (const seed of seeds) parentPort!.postMessage(playOne(map, options, seed));
 }
@@ -323,6 +348,16 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     wallTilesBroken: 0,
     wallsDestroyed: 0,
   };
+  const naval: GameReport["naval"] = {
+    settle: 0,
+    strike: 0,
+    beachheads: 0,
+    landedHome: 0,
+    recalled: 0,
+    sunk: 0,
+    ports: 0,
+    portUpgrades: 0,
+  };
   let reason = "timeout";
   let error: string | null = null;
 
@@ -363,6 +398,18 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
             economy.goldGifts++;
             economy.goldGiven += event.amount;
           }
+        }
+        if (event.type === "boatLaunched") {
+          if (event.target === 0) naval.settle++;
+          else naval.strike++;
+        } else if (event.type === "boatLanded") {
+          if (event.attackId >= 0) naval.beachheads++;
+          else naval.landedHome++;
+        } else if (event.type === "boatRecalled") naval.recalled++;
+        else if (event.type === "boatReturned" && event.troops === 0) naval.sunk++;
+        else if (event.type === "buildingStarted" && event.buildingType === "port") {
+          if (event.level === 1) naval.ports++;
+          else naval.portUpgrades++;
         }
         if (event.type === "eliminated") economy.looted += event.loot;
         else if (event.type === "buildingStarted") {
@@ -453,6 +500,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     diplomacy,
     economy,
     buildings,
+    naval,
     tickMs: {
       avg: round(times.reduce((s, t) => s + t, 0) / Math.max(1, times.length), 3),
       p99: round(sorted[Math.floor(sorted.length * 0.99)] ?? 0, 3),
@@ -530,7 +578,7 @@ function summarize(
     tribes: options.tribes,
     teams: options.teams,
     difficulty: options.difficulty,
-    map: `${options.width}x${options.height} seed ${options.mapSeed}`,
+    map: `${options.width}x${options.height} seed ${options.mapSeed}${options.continent ? " continent" : ""}`,
     finishedWithWinner: finished.length,
     errors: reports.filter((r) => r.error).length,
     timeouts: reports.filter((r) => r.reason === "timeout").length,
@@ -594,6 +642,12 @@ function summarize(
               ),
             ],
       ),
+    ),
+    navalPerGame: Object.fromEntries(
+      (Object.keys(reports[0]?.naval ?? {}) as (keyof GameReport["naval"])[]).map((key) => [
+        key,
+        round(reports.reduce((s, r) => s + r.naval[key], 0) / Math.max(1, reports.length)),
+      ]),
     ),
     tickMs: {
       avg: round(reports.reduce((s, r) => s + r.tickMs.avg, 0) / Math.max(1, reports.length), 3),

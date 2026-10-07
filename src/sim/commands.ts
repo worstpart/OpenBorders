@@ -23,6 +23,19 @@ export type Command =
       readonly focusTile: number;
       readonly percentBp: number;
     }
+  /**
+   * Send a share of your home troops by boat (GAME_DESIGN.md §3.18) to the coast of
+   * `target` (0 = neutral land) nearest `tile` — a tile of theirs that you clicked. The
+   * boat leaves from your best coast and lands as a beachhead attack aimed at `tile`.
+   */
+  | {
+      readonly type: "boat";
+      readonly target: PlayerId;
+      readonly tile: number;
+      readonly percentBp: number;
+    }
+  /** Turn a boat of yours around; its troops come home when it is back. */
+  | { readonly type: "recallBoat"; readonly boatId: number }
   /** Stop an attack; its army comes home after a delay, minus a penalty against players. */
   | { readonly type: "retreat"; readonly attackId: number }
   /**

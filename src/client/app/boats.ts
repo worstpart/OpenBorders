@@ -1,0 +1,181 @@
+/**
+ * What the HUD shows about boats (GAME_DESIGN.md §3.18): where each boat is now, the chips
+ * for your boats and the ones coming for you, and the preview of a crossing under the mouse
+ * (route, landing, ETA). Pure functions over frame snapshots; routes and landing rules come
+ * from the simulation (naval.ts), so the preview shows exactly what a click will do.
+ */
+import type { BoatSnapshot, BuildingSnapshot, PlayerSnapshot } from "../../sim/frame.ts";
+import { isLand, type GameMap } from "../../sim/map/gameMap.ts";
+import type { GameRules } from "../../sim/rules.ts";
+import {
+  BOAT_PROBLEM_TEXT,
+  boatSlots,
+  coastTiles,
+  landmassesOf,
+  planBoat,
+  type BoatPlan,
+  type BoatProblem,
+} from "../../sim/systems/naval.ts";
+
+export interface BoatContext {
+  readonly rules: GameRules;
+  readonly map: GameMap | null;
+  readonly owner: Uint16Array;
+  readonly buildings: readonly BuildingSnapshot[];
+  readonly boats: readonly BoatSnapshot[];
+  readonly me: PlayerSnapshot | undefined;
+  readonly tick: number;
+  readonly playing: boolean;
+}
+
+/** How far along its route a boat is at `tick` (fraction allowed), in route steps. */
+export function boatSteps(boat: BoatSnapshot, tick: number): number {
+  const steps = boat.route.length + 1;
+  if (boat.recallTick < 0)
+    return Math.min(steps, Math.max(0, tick - boat.launchTick) * boat.tilesPerTick);
+  const turned = Math.min(steps, (boat.recallTick - boat.launchTick) * boat.tilesPerTick);
+  return Math.max(0, turned - Math.max(0, tick - boat.recallTick) * boat.tilesPerTick);
+}
+
+/** The tile at route step `k` (0 = the launch coast, route.length + 1 = the landing coast). */
+function stepTile(boat: BoatSnapshot, k: number): number {
+  if (k <= 0) return boat.launchTile;
+  if (k > boat.route.length) return boat.landingTile;
+  return boat.route[k - 1]!;
+}
+
+/** A boat's position (tile coordinates, tile centres at .5) and heading at `tick`. */
+export function boatPosition(
+  boat: BoatSnapshot,
+  width: number,
+  tick: number,
+): { x: number; y: number; dx: number; dy: number } {
+  const steps = boatSteps(boat, tick);
+  const k = Math.floor(steps);
+  const f = steps - k;
+  const a = stepTile(boat, k);
+  const b = stepTile(boat, k + 1);
+  const ax = (a % width) + 0.5;
+  const ay = Math.floor(a / width) + 0.5;
+  const bx = (b % width) + 0.5;
+  const by = Math.floor(b / width) + 0.5;
+  const back = boat.recallTick >= 0 ? -1 : 1;
+  return {
+    x: ax + (bx - ax) * f,
+    y: ay + (by - ay) * f,
+    dx: (bx - ax) * back,
+    dy: (by - ay) * back,
+  };
+}
+
+/** A boat in the attack chips: one of yours, or one sailing for your coast. */
+export interface BoatChip {
+  readonly id: number;
+  readonly mine: boolean;
+  /** Mine: who it sails for (0 = open land); incoming: who sent it. */
+  readonly other: number;
+  readonly troops: number;
+  readonly secondsLeft: number;
+  readonly recalled: boolean;
+}
+
+export function boatChips(ctx: BoatContext): BoatChip[] {
+  const me = ctx.me?.id ?? 0;
+  const chips: BoatChip[] = [];
+  for (const boat of ctx.boats) {
+    const mine = boat.owner === me;
+    if (!mine && (boat.recallTick >= 0 || ctx.owner[boat.landingTile] !== me)) continue;
+    chips.push({
+      id: boat.id,
+      mine,
+      other: mine ? boat.target : boat.owner,
+      troops: boat.troops,
+      secondsLeft: Math.max(0, ((boat.arriveTick - ctx.tick) * ctx.rules.tickMs) / 1000),
+      recalled: boat.recallTick >= 0,
+    });
+  }
+  return chips;
+}
+
+/**
+ * True when a click on `tile` sends a boat: land whose owner we don't border, or land on a
+ * landmass where we own nothing (open land across the sea, though we border open land here).
+ */
+export function needsBoat(ctx: BoatContext, tile: number): boolean {
+  const me = ctx.me;
+  const map = ctx.map;
+  if (!me || !map || !ctx.rules.naval.enabled || !isLand(map, tile)) return false;
+  const target = ctx.owner[tile]!;
+  if (target === me.id) return false;
+  if (!(me.neighbors ?? []).includes(target)) return true;
+  return !myLandmasses(ctx, me.id).has(landmassesOf(map)[tile]!);
+}
+
+const landmassUse = new WeakMap<Uint16Array, { tick: number; me: number; masses: Set<number> }>();
+
+/** The landmasses where the local player owns land (refreshed at most once per tick). */
+function myLandmasses(ctx: BoatContext, me: number): Set<number> {
+  const cached = landmassUse.get(ctx.owner);
+  if (cached && cached.tick === ctx.tick && cached.me === me) return cached.masses;
+  const labels = landmassesOf(ctx.map!);
+  const masses = new Set<number>();
+  for (let tile = 0; tile < ctx.owner.length; tile++) {
+    if (ctx.owner[tile] === me) masses.add(labels[tile]!);
+  }
+  landmassUse.set(ctx.owner, { tick: ctx.tick, me, masses });
+  return masses;
+}
+
+/** A crossing as the hover card and the map preview show it. */
+export interface BoatPreview {
+  readonly target: number;
+  readonly tile: number;
+  /** The plan, or why there can't be one (no coast, no route, no free boat). */
+  readonly plan: BoatPlan | null;
+  readonly problem: BoatProblem | "noBoat" | null;
+  readonly seconds: number;
+}
+
+const ownCoastCache = new WeakMap<Uint16Array, { tick: number; me: number; tiles: number[] }>();
+
+/** The local player's coast tiles (refreshed at most once per tick). */
+function ownCoast(ctx: BoatContext, me: number): number[] {
+  const cached = ownCoastCache.get(ctx.owner);
+  if (cached && cached.tick === ctx.tick && cached.me === me) return cached.tiles;
+  const tiles: number[] = [];
+  for (const tile of coastTiles(ctx.map!)) if (ctx.owner[tile] === me) tiles.push(tile);
+  ownCoastCache.set(ctx.owner, { tick: ctx.tick, me, tiles });
+  return tiles;
+}
+
+/** The crossing a click on `tile` would start (null when the click isn't a boat). */
+export function boatPreview(ctx: BoatContext, tile: number): BoatPreview | null {
+  if (!needsBoat(ctx, tile) || !ctx.playing) return null;
+  const me = ctx.me!;
+  const target = ctx.owner[tile]!;
+  const atSea = ctx.boats.filter((b) => b.owner === me.id).length;
+  const plan = planBoat(
+    ctx.rules,
+    ctx.map!,
+    ctx.owner,
+    ctx.buildings,
+    me.id,
+    ownCoast(ctx, me.id),
+    target,
+    tile,
+  );
+  if (typeof plan === "string") return { target, tile, plan: null, problem: plan, seconds: 0 };
+  const full = atSea >= boatSlots(ctx.rules, ctx.buildings, me.id);
+  return {
+    target,
+    tile,
+    plan,
+    problem: full ? "noBoat" : null,
+    seconds: (plan.ticks * ctx.rules.tickMs) / 1000,
+  };
+}
+
+export const BOAT_PREVIEW_TEXT: Record<BoatProblem | "noBoat", string> = {
+  ...BOAT_PROBLEM_TEXT,
+  noBoat: "all your boats are at sea",
+};

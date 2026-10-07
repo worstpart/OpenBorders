@@ -2,6 +2,7 @@
   import { battleOutlook } from "../../../sim/battle.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { troopsToSend } from "../../app/attackPercent.ts";
+  import { boatChips } from "../../app/boats.ts";
   import { lossFactorOf, ODDS_LABEL, outcomeText, THREAT_LABEL } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
@@ -9,9 +10,10 @@
   interface Props {
     onRetreat: (attackId: number) => void;
     onCounter: (attackId: number) => void;
+    onRecallBoat: (boatId: number) => void;
   }
 
-  let { onRetreat, onCounter }: Props = $props();
+  let { onRetreat, onCounter, onRecallBoat }: Props = $props();
 
   const me = $derived(ui.me);
   const outgoing = $derived(ui.attacks.filter((a) => a.attacker === ui.localPlayerId));
@@ -42,10 +44,21 @@
   }
 
   const counterTroops = $derived(me ? troopsToSend(me.homeTroops, ui.attackPercent) : 0);
+  // Boats (GAME_DESIGN.md §3.18): ours at sea, and the ones sailing for our coast.
+  const boats = $derived(ui.tick >= 0 ? boatChips(ui.boatContext) : []);
 </script>
 
-{#if outgoing.length > 0 || incoming.length > 0}
+{#if outgoing.length > 0 || incoming.length > 0 || boats.length > 0}
   <ul class="chips" aria-label="Active attacks">
+    {#each boats.filter((b) => !b.mine) as boat (boat.id)}
+      <li class="chip incoming" style:--player-color={ui.colorOf(boat.other)}>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label"
+          >⛵ {ui.playerName(boat.other)}'s boat lands in {Math.ceil(boat.secondsLeft)} s</span
+        >
+        <span class="troops">{formatTroops(boat.troops)}</span>
+      </li>
+    {/each}
     {#each incoming as attack (attack.id)}
       {@const threat = me
         ? battleOutlook(
@@ -64,7 +77,10 @@
         : null}
       <li class="chip incoming" style:--player-color={ui.colorOf(attack.attacker)}>
         <span class="dot" aria-hidden="true"></span>
-        <span class="label">{ui.playerName(attack.attacker)} attacks you</span>
+        <span class="label"
+          >{attack.landingTile >= 0 ? "⛵ " : ""}{ui.playerName(attack.attacker)}
+          {attack.landingTile >= 0 ? "landed on your coast" : "attacks you"}</span
+        >
         <span class="troops">{formatTroops(attack.troops)}</span>
         {#if threat}
           <span
@@ -88,6 +104,31 @@
         >
       </li>
     {/each}
+    {#each boats.filter((b) => b.mine) as boat (boat.id)}
+      <li
+        class="chip"
+        class:retreating={boat.recalled}
+        style:--player-color={ui.colorOf(boat.other)}
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label">⛵ {boat.other === 0 ? "To open land" : ui.playerName(boat.other)}</span
+        >
+        <span class="troops">{formatTroops(boat.troops)}</span>
+        <span class="status" title={boat.recalled ? "Back home in" : "Lands in"}
+          >{boat.recalled ? "Home in" : "Lands in"} {Math.ceil(boat.secondsLeft)} s</span
+        >
+        {#if !boat.recalled}
+          <button
+            type="button"
+            class="retreat"
+            tabindex={-1}
+            title="Turn back: the troops come home when the boat is back"
+            aria-label="Recall boat"
+            onclick={() => onRecallBoat(boat.id)}>↩</button
+          >
+        {/if}
+      </li>
+    {/each}
     {#each outgoing as attack (attack.id)}
       {@const odds =
         attack.target === 0 ? null : outlook(attack.troops, attack.target, attack.focusTile)}
@@ -98,7 +139,11 @@
       >
         <span class="dot" aria-hidden="true"></span>
         <span class="label">
-          {attack.target === 0 ? "Expanding" : ui.playerName(attack.target)}
+          {attack.landingTile >= 0 ? "⛵ " : ""}{attack.target === 0
+            ? attack.landingTile >= 0
+              ? "Settling"
+              : "Expanding"
+            : ui.playerName(attack.target)}
         </span>
         <span class="army" title="Army left">
           <span class="army-bar"

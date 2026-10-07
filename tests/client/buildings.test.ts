@@ -87,6 +87,7 @@ describe("build options", () => {
     expect(options.map((o) => [o.type, o.name, o.price, o.blocked])).toEqual([
       ["housing", "Housing", 40_000, null],
       ["factory", "Factory", 60_000, null],
+      ["port", "Port", 50_000, "notCoast"], // an all-land test map: no coast anywhere
     ]);
   });
 

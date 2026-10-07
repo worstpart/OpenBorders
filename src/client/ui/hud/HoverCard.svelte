@@ -3,6 +3,8 @@
   import { describeBot } from "../../app/players.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ODDS_LABEL, outcomeText, previewClick } from "../../app/preview.ts";
+  import { BOAT_PREVIEW_TEXT } from "../../app/boats.ts";
+  import { troopsToSend } from "../../app/attackPercent.ts";
   import { teamName } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatPercent, formatTroops } from "../../format.ts";
@@ -34,6 +36,12 @@
       : undefined,
   );
   const terrain = $derived(hover ? TERRAIN[hover.terrain] : undefined);
+  /** Land beyond our border: a click sends a boat (GAME_DESIGN.md §3.18). */
+  const boat = $derived(
+    hover && ui.boatPreview?.tile === hover.tile && !ui.friends.has(hover.owner)
+      ? ui.boatPreview
+      : null,
+  );
   const alliance = $derived(hover ? allianceStatus(ui.diplomacyContext, hover.owner) : null);
   const traitorFor = $derived(traitorSecondsLeft(DEFAULT_RULES, ui.tick, owner));
   // Border Defense (GAME_DESIGN.md §3.17.6); ui.fort isn't reactive, so re-read every tick.
@@ -116,7 +124,21 @@
     {/if}
 
     <div class="preview">
-      {#if preview.kind === "expand"}
+      {#if boat?.plan && !boat.problem}
+        <div>
+          <span class="click">Click:</span> ⛵ boat with {formatTroops(
+            troopsToSend(ui.me?.homeTroops ?? 0, ui.attackPercent),
+          )}
+          <span class="muted">({ui.attackPercent}%) · lands in {Math.ceil(boat.seconds)} s</span>
+        </div>
+        <div class="muted">
+          {hover.owner === 0
+            ? "The troops settle the coast and spread from there"
+            : "The troops land on their coast and attack from there"}
+        </div>
+      {:else if boat?.problem}
+        <span class="muted">No boat: {BOAT_PREVIEW_TEXT[boat.problem]}</span>
+      {:else if preview.kind === "expand"}
         <span class="click">Click:</span> expand with {formatTroops(preview.army)}
         <span class="muted">→ up to ~{preview.tiles.toLocaleString("en-US")} tiles</span>
       {:else if preview.kind === "attack"}
@@ -127,14 +149,14 @@
         </div>
         <div class="muted">Expected: {outcomeText(preview.outlook)}</div>
       {/if}
-      {#if (preview.kind === "expand" || preview.kind === "attack") && terrain?.note}
+      {#if (preview.kind === "expand" || preview.kind === "attack") && !boat && terrain?.note}
         <div class="muted">{terrain.name}: {terrain.note}</div>
       {/if}
       {#if preview.kind === "teammate"}
         <span class="muted">Your teammate — teammates can't attack each other</span>
       {:else if preview.kind === "allied"}
         <span class="muted">Allied — break the alliance first (right-click)</span>
-      {:else if preview.kind === "notReachable"}
+      {:else if preview.kind === "notReachable" && !boat}
         <span class="muted">
           {hover.owner === 0
             ? "Not reachable — you don't border this land"

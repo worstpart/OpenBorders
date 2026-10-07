@@ -13,6 +13,7 @@ import { nextScratchStamp, setOwner, type Player, type PlayerId, type World } fr
 import { endAttacksInvolving, primaryAttacker } from "./attacks.ts";
 import { dropDiplomacy } from "./diplomacy.ts";
 import { lootGold } from "./economy.ts";
+import { sinkBoatsOf } from "./naval.ts";
 
 /** Tick system. */
 export function eliminate(world: World): void {
@@ -40,6 +41,7 @@ function eliminatePlayer(world: World, player: Player, by: PlayerId | null): voi
   player.alive = false;
   player.eliminatedTick = world.tick;
   endAttacksInvolving(world, player.id);
+  sinkBoatsOf(world, player.id);
   dropDiplomacy(world, player.id);
   player.homeTroops = 0;
   player.fieldTroops = 0;

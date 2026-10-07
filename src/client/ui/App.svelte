@@ -15,6 +15,9 @@
     retreatFrom: (target: number) => void;
     /** Attack or expand at a tile with this share (%) of home troops. */
     attackTile: (tile: number, percent: number) => void;
+    /** Boats (GAME_DESIGN.md §3.18): sail for the coast nearest a tile; turn one back. */
+    sendBoat: (tile: number, percent: number) => void;
+    recallBoat: (boatId: number) => void;
     /** Answer an incoming attack by attacking its sender. */
     counter: (attackId: number) => void;
     /** Alliances (GAME_DESIGN.md §3.14). Asking someone who asked you accepts. */
@@ -91,11 +94,16 @@
   <SpawnPrompt onConfirm={actions.confirmSpawn} />
   <Toasts />
   <HintCard onDismiss={actions.dismissHint} />
-  <AttackChips onRetreat={actions.retreat} onCounter={actions.counter} />
+  <AttackChips
+    onRetreat={actions.retreat}
+    onCounter={actions.counter}
+    onRecallBoat={actions.recallBoat}
+  />
   <CommandBar onMobilize={actions.mobilize} onPickBuilding={actions.pickBuilding} />
   <HoverCard />
   <ContextMenu
     onAttack={actions.attackTile}
+    onBoat={actions.sendBoat}
     onRetreatFrom={actions.retreatFrom}
     onRequestAlliance={actions.requestAlliance}
     onRenewAlliance={actions.renewAlliance}

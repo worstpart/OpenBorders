@@ -471,8 +471,9 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall; (2B) airlift, airAssault, airStrike, launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, airAssault, airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
+2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
 3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
 3b. advanceFlights     (2B) move flights, SAM/flak interceptions, arrivals:
                        airlift → friend's home troops; assault → beachhead attack (2.7);
@@ -497,6 +498,33 @@ border. Boats (2.7) and airborne assaults (2B.3) need an army whose front starts
 (OpenFront's boat attacks don't merge either). So the merge lookup gains a "source" (land
 or a landing) and fronts can be seeded from a landing tile — the main structural change of
 the plan, done once in 2.7 and reused by 2B. Land attacks are unchanged. Landing pockets are protected from encirclement while their attack advances.
+
+*As built (2.7):* `Attack` gained `landingTile` (-1 for land armies) and `lossFactor`
+(Marines 0.8; airborne will be 1.25). `launchBeachhead(world, player, target, landingTile,
+focusTile, troops, lossFactor)` in `systems/attacks.ts` creates one: its front holds only
+the landing tile, ready at once; `advance` lets that one tile be taken without touching the
+attacker's land, and everything after spreads by the normal `discover`. `applyAttackCommand`
+merges only into armies with `landingTile < 0`. `encirclement.ts` treats the piece holding
+the landing tile of an advancing beachhead as safe; ending or retreating a beachhead marks
+the attacker `encircleDirty` so the pocket is checked again.
+
+**Boats (2.7, `systems/naval.ts`).** `world.boats` (ascending ids; owner, target, troops,
+launch/landing/focus tiles, `route: Int32Array` of sea tiles, launchTick, tilesPerTick,
+lossFactor, arriveTick, recallTick) — hashed, never moved tick by tick: `boatProgress(boat,
+tick)` is a pure function of the tick (recalled boats sail back from where they turned).
+Static per-map data is derived once and cached in WeakMaps keyed by the map (not game state):
+`seasOf` (4-connected water bodies), `landmassesOf`, `coastTiles`. `planBoat(rules, map,
+owner, buildings, playerId, ownTiles, target, tile)` is shared by the simulation and the HUD
+(preview = what a click does): landing = `nearestCoast` of the target around the click;
+launch = the player's coast tile on the same sea with the best straight-line ETA (nearest,
+or a Port tile); `seaRoute` = integer A* (10/14, octile heuristic, no corner cutting) over
+water with a node budget and per-map scratch arrays, ties popped in insertion order
+(`TileQueue`) — deterministic. Field troops include boat troops (`updateFieldTroops`).
+Elimination sinks the owner's boats; game over unloads them. Frames carry `boats`
+snapshots, made once per boat (the route copied once) and remade only on recall. The client
+draws boats, routes and the click preview on the Canvas2D overlay (`render/boats.ts`); HUD
+logic in `client/app/boats.ts` (chips, preview, `needsBoat`: a click on land whose owner
+we don't border, or on a landmass where we own nothing, sends a boat).
 
 **Frames and rendering.** Frames carry building deltas (added/changed/removed: id, type,
 owner, tile, level, targetLevel, readyTick, disabled) and flight launch/interception/

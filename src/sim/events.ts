@@ -21,6 +21,8 @@ export type SimEvent =
       readonly attacker: PlayerId;
       /** 0 = expanding into neutral land. */
       readonly target: PlayerId;
+      /** A beachhead (a boat landing): the tile it landed on; -1 for a land attack. */
+      readonly landingTile: number;
     }
   | {
       readonly type: "attackEnded";
@@ -179,6 +181,45 @@ export type SimEvent =
       readonly playerId: PlayerId;
       readonly by: PlayerId | null;
       readonly reason: "breached" | "cancelled";
+    }
+  | {
+      /** A boat set sail (GAME_DESIGN.md §3.18); it lands at `arriveTick`. */
+      readonly type: "boatLaunched";
+      readonly boatId: number;
+      readonly owner: PlayerId;
+      /** Whose coast it sails for (0 = neutral land). */
+      readonly target: PlayerId;
+      readonly troops: number;
+      readonly landingTile: number;
+      readonly arriveTick: number;
+    }
+  | {
+      /**
+       * A boat reached its landing tile: its troops attack from there (`attackId`), or —
+       * if that land is now the owner's or a friend's — go home (`attackId` -1).
+       */
+      readonly type: "boatLanded";
+      readonly boatId: number;
+      readonly owner: PlayerId;
+      /** Who owned the landing tile when it arrived. */
+      readonly target: PlayerId;
+      readonly tile: number;
+      readonly troops: number;
+      readonly attackId: number;
+    }
+  | {
+      /** The owner called the boat back; it sails home and arrives at `arriveTick`. */
+      readonly type: "boatRecalled";
+      readonly boatId: number;
+      readonly owner: PlayerId;
+      readonly arriveTick: number;
+    }
+  | {
+      /** A recalled boat got home (`troops` back), or sank with its owner (`troops` 0). */
+      readonly type: "boatReturned";
+      readonly boatId: number;
+      readonly owner: PlayerId;
+      readonly troops: number;
     }
   | {
       readonly type: "commandRejected";

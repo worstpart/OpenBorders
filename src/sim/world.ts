@@ -153,6 +153,36 @@ export interface Wall {
   paid: number;
 }
 
+/**
+ * A boat at sea (GAME_DESIGN.md §3.18): troops sailing from the owner's coast to a landing
+ * tile across the water. Its position is a pure function of the tick (see naval.ts), so
+ * nothing moves it tick by tick.
+ */
+export interface Boat {
+  readonly id: number;
+  readonly owner: PlayerId;
+  /** Who owned the landing tile at launch (0 = neutral land). */
+  readonly target: PlayerId;
+  /** Troops aboard (they count toward the owner's capacity, like an army in the field). */
+  readonly troops: number;
+  /** The owner's coast tile it left from, and the coast tile it lands on. */
+  readonly launchTile: number;
+  readonly landingTile: number;
+  /** The tile clicked: where the beachhead attack aims. */
+  readonly focusTile: number;
+  /** Sea tiles from the launch coast to the landing coast, in order. Never changed. */
+  readonly route: Int32Array;
+  readonly launchTick: number;
+  /** Route tiles sailed per tick (faster from a Port). */
+  readonly tilesPerTick: number;
+  /** Losses per tile of its beachhead attack, as a share (Marines < 1). */
+  readonly lossFactor: number;
+  /** When it lands — or, recalled, when it is back home. */
+  arriveTick: number;
+  /** Tick it was recalled and turned back, or -1. */
+  recallTick: number;
+}
+
 /** A bot's own state (GAME_DESIGN.md §3.11). */
 export interface BotBrain {
   readonly tier: BotTier;
@@ -197,6 +227,9 @@ export interface World {
   ownerHash: number;
   /** Active attacks, in launch order (the order they are processed in). */
   attacks: Attack[];
+  /** Boats at sea, by ascending id (GAME_DESIGN.md §3.18). */
+  boats: Boat[];
+  nextBoatId: number;
   /** Alliances by pairKey(a, b), in the order they were formed (GAME_DESIGN.md §3.14). */
   readonly alliances: Map<number, Alliance>;
   /** Open alliance requests, oldest first. */
@@ -265,6 +298,14 @@ export interface Attack {
   readonly growthSeed: number;
   /** Retreating without the usual loss (the two sides just became allies). */
   freeRetreat: boolean;
+  /**
+   * Beachhead attacks (boats, later airborne assaults): the tile the army lands on, -1 for
+   * a land attack. A beachhead never merges with the land army against the same target,
+   * and its front starts from that tile only.
+   */
+  readonly landingTile: number;
+  /** Losses per tile as a share of normal (Marines 0.8; 1 for ordinary armies). */
+  readonly lossFactor: number;
 }
 
 /** Two players who can't attack each other until the alliance ends or one breaks it. */
@@ -356,6 +397,8 @@ export function createWorld(setup: GameSetup): World {
     teamCount: Math.max(0, ...setup.players.map((p) => p.team ?? 0)),
     ownerHash: 0,
     attacks: [],
+    boats: [],
+    nextBoatId: 1,
     alliances: new Map(),
     allianceRequests: [],
     lastRequestTick: new Map(),

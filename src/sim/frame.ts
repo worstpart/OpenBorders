@@ -7,7 +7,7 @@ import type { SimEvent } from "./events.ts";
 import { hashWorld } from "./stateHash.ts";
 import { landNeighbors } from "./systems/attacks.ts";
 import type { BuildingType, Difficulty } from "./rules.ts";
-import type { BotTier, Phase, PlayerId, PlayerKind, World } from "./world.ts";
+import type { Boat, BotTier, Phase, PlayerId, PlayerKind, World } from "./world.ts";
 
 export interface PlayerSnapshot {
   readonly id: PlayerId;
@@ -59,6 +59,31 @@ export interface AttackSnapshot {
   readonly tilesTaken: number;
   readonly focusTile: number;
   readonly retreating: boolean;
+  /** A beachhead (boat landing): the tile it landed on; -1 for a land attack. */
+  readonly landingTile: number;
+}
+
+/**
+ * A boat at sea (GAME_DESIGN.md §3.18). Its route never changes, so the snapshot (and its
+ * copy of the route) is made once per boat and shared between frames until it is recalled.
+ */
+export interface BoatSnapshot {
+  readonly id: number;
+  readonly owner: PlayerId;
+  /** Whose coast it sails for (0 = neutral land). */
+  readonly target: PlayerId;
+  readonly troops: number;
+  readonly launchTile: number;
+  readonly landingTile: number;
+  readonly focusTile: number;
+  /** Sea tiles from the launch coast to the landing coast. */
+  readonly route: Int32Array;
+  readonly launchTick: number;
+  readonly tilesPerTick: number;
+  /** Lands (or, recalled, is back home) at this tick. */
+  readonly arriveTick: number;
+  /** Tick it turned back, or -1. */
+  readonly recallTick: number;
 }
 
 /** A building (GAME_DESIGN.md §3.17). */
@@ -127,6 +152,8 @@ export interface TickFrame {
   readonly buildings: readonly BuildingSnapshot[];
   /** Every wall, by ascending id. */
   readonly walls: readonly WallSnapshot[];
+  /** Every boat at sea, by ascending id. */
+  readonly boats: readonly BoatSnapshot[];
   readonly events: readonly SimEvent[];
   readonly winner: PlayerId | null;
   /** Team games: the team that won (0 = none). */
@@ -184,6 +211,29 @@ function snapshotWalls(world: World): readonly WallSnapshot[] {
   return walls;
 }
 
+const boatCache = new WeakMap<Boat, { recallTick: number; snapshot: BoatSnapshot }>();
+
+function snapshotBoat(boat: Boat): BoatSnapshot {
+  const cached = boatCache.get(boat);
+  if (cached && cached.recallTick === boat.recallTick) return cached.snapshot;
+  const snapshot: BoatSnapshot = {
+    id: boat.id,
+    owner: boat.owner,
+    target: boat.target,
+    troops: boat.troops,
+    launchTile: boat.launchTile,
+    landingTile: boat.landingTile,
+    focusTile: boat.focusTile,
+    route: cached?.snapshot.route ?? boat.route.slice(),
+    launchTick: boat.launchTick,
+    tilesPerTick: boat.tilesPerTick,
+    arriveTick: boat.arriveTick,
+    recallTick: boat.recallTick,
+  };
+  boatCache.set(boat, { recallTick: boat.recallTick, snapshot });
+  return snapshot;
+}
+
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
   const changedOwners = new Uint16Array(changedTiles.length);
@@ -208,6 +258,7 @@ export function buildFrame(world: World): TickFrame {
       tilesTaken: a.tilesTaken,
       focusTile: a.focusTile,
       retreating: a.retreatTick >= 0,
+      landingTile: a.landingTile,
     })),
     alliances: [...world.alliances.values()].map((a) => ({
       a: a.a,
@@ -228,6 +279,7 @@ export function buildFrame(world: World): TickFrame {
       readyTick: b.readyTick,
     })),
     walls: snapshotWalls(world),
+    boats: world.boats.map(snapshotBoat),
     events: world.events.slice(),
     winner: world.winner,
     winningTeam: world.winningTeam,

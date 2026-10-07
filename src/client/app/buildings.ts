@@ -7,11 +7,12 @@ import type { BuildingSnapshot, PlayerSnapshot, WallSnapshot } from "../../sim/f
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import { BUILDING_TYPES, type BuildingType, type GameRules } from "../../sim/rules.ts";
 import {
+  buildingAvailable,
   buildingPrice,
   buildingsEnabled,
   levelRules,
   levelsOwned,
-  MAX_LEVEL,
+  maxLevel,
   placementProblem,
   type PlacementProblem,
 } from "../../sim/systems/buildings.ts";
@@ -44,8 +45,14 @@ export interface BuildContext {
 export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
+  port: "Faster boats",
   wall: "Draw a defence line",
 };
+
+/** The building types this game offers (Ports only with boats). */
+function availableTypes(rules: GameRules): BuildingType[] {
+  return BUILDING_TYPES.filter((type) => buildingAvailable(rules, type));
+}
 
 /** What a level gives, in a few words per effect ("+90K troop capacity"). */
 export function effectLines(rules: GameRules, type: BuildingType, level: number): string[] {
@@ -57,6 +64,14 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   if (effect.income) lines.push(`+${formatTroops(effect.income * 10)} gold/s`);
   if (effect.mobilizeDiscount) {
     lines.push(`Mobilize ${Math.round(effect.mobilizeDiscount * 100)}% cheaper`);
+  }
+  if (effect.boatSpeed) {
+    lines.push(`Boats ×${effect.boatSpeed} faster within ${effect.range ?? 0} km`);
+  }
+  if (effect.boatSlots)
+    lines.push(`+${effect.boatSlots} boat${effect.boatSlots > 1 ? "s" : ""} at sea`);
+  if (effect.boatLoss) {
+    lines.push(`Marines: landings lose ${Math.round((1 - effect.boatLoss) * 100)}% less`);
   }
   return lines;
 }
@@ -92,6 +107,13 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
       `${now.mobilizeDiscount ? "" : "New: "}Mobilize ${Math.round(next.mobilizeDiscount * 100)}% cheaper`,
     );
   }
+  if (next.boatSpeed) lines.push(`Boats ×${next.boatSpeed} faster`);
+  if (next.boatSlots) lines.push(`+${next.boatSlots} boats at sea`);
+  if (next.boatLoss) {
+    lines.push(
+      `${now.boatLoss ? "" : "New: Marines — "}landings lose ${Math.round((1 - next.boatLoss) * 100)}% less`,
+    );
+  }
   return lines;
 }
 
@@ -109,11 +131,12 @@ export interface BuildOption {
 export function buildOptions(ctx: BuildContext, tile: number): BuildOption[] {
   const me = ctx.me;
   if (!buildingsEnabled(ctx.rules) || !ctx.map || !me || ctx.owner[tile] !== me.id) return [];
-  const problem: BuildBlock | null =
-    placementProblem(ctx.rules, ctx.map, ctx.owner, ctx.buildings, me.id, tile) ??
-    (standingWallTiles(ctx.walls).has(tile) ? "wall" : null);
-  return BUILDING_TYPES.map((type) => {
+  const onWall = standingWallTiles(ctx.walls).has(tile);
+  return availableTypes(ctx.rules).map((type) => {
     const price = buildingPrice(ctx.rules, type, 1, levelsOwned(ctx.buildings, me.id, type));
+    const problem: BuildBlock | null =
+      placementProblem(ctx.rules, ctx.map!, ctx.owner, ctx.buildings, me.id, tile, type) ??
+      (onWall ? "wall" : null);
     const blocked: BuildBlock | null = !ctx.playing
       ? "notPlaying"
       : (problem ?? (me.gold < price ? "noGold" : null));
@@ -141,7 +164,7 @@ export interface BuildBarItem {
 export function buildBarItems(ctx: BuildContext): BuildBarItem[] {
   const me = ctx.me;
   if (!buildingsEnabled(ctx.rules) || !me) return [];
-  const items: BuildBarItem[] = BUILDING_TYPES.map((type) => {
+  const items: BuildBarItem[] = availableTypes(ctx.rules).map((type) => {
     const price = buildingPrice(ctx.rules, type, 1, levelsOwned(ctx.buildings, me.id, type));
     return {
       type,
@@ -192,6 +215,7 @@ export function placementCheck(
 export const BUILD_BLOCK_TEXT: Record<BuildBlock, string> = {
   notYourLand: "not your land",
   water: "not on water",
+  notCoast: "a port must stand on the coast",
   tooClose: "too close to another building",
   noGold: "not enough gold",
   notPlaying: "after the match starts",
@@ -313,7 +337,7 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
   const working = building.readyTick >= 0;
   const shownLevel = Math.max(1, building.level);
   let upgrade: BuildingCard["upgrade"] = null;
-  if (mine && !working && building.level < MAX_LEVEL) {
+  if (mine && !working && building.level < maxLevel(rules, building.type)) {
     const level = building.level + 1;
     const price = buildingPrice(
       rules,

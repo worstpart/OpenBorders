@@ -8,6 +8,9 @@ import type { Command } from "../../sim/commands.ts";
 import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { generateContinent } from "../../sim/map/generate.ts";
+import { coastTiles, landmassesOf, seasOf } from "../../sim/systems/naval.ts";
+import { BoatLayer } from "../render/boats.ts";
+import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
 import {
@@ -61,6 +64,8 @@ export const MAP_SEED = 2;
 const LOCAL_PLAYER_ID = 1;
 /** Label positions are recomputed at most this often while territory changes. */
 const LABEL_REFRESH_MS = 250;
+/** The mouse rests this long on far land before its boat route is planned (a search each). */
+const BOAT_PREVIEW_REST_MS = 120;
 /** The gold capture effect (GAME_DESIGN.md §3.16) lasts this long, in real time. */
 const LOOT_FX_MS = 2_400;
 
@@ -84,6 +89,13 @@ export class GameClient {
   private readonly renderer: MapRenderer;
   private readonly labels: LabelLayer;
   private readonly buildingLayer: BuildingLayer;
+  private readonly boatLayer: BoatLayer;
+  /** The hovered tile the boat preview was computed for, and when (route searches cost). */
+  private boatPreviewTile = -1;
+  private boatPreviewAt = 0;
+  /** The tile under the mouse and since when (the preview waits until the mouse rests). */
+  private hoverTile = -1;
+  private hoverSince = 0;
   private readonly camera = new Camera();
   private readonly perf: PerfOverlay;
   private readonly controls: Controls;
@@ -110,6 +122,7 @@ export class GameClient {
     this.renderer = new MapRenderer(elements.mapCanvas);
     this.labels = new LabelLayer(elements.labelCanvas, elements.fontFamily);
     this.buildingLayer = new BuildingLayer(elements.labelCanvas);
+    this.boatLayer = new BoatLayer(elements.labelCanvas, elements.fontFamily);
     this.perf = new PerfOverlay(elements.overlayParent);
     this.controls = new Controls(elements.mapCanvas, {
       primaryClick: (at) => this.primaryClick(at),
@@ -134,6 +147,10 @@ export class GameClient {
         ? this.map
         : generateContinent({ seed: MAP_SEED, width, height });
     this.map = map;
+    // The sea data boats need, computed now rather than at the first boat (a short hitch).
+    seasOf(map);
+    coastTiles(map);
+    landmassesOf(map);
     this.owner = new Uint16Array(map.width * map.height);
     ui.map = map;
     ui.owner = this.owner;
@@ -356,13 +373,20 @@ export class GameClient {
     }
   }
 
-  /** Attacks (or expands into) the land at `tile` with `percent`% of our home troops. */
+  /**
+   * Attacks (or expands into) the land at `tile` with `percent`% of our home troops. Land
+   * we can't reach over our own border gets a boat instead (GAME_DESIGN.md §3.18).
+   */
   attackTile(tile: number, percent: number): void {
     const me = ui.me;
     if (!this.host || !this.map || ui.phase !== "playing" || !me?.alive) return;
     if (!isLand(this.map, tile)) return;
     const target = this.owner[tile]!;
     if (target === me.id) return;
+    if (needsBoat(ui.boatContext, tile) && !ui.friends.has(target)) {
+      this.sendBoat(tile, percent);
+      return;
+    }
     // Neutral land → expand; enemy land → attack. The simulation validates the rest.
     this.host.send({
       type: "attack",
@@ -370,6 +394,29 @@ export class GameClient {
       focusTile: tile,
       percentBp: Math.round(percent * 100),
     });
+  }
+
+  /**
+   * Sends a boat with `percent`% of our home troops to the coast nearest `tile` (also from
+   * the right-click menu, even where we border them by land).
+   */
+  sendBoat(tile: number, percent: number): void {
+    const me = ui.me;
+    if (!this.host || !this.map || ui.phase !== "playing" || !me?.alive) return;
+    const target = this.owner[tile]!;
+    if (target === me.id || !isLand(this.map, tile)) return;
+    const preview = boatPreview({ ...ui.boatContext, me: { ...me, neighbors: [] } }, tile);
+    if (preview?.problem) {
+      this.toast({ text: `No boat: ${BOAT_PREVIEW_TEXT[preview.problem]}`, tone: "info" });
+      return;
+    }
+    this.host.send({ type: "boat", target, tile, percentBp: Math.round(percent * 100) });
+    this.hints.complete(target === 0 ? "expand" : "attack");
+  }
+
+  /** Turns one of our boats around. */
+  recallBoat(boatId: number): void {
+    this.host?.send({ type: "recallBoat", boatId });
   }
 
   /**
@@ -429,6 +476,7 @@ export class GameClient {
     }
     this.renderer.setAttacks([], 0);
     this.renderer.setHoverOwner(0);
+    this.boatPreviewTile = -1;
     this.placements.clear();
     this.lootEffects = [];
     this.baseFlags = new Uint8Array(1);
@@ -567,6 +615,7 @@ export class GameClient {
     ui.allianceRequests = frame.allianceRequests;
     ui.buildings = frame.buildings;
     ui.walls = frame.walls;
+    ui.boats = frame.boats;
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
@@ -828,6 +877,15 @@ export class GameClient {
         selectedWall: ui.menu?.kind === "wall" ? ui.menu.id : null,
         wallPreview: this.wallDraft(),
       });
+      this.boatLayer.draw(view, {
+        boats: ui.boats,
+        width: this.map.width,
+        tick,
+        localPlayerId: ui.localPlayerId,
+        colorOf: (id) => ui.colorOf(id),
+        owner: this.owner,
+        preview: ui.boatPreview,
+      });
     }
     this.labels.draw(
       view,
@@ -905,6 +963,8 @@ export class GameClient {
       ui.placing
     ) {
       if (prev) ui.hover = null;
+      if (ui.boatPreview) ui.boatPreview = null;
+      this.boatPreviewTile = -1;
       return;
     }
     const same =
@@ -914,6 +974,29 @@ export class GameClient {
       prev.x === point.x &&
       prev.y === point.y;
     if (!same) ui.hover = { tile, owner, terrain: map.terrain[tile]!, x: point.x, y: point.y };
+    this.updateBoatPreview(tile);
+  }
+
+  /**
+   * The crossing a click on the hovered land would start (GAME_DESIGN.md §3.18): planned once
+   * the mouse rests on a tile for a moment, and again twice a second while it stays (land
+   * changes hands, boats come and go) — a route search is too costly for every frame.
+   */
+  private updateBoatPreview(tile: number): void {
+    const now = performance.now();
+    if (tile !== this.hoverTile) {
+      this.hoverTile = tile;
+      this.hoverSince = now;
+    }
+    if (now - this.hoverSince < BOAT_PREVIEW_REST_MS) return;
+    if (tile === this.boatPreviewTile && now - this.boatPreviewAt < 500) return;
+    this.boatPreviewTile = tile;
+    this.boatPreviewAt = now;
+    const owner = tile >= 0 ? this.owner[tile]! : 0;
+    const blocked =
+      ui.friends.has(owner) || (owner !== 0 && protectionSecondsLeft(ui.previewContext) > 0);
+    const preview = blocked ? null : boatPreview(ui.boatContext, tile);
+    if (preview !== null || ui.boatPreview !== null) ui.boatPreview = preview;
   }
 
   private updateHint(): void {

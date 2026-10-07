@@ -36,6 +36,11 @@
  * Border Defense (GAME_DESIGN.md §3.17.6): nations count a walled front's extra losses in
  * their estimates and aim around walls — at an open stretch of the shared border. Building
  * walls is in build.ts.
+ *
+ * Boats (GAME_DESIGN.md §3.18): a nation with no open land next to it sails for the nearest
+ * unclaimed coast; one that finds no land target worth it looks across the sea, with the
+ * same estimate and a discount for the crossing. One boat of each kind at a time. Tribes
+ * stay on land.
  */
 import {
   attackLossFactor,
@@ -43,7 +48,7 @@ import {
   tileCostOfAll as tileCostOfAllTiles,
 } from "../battle.ts";
 import type { Command } from "../commands.ts";
-import { isLand, tileAt, Terrain } from "../map/gameMap.ts";
+import { isCoast, isLand, tileAt, Terrain } from "../map/gameMap.ts";
 import { mix32 } from "../math/hash.ts";
 import { terrainValue, type DifficultyRules, type PersonalityRules } from "../rules.ts";
 import {
@@ -55,6 +60,8 @@ import {
   isTraitor,
 } from "../systems/diplomacy.ts";
 import { bordersTarget } from "../systems/attacks.ts";
+import { coastTiles, seasOf, touchesSea } from "../systems/naval.ts";
+import { distanceSq } from "../geometry.ts";
 import { wallLevel } from "../systems/walls.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
@@ -112,7 +119,9 @@ export function thinkBots(world: World): void {
     }
     // Buildings (GAME_DESIGN.md §3.17): only with gold left over — not right before an
     // attack (the war chest goes to Mobilize) nor when giving gold away.
-    const strikes = actions.some((c) => c.type === "attack" && c.target !== NEUTRAL);
+    const strikes = actions.some(
+      (c) => (c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL,
+    );
     if (!tribe && !strikes && !gold.after.some((c) => c.type === "donate")) {
       const build = decideBuild(world, bot, incomingTroops(world, bot.id));
       if (build) world.pendingCommands.push({ playerId: bot.id, command: build });
@@ -148,7 +157,7 @@ function economy(
   let home = bot.homeTroops;
   // Gold saved toward a building stays out of the war chest (GAME_DESIGN.md §3.17).
   let gold = bot.gold - buildingReserve(world, bot, bot.brain!.personality);
-  if (actions.some((c) => c.type === "attack" && c.target !== NEUTRAL)) {
+  if (actions.some((c) => (c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL)) {
     const discount = bot.bonus.mobilizeDiscount;
     const chest = Math.min(troopRoom(bot), gold / goldPerTroop(world.rules, discount));
     if (chest >= ai.mobilizeMinShare * capacity) {
@@ -158,7 +167,9 @@ function economy(
     }
   }
   // Home troops once this think's attacks have left.
-  for (const c of actions) if (c.type === "attack") home -= (home * c.percentBp) / 10_000;
+  for (const c of actions) {
+    if (c.type === "attack" || c.type === "boat") home -= (home * c.percentBp) / 10_000;
+  }
   if (incomingTroops(world, bot.id) > 0) return { before, after };
 
   let needy: Player | null = null;
@@ -228,6 +239,8 @@ interface Surroundings {
   centerY: number;
   /** Only when some wall stands: each neighbour's walls along the front. */
   fortFront: Map<PlayerId, FortFront> | null;
+  /** The seas the bot's coast touches (none when boats are off). */
+  seas: number[];
 }
 
 /** A neighbour's side of the shared border, as Border Defense fortifies it. */
@@ -300,6 +313,12 @@ function decide(
     if (!style.attacksWhileExpanding) return null;
   }
 
+  // 4b. No open land next to us: sail for the nearest unclaimed coast (§3.18).
+  if (fill >= style.expandAt) {
+    const settle = seaExpansion(world, bot, style, around);
+    if (settle) return settle;
+  }
+
   // 3 + 5. Attack a neighbour we can beat, once we've regrown enough.
   if (fill < style.attackAt || isSpawnProtected(world)) return null;
   // One war at a time against a nation; tribes are eaten several at once (§3.13).
@@ -309,9 +328,13 @@ function decide(
   if (wars.length >= ai.maxTribeWars) {
     return skill.reinforces ? reinforce(world, bot, style, wars[0]!, around) : null;
   }
-  const choice = chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars);
+  const choice =
+    chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars) ??
+    chooseSeaTarget(world, bot, style, around, idleThinks, wars);
   if (!choice) return null;
-  const attack = attackCommand(choice.target.id, choice.focus, choice.share);
+  const attack = choice.bySea
+    ? boatCommand(choice.target.id, choice.focus, choice.share)
+    : attackCommand(choice.target.id, choice.focus, choice.share);
   // Betrayal: break the alliance first; both commands apply next tick, in this order.
   return choice.betray ? [{ type: "allianceBreak", ally: choice.target.id }, attack] : attack;
 }
@@ -321,12 +344,129 @@ function attackCommand(target: PlayerId, focusTile: number, share: number): Comm
   return { type: "attack", target, focusTile, percentBp };
 }
 
+function boatCommand(target: PlayerId, tile: number, share: number): Command {
+  const percentBp = Math.max(1, Math.min(10_000, Math.round(share * 10_000)));
+  return { type: "boat", target, tile, percentBp };
+}
+
+/** Boats this bot has at sea: settling neutral land, and against players. */
+function boatsAtSea(world: World, bot: Player): { settling: number; striking: number } {
+  let settling = 0;
+  let striking = 0;
+  for (const b of world.boats) {
+    if (b.owner !== bot.id) continue;
+    if (b.target === NEUTRAL) settling++;
+    else striking++;
+  }
+  return { settling, striking };
+}
+
+/**
+ * A boat to the nearest unclaimed coast across the bot's seas (GAME_DESIGN.md §3.18), when no
+ * open land touches its own and no settling boat is already out. Null if there is none
+ * within `seaReach`.
+ */
+function seaExpansion(
+  world: World,
+  bot: Player,
+  style: PersonalityRules,
+  around: Surroundings,
+): Command | null {
+  if (around.neutralFront >= 0 || around.seas.length === 0) return null;
+  if (boatsAtSea(world, bot).settling > 0) return null;
+  const { map } = world;
+  const { body } = seasOf(map);
+  const center = tileAt(map, Math.round(around.centerX), Math.round(around.centerY));
+  const reach = world.rules.ai.seaReach;
+  let best = -1;
+  let bestDistance = reach * reach;
+  for (const tile of coastTiles(map)) {
+    if (world.owner[tile] !== NEUTRAL) continue;
+    const d = distanceSq(map, tile, center);
+    if (d >= bestDistance || !touchesSea(map, body, tile, around.seas)) continue;
+    best = tile;
+    bestDistance = d;
+  }
+  if (best < 0) return null;
+  return boatCommand(NEUTRAL, best, style.expandShare);
+}
+
+type Choice = { target: Player; focus: number; share: number; betray: boolean; bySea: boolean };
+
+/**
+ * The best player to attack across the sea, when no land neighbour is worth it: the same
+ * estimate as on land (§3.6), for players whose coast lies on one of the bot's seas within
+ * `seaReach`, weighed by `seaPreference`. Aimed at their coast nearest the bot.
+ */
+function chooseSeaTarget(
+  world: World,
+  bot: Player,
+  style: PersonalityRules,
+  around: Surroundings,
+  idleThinks: number,
+  wars: Attack[],
+): Choice | null {
+  const ai = world.rules.ai;
+  if (around.seas.length === 0 || boatsAtSea(world, bot).striking > 0) return null;
+  const { map } = world;
+  const { body } = seasOf(map);
+  const center = tileAt(map, Math.round(around.centerX), Math.round(around.centerY));
+  const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
+  const boredom = Math.max(0, 1 - idleThinks / ai.boredomThinks);
+  const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
+  let best: Choice | null = null;
+  let bestScore = 0;
+  for (const target of world.players) {
+    const id = target.id;
+    if (id === bot.id || !target.alive || target.tiles === 0) continue;
+    if (around.neighborFront.has(id) || wars.some((a) => a.target === id)) continue;
+    if (sameTeam(world, bot.id, id) || isAllied(world, bot.id, id)) continue;
+    const army = Math.min(
+      armyToTakeAll(world, bot, target, style),
+      style.attackMaxShare * bot.homeTroops,
+    );
+    const gain = Math.min(
+      expectedLandShare(
+        world.rules,
+        army,
+        Math.max(1, target.homeTroops),
+        lossFactor(world, bot, target),
+      ),
+      army / tileCostOfAll(world, bot, target),
+    );
+    if (gain < minGain) continue;
+    const score =
+      gain *
+      target.tiles *
+      ai.seaPreference *
+      (isTribe(target) ? ai.tribePreference : 1) *
+      (isTraitor(world, target) ? ai.traitorPreference : 1);
+    if (score <= bestScore) continue;
+    // Their coast nearest us, on one of our seas.
+    let landing = -1;
+    let nearest = ai.seaReach * ai.seaReach;
+    for (const tile of target.border) {
+      const d = distanceSq(map, tile, center);
+      if (d >= nearest || !isCoast(map, tile) || !touchesSea(map, body, tile, around.seas))
+        continue;
+      landing = tile;
+      nearest = d;
+    }
+    if (landing < 0) continue;
+    bestScore = score;
+    best = { target, focus: landing, share: army / bot.homeTroops, betray: false, bySea: true };
+  }
+  return best;
+}
+
 function survey(world: World, bot: Player): Surroundings {
   const { width } = world.map;
   const o = world.owner;
   let neutralFront = -1;
   const neighborFront = new Map<PlayerId, number>();
   const fortFront = world.walls.length > 0 ? new Map<PlayerId, FortFront>() : null;
+  const seas: number[] = [];
+  const body = world.rules.naval.enabled ? seasOf(world.map).body : null;
   let sumX = 0;
   let sumY = 0;
   let count = 0;
@@ -334,6 +474,7 @@ function survey(world: World, bot: Player): Surroundings {
     const owner = o[tile]!;
     if (owner === bot.id) return;
     if (owner === NEUTRAL) {
+      if (body && body[tile] !== 0 && !seas.includes(body[tile]!)) seas.push(body[tile]!);
       if (neutralFront < 0 && isLand(world.map, tile)) neutralFront = tile;
     } else {
       if (!neighborFront.has(owner)) neighborFront.set(owner, tile);
@@ -363,6 +504,7 @@ function survey(world: World, bot: Player): Surroundings {
     centerX: count > 0 ? sumX / count : 0,
     centerY: count > 0 ? sumY / count : 0,
     fortFront,
+    seas,
   };
 }
 
@@ -516,12 +658,12 @@ function chooseTarget(
   incoming: Attack[],
   idleThinks: number,
   wars: Attack[],
-): { target: Player; focus: number; share: number; betray: boolean } | null {
+): Choice | null {
   const ai = world.rules.ai;
   const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
   const boredom = Math.max(0, 1 - idleThinks / ai.boredomThinks);
   const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
-  let best: { target: Player; focus: number; share: number; betray: boolean } | null = null;
+  let best: Choice | null = null;
   let bestScore = 0;
   const team = teamWars(world, bot);
   for (const [id, frontTile] of around.neighborFront) {
@@ -574,6 +716,7 @@ function chooseTarget(
               : frontTile,
         share: army / bot.homeTroops,
         betray: alliance !== undefined,
+        bySea: false,
       };
     }
   }

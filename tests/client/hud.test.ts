@@ -114,8 +114,8 @@ describe("toasts", () => {
   it("reports what matters to the local player only", () => {
     const toasts = toastsForEvents(
       [
-        { type: "attackStarted", attackId: 1, attacker: 2, target: 1 },
-        { type: "attackStarted", attackId: 2, attacker: 3, target: 2 },
+        { type: "attackStarted", attackId: 1, attacker: 2, target: 1, landingTile: -1 },
+        { type: "attackStarted", attackId: 2, attacker: 3, target: 2, landingTile: -1 },
         { type: "eliminated", playerId: 4, by: 1, loot: 0 },
         { type: "eliminated", playerId: 5, by: 3, loot: 0 },
         { type: "eliminated", playerId: 1, by: 3, loot: 0 },

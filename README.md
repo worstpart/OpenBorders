@@ -14,9 +14,11 @@ presentation. Not affiliated with OpenFront.
 **Phase 1 — Playable prototype: complete** (git tag `phase-1`): spawn, expand, fight bots,
 encircle, win or lose, with a full HUD. **Phase 2 — in progress:** big lobbies (up to 125
 opponents, Normal or Large map) ✅; Tribes & Nations (weak filler tribes, nations with
-Easy/Medium/Hard) ✅; alliances (timed, renewable, traitors) ✅; next teams (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
+Easy/Medium/Hard) ✅; alliances (timed, renewable, traitors) ✅; teams ✅; gold, Mobilize and
+gifts ✅; buildings — Housing, Factory, Port, levels I–III ✅; walls drawn point by point ✅;
+islands, boats and beachhead landings ✅; next more maps (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
 A new working session starts by reading the latest handoff in `docs/handoffs/`
-(currently [PHASE_2_AFTER_2.2_HANDOFF.md](docs/handoffs/PHASE_2_AFTER_2.2_HANDOFF.md)).
+(currently [PHASE_2_AFTER_2.7_HANDOFF.md](docs/handoffs/PHASE_2_AFTER_2.7_HANDOFF.md)).
 
 ## Running it
 
@@ -33,24 +35,27 @@ npm install
 | `npm run check` | Type-checks TypeScript and Svelte files |
 | `npm run build` | Production build into `dist/` (`npm run preview` serves it) |
 | `npm run format` | Formats code with Prettier (Markdown is left as written) |
-| `npm run headless -- --games 20` | Plays bots-only games without a browser and reports winners, game length, lead changes and tick times, with a per-system breakdown (options: `--bots` nations, `--tribes`, `--difficulty`, `--width`/`--height` for the map size, `--seed`, `--map-seed`, `--max-minutes`, `--json file`, `--rules overrides.json` to try rule changes, `--personality` to give every bot the same one, `--no-alliances` to switch diplomacy off) |
+| `npm run headless -- --games 20` | Plays bots-only games without a browser and reports winners, game length, lead changes and tick times, with a per-system breakdown (options: `--bots` nations, `--tribes`, `--difficulty`, `--width`/`--height` for the map size, `--seed`, `--map-seed`, `--max-minutes`, `--json file`, `--rules overrides.json` to try rule changes, `--personality` to give every bot the same one, `--no-alliances`, `--no-economy`, `--no-buildings`, `--no-boats` to switch systems off, `--continent` for the old island-free map, `--teams N`) |
 | `node tools/speeds.ts` | Measures how fast fronts move on each terrain and at each troop advantage (tiles per second); takes `--rules overrides.json` too |
 
 ## Controls (so far)
 
 | Input | Action |
 |---|---|
-| Left click | Choose / move your start (spawn phase); then expand into neutral land or attack enemy land |
+| Left click | Choose / move your start (spawn phase); then expand into neutral land or attack enemy land — land you can't reach over your border (another island, a player you don't border) gets a boat |
 | Enter | Confirm your start |
 | 1 2 3 4 5 | Send 10 / 25 / 50 / 75 / 100% of your home troops per click |
 | Q / E, Shift + wheel | Send 5% less / more |
 | × on an attack chip | Retreat (troops return after 2 s, −20% against players) |
+| ↩ on a boat chip | Turn the boat back (its troops come home when it is back) |
+| Build bar (bottom) | Pick up Housing, Factory, Port (coast only) or the Wall tool; click your land to place; right-click / Esc puts it back |
+| M | Mobilize: turn gold into troops |
 | Play again (end card) | Back to the start screen for a new game |
 | Drag (any button) | Pan |
 | Mouse wheel | Zoom toward the cursor |
 | W A S D / arrows | Pan |
 | Space | Center on your territory |
-| Right click | Options for that land: attack presets, request / accept / renew / break an alliance |
+| Right click | Options for that land: attack presets, a boat, request / accept / renew / break an alliance, gifts to friends |
 | K | Ally with the player under the cursor (request, or accept their request) |
 | Y / N | Yes / no to the top alliance card (accept or decline a request, renew or let it end) |
 | F3 or ` | Performance overlay |

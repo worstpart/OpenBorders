@@ -4,7 +4,8 @@
  * holes). The same paths are drawn on the map (Canvas2D Path2D) and in the HUD (inline
  * SVG), so a building looks the same everywhere. Each level adds detail: a house → a street
  * → a skyline; a workshop → a plant → a smoking industrial complex; a palisade → a
- * crenellated wall → a fortress tower between walls (the wall tool, D-024).
+ * crenellated wall → a fortress tower between walls (the wall tool, D-024); a boat at a pier
+ * → a pier with a crane (Port).
  */
 import type { BuildingType } from "../sim/rules.ts";
 import type { Placeable } from "./app/buildings.ts";
@@ -121,9 +122,38 @@ const POST_3 = [
   rect(18, 15, 3, 1.4),
 ].join("");
 
+/** Port I: a sailing boat beside a pier on posts (GAME_DESIGN.md §3.18). */
+const PIER = [
+  rect(12, 15, 10.5, 1.6), // deck
+  rect(13, 16.6, 1.2, 3.6), // posts
+  rect(16.8, 16.6, 1.2, 3.6),
+  rect(20.6, 16.6, 1.2, 3.6),
+].join("");
+const PORT_1 = [
+  PIER,
+  "M2 15.5H12.5L10.6 18.8H4Z", // hull
+  rect(6.6, 5.5, 0.9, 10), // mast
+  "M7.5 6L11.6 14.5H7.5Z", // sail
+  "M1.5 20.5H22.5V21.8H1.5Z", // water line
+].join("");
+/** Port II (Naval Port): the pier gets a crane lifting a crate. */
+const PORT_2 = [
+  PIER,
+  "M2 15.5H11.5L9.8 18.8H3.7Z",
+  rect(5.9, 6.5, 0.9, 9),
+  "M6.8 7L10.4 14.5H6.8Z",
+  rect(17, 4.4, 1.4, 10.6), // crane mast, down to the deck
+  rect(13.5, 3, 9.5, 1.4), // crane arm
+  rect(21.4, 4.4, 0.5, 3.6), // cable
+  rect(20.4, 8, 2.5, 2.2), // crate
+  "M1.5 20.5H22.5V21.8H1.5Z",
+].join("");
+
 export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, string, string]>> = {
   housing: [HOUSE_1, HOUSE_2, HOUSE_3],
   factory: [FACTORY_1, FACTORY_2, FACTORY_3],
+  // Level III (Naval Base) comes with Phase 2B; until then nothing reaches it.
+  port: [PORT_1, PORT_2, PORT_2],
 };
 
 /** The wall tool and wall cards (GAME_DESIGN.md §3.17.6). */

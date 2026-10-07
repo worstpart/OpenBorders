@@ -73,7 +73,7 @@ function fullWall(w: World, x: number, level = 1): number {
 }
 
 const fakeAttack = (attacker: number, target: number, troops: number) =>
-  ({ attacker, target, troops }) as unknown as Attack;
+  ({ attacker, target, troops, landingTile: -1, lossFactor: 1 }) as unknown as Attack;
 
 describe("drawing a wall", () => {
   const map = world().map;

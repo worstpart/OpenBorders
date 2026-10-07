@@ -7,11 +7,13 @@ import type {
   AllianceRequestSnapshot,
   AllianceSnapshot,
   AttackSnapshot,
+  BoatSnapshot,
   BuildingSnapshot,
   WallSnapshot,
   PlayerSnapshot,
 } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
+import type { BoatContext, BoatPreview } from "./boats.ts";
 import type { BuildContext, Placeable } from "./buildings.ts";
 import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
 import type { DonationContext } from "./economy.ts";
@@ -84,6 +86,10 @@ class UiState {
   allianceRequests = $state.raw<readonly AllianceRequestSnapshot[]>([]);
   buildings = $state.raw<readonly BuildingSnapshot[]>([]);
   walls = $state.raw<readonly WallSnapshot[]>([]);
+  /** Boats at sea (GAME_DESIGN.md §3.18). */
+  boats = $state.raw<readonly BoatSnapshot[]>([]);
+  /** The crossing a click on the hovered land would start (null: the click isn't a boat). */
+  boatPreview = $state.raw<BoatPreview | null>(null);
   /** The building picked up from the build bar, following the mouse until placed. */
   placing = $state<Placeable | null>(null);
   /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */
@@ -133,6 +139,8 @@ class UiState {
     this.allianceRequests = [];
     this.buildings = [];
     this.walls = [];
+    this.boats = [];
+    this.boatPreview = null;
     this.placing = null;
     this.wallPoints = [];
     this.myRequests = new Map();
@@ -198,6 +206,20 @@ class UiState {
       owner: this.owner,
       buildings: this.buildings,
       walls: this.walls,
+      me: this.me,
+      tick: this.tick,
+      playing: this.phase === "playing",
+    };
+  }
+
+  /** What the boat HUD needs (GAME_DESIGN.md §3.18). */
+  get boatContext(): BoatContext {
+    return {
+      rules: DEFAULT_RULES,
+      map: this.map,
+      owner: this.owner,
+      buildings: this.buildings,
+      boats: this.boats,
       me: this.me,
       tick: this.tick,
       playing: this.phase === "playing",

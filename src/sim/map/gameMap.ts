@@ -88,6 +88,19 @@ export function neighbors(map: GameMap, tile: number, out: Int32Array): number {
   return count;
 }
 
+/** A land tile next to water (4-neighbours): where boats leave and land, and Ports stand. */
+export function isCoast(map: GameMap, tile: number): boolean {
+  const { width, terrain } = map;
+  if (terrain[tile] === Terrain.Water) return false;
+  const x = tile % width;
+  return (
+    (tile >= width && terrain[tile - width] === Terrain.Water) ||
+    (tile + width < terrain.length && terrain[tile + width] === Terrain.Water) ||
+    (x > 0 && terrain[tile - 1] === Terrain.Water) ||
+    (x < width - 1 && terrain[tile + 1] === Terrain.Water)
+  );
+}
+
 /** True if the tile is on the outer edge of the map. */
 export function isMapEdge(map: GameMap, tile: number): boolean {
   const x = tileX(map, tile);

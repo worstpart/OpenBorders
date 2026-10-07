@@ -17,7 +17,7 @@
  * economy) nothing here runs and games play as in 2.4.
  */
 import { withinRange } from "../geometry.ts";
-import { isLand, type GameMap } from "../map/gameMap.ts";
+import { isCoast, isLand, type GameMap } from "../map/gameMap.ts";
 import {
   BUILDING_TYPES,
   type BuildingLevelRules,
@@ -39,6 +39,11 @@ export function buildingsEnabled(rules: GameRules): boolean {
   return rules.buildings.enabled && rules.economy.enabled;
 }
 
+/** Building types this game offers: Ports only come with boats (GAME_DESIGN.md §3.18). */
+export function buildingAvailable(rules: GameRules, type: BuildingType): boolean {
+  return type !== "port" || rules.naval.enabled;
+}
+
 export function isBuildingType(value: unknown): value is BuildingType {
   return (BUILDING_TYPES as readonly unknown[]).includes(value);
 }
@@ -54,7 +59,10 @@ export function levelRules(
   return found;
 }
 
-export const MAX_LEVEL = 3;
+/** The top level of a building type (3; Port 2 until Phase 2B). */
+export function maxLevel(rules: GameRules, type: BuildingType): number {
+  return rules.buildings.types[type].levels.length;
+}
 
 /** What the price escalation counts: the levels of `type` a player owns, building ones included. */
 export function levelsOwned(
@@ -82,7 +90,7 @@ export function buildingPrice(
 }
 
 /** Why a building can't go on `tile` (gold aside), or null. Shared with the HUD. */
-export type PlacementProblem = "notYourLand" | "water" | "tooClose";
+export type PlacementProblem = "notYourLand" | "water" | "notCoast" | "tooClose";
 
 export function placementProblem(
   rules: GameRules,
@@ -91,10 +99,13 @@ export function placementProblem(
   buildings: readonly { tile: number }[],
   playerId: PlayerId,
   tile: number,
+  type?: BuildingType,
 ): PlacementProblem | null {
   if (!Number.isInteger(tile) || tile < 0 || tile >= owner.length) return "notYourLand";
   if (!isLand(map, tile)) return "water";
   if (owner[tile] !== playerId) return "notYourLand";
+  if (type && rules.buildings.types[type].placement === "coast" && !isCoast(map, tile))
+    return "notCoast";
   const spacing = rules.buildings.minSpacing;
   for (const b of buildings) {
     if (withinRange(map, b.tile, tile, spacing - 1)) return "tooClose";
@@ -105,6 +116,7 @@ export function placementProblem(
 const PLACEMENT_REASON: Record<PlacementProblem, string> = {
   notYourLand: "you can only build on your own land",
   water: "you can only build on land",
+  notCoast: "a port must stand on the coast",
   tooClose: "too close to another building",
 };
 
@@ -123,7 +135,16 @@ export function applyBuild(
   if (!buildingsEnabled(rules)) return "there are no buildings in this game";
   if (world.phase !== "playing") return "the match hasn't started";
   if (!isBuildingType(type)) return "unknown building";
-  const problem = placementProblem(rules, world.map, world.owner, world.buildings, player.id, tile);
+  if (!buildingAvailable(rules, type)) return "there are no boats in this game";
+  const problem = placementProblem(
+    rules,
+    world.map,
+    world.owner,
+    world.buildings,
+    player.id,
+    tile,
+    type,
+  );
   if (problem) return PLACEMENT_REASON[problem];
   if (world.wallAt[tile]! >= 0) return "there is a wall there";
   const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, player.id, type));
@@ -163,7 +184,7 @@ export function applyUpgrade(world: World, player: Player, buildingId: number): 
   const building = findBuilding(world, buildingId);
   if (!building || building.owner !== player.id) return "not your building";
   if (busy(building)) return "it is still being built";
-  if (building.level >= MAX_LEVEL) return "already at the top level";
+  if (building.level >= maxLevel(rules, building.type)) return "already at the top level";
   const level = building.level + 1;
   const price = buildingPrice(
     rules,

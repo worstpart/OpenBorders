@@ -81,8 +81,26 @@ export function hashWorld(world: World): number {
       .addInt(a.tilesTaken)
       .addInt(a.retreatTick)
       .addInt(a.freeRetreat)
+      .addInt(a.landingTile)
+      .addNumber(a.lossFactor)
       .addInt(a.front.size)
       .addNumber(a.front.peekTime());
+  }
+  h.addInt(world.nextBoatId).addInt(world.boats.length);
+  for (const b of world.boats) {
+    h.addInt(b.id)
+      .addInt(b.owner)
+      .addInt(b.target)
+      .addNumber(b.troops)
+      .addInt(b.launchTile)
+      .addInt(b.landingTile)
+      .addInt(b.focusTile)
+      .addInt(b.route.length)
+      .addInt(b.launchTick)
+      .addNumber(b.tilesPerTick)
+      .addNumber(b.lossFactor)
+      .addInt(b.arriveTick)
+      .addInt(b.recallTick);
   }
   h.addInt(world.nextBuildingId).addInt(world.buildings.length);
   for (const b of world.buildings) {

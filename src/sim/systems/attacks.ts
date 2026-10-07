@@ -66,8 +66,14 @@ export function applyAttackCommand(
   if (!bordersTarget(world, player, target)) return "you don't border that land";
 
   player.homeTroops -= troops;
+  // Land clicks add to the land army against this target; beachheads stay separate.
   let attack = world.attacks.find(
-    (a) => a.attacker === player.id && a.target === target && a.retreatTick < 0 && !a.ended,
+    (a) =>
+      a.attacker === player.id &&
+      a.target === target &&
+      a.landingTile < 0 &&
+      a.retreatTick < 0 &&
+      !a.ended,
   );
   if (attack) {
     attack.troops += troops;
@@ -87,15 +93,70 @@ export function applyAttackCommand(
       scheduled: new Map(),
       growthSeed: world.rng.nextUint32(),
       freeRetreat: false,
+      landingTile: -1,
+      lossFactor: 1,
     };
     world.attacks.push(attack);
-    world.events.push({ type: "attackStarted", attackId: attack.id, attacker: player.id, target });
+    world.events.push({
+      type: "attackStarted",
+      attackId: attack.id,
+      attacker: player.id,
+      target,
+      landingTile: -1,
+    });
   }
   // A (bigger) attack can make an enclosed player's main territory fall (encirclement).
   if (target !== NEUTRAL) getPlayer(world, target)!.encircleDirty = true;
   seedFront(world, attack);
   updateFieldTroops(world);
   return null;
+}
+
+/**
+ * A beachhead attack (GAME_DESIGN.md §3.18): an army landing on `landingTile` (the
+ * target's, or neutral land) that first takes that tile — paying for it like any tile —
+ * and then spreads from it toward `focusTile`. It never merges with the land army against
+ * the same target. Used by boats now and by airborne assaults in Phase 2B. Its pocket can't
+ * be encircled while the attack advances (encirclement.ts).
+ */
+export function launchBeachhead(
+  world: World,
+  player: Player,
+  target: PlayerId,
+  landingTile: number,
+  focusTile: number,
+  troops: number,
+  lossFactor: number,
+): Attack {
+  const attack: Attack = {
+    id: world.nextAttackId++,
+    attacker: player.id,
+    target,
+    troops,
+    focusTile,
+    startTick: world.tick,
+    tilesTaken: 0,
+    retreatTick: -1,
+    ended: false,
+    front: new TileQueue(),
+    scheduled: new Map(),
+    growthSeed: world.rng.nextUint32(),
+    freeRetreat: false,
+    landingTile,
+    lossFactor,
+  };
+  world.attacks.push(attack);
+  world.events.push({
+    type: "attackStarted",
+    attackId: attack.id,
+    attacker: player.id,
+    target,
+    landingTile,
+  });
+  if (target !== NEUTRAL) getPlayer(world, target)!.encircleDirty = true;
+  schedule(attack, landingTile, world.tick);
+  updateFieldTroops(world);
+  return attack;
 }
 
 /** Handles the `retreat` command: the army stops at once and comes home later, minus a penalty. */
@@ -114,6 +175,8 @@ export function applyRetreatCommand(world: World, player: Player, attackId: numb
 export function retreatAttack(world: World, attack: Attack, free: boolean): void {
   attack.retreatTick = world.tick + world.rules.attack.retreatTicks;
   attack.freeRetreat = free;
+  // A landing pocket loses its protection from encirclement: check it again.
+  if (attack.landingTile >= 0) getPlayer(world, attack.attacker)!.encircleDirty = true;
   attack.front.clear();
   attack.scheduled.clear();
 }
@@ -167,10 +230,10 @@ function advance(world: World, attack: Attack): void {
     const tile = front.pop();
     if (attack.scheduled.get(tile) !== time) continue; // superseded by an earlier entry
     attack.scheduled.delete(tile);
-    // Stale entries: the tile changed hands, or our land next to it was lost.
-    if (world.owner[tile] !== attack.target || !touchesOwner(world, tile, attack.attacker)) {
-      continue;
-    }
+    // Stale entries: the tile changed hands, or our land next to it was lost. (A beachhead's
+    // landing tile is taken from the sea.)
+    if (world.owner[tile] !== attack.target) continue;
+    if (!touchesOwner(world, tile, attack.attacker) && tile !== attack.landingTile) continue;
 
     const cost = tileCost(world, attack, tile);
     if (attack.troops < cost) {
@@ -318,7 +381,8 @@ function growthResistance(world: World, attack: Attack, tile: number): number {
 /** Troops the attacker pays to take `tile`. */
 export function tileCost(world: World, attack: Attack, tile: number): number {
   const terrain = world.map.terrain[tile]!;
-  if (attack.target === NEUTRAL) return terrainValue(world.rules.expansion.costPerTile, terrain);
+  if (attack.target === NEUTRAL)
+    return attack.lossFactor * terrainValue(world.rules.expansion.costPerTile, terrain);
   const { combat } = world.rules;
   const defender = getPlayer(world, attack.target)!;
   const ratio = clamp(outnumbering(world, attack), combat.lossRatioMin, combat.lossRatioMax);
@@ -330,7 +394,8 @@ export function tileCost(world: World, attack: Attack, tile: number): number {
     wallLossFactor(world, tile),
   );
   return (
-    discount *
+    attack.lossFactor *
+      discount *
       terrainValue(combat.terrainLoss, terrain) *
       ratio *
       (combat.lossBase + combat.lossDensity * defenderDensity(defender)) +
@@ -415,6 +480,7 @@ function endAttack(world: World, attack: Attack, reason: EndReason): void {
   attacker.homeTroops += survivors;
   attack.troops = 0;
   attack.ended = true;
+  if (attack.landingTile >= 0) attacker.encircleDirty = true; // see retreatAttack
   attack.front.clear();
   attack.scheduled.clear();
   world.events.push({
@@ -485,11 +551,12 @@ function removeEnded(world: World): void {
   if (world.attacks.some((a) => a.ended)) world.attacks = world.attacks.filter((a) => !a.ended);
 }
 
-/** Field troops are always recomputed from the armies, so they can never drift. */
-function updateFieldTroops(world: World): void {
+/** Field troops are always recomputed from the armies and boats, so they can never drift. */
+export function updateFieldTroops(world: World): void {
   for (const player of world.players) player.fieldTroops = 0;
   for (const attack of world.attacks)
     getPlayer(world, attack.attacker)!.fieldTroops += attack.troops;
+  for (const boat of world.boats) getPlayer(world, boat.owner)!.fieldTroops += boat.troops;
 }
 
 function distance(world: World, a: number, b: number): number {

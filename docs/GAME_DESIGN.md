@@ -70,6 +70,13 @@ All numbers live in one rules config (`GameRules`) — none are hard-coded in sy
   toward the edges; sea level chosen so 55% of tiles are land; only the largest landmass
   is kept (no boats yet) and lakes under 80 tiles are filled; land is ~68% plains, 22%
   highland, 10% mountain, with mountains following ridge noise so they form chains.
+- **Islands (milestone 2.7, D-025 — the user chose islands always):** the continent
+  holds 42% of the map and 5–7 islands another ~8% (50% land in all). Islands are their
+  own layer — each has a centre in the ring between the continent and the map edge and
+  its own falloff — and rise only beyond **18 tiles of open sea** from the continent's
+  coast; islets under 400 tiles are sunk. On the reference map: a continent of ~320k tiles
+  and islands of ~1k–45k. `islands: false` still makes the old single continent exactly
+  (regression runs).
 - Tiles are 4-connected (N/S/W/E) for ownership and combat.
 - Terrain classes: **Plains** (fast, cheap), **Highland** (slower, costlier),
   **Mountain** (slowest, costliest), **Water** (impassable in Phase 1).
@@ -809,9 +816,9 @@ toggle shows all your coverage (and enemies' known SAM rings) at once.
 - **Factory** — gold income and cheaper Mobilize (OpenFront's trains are replaced by a
   plain income number; the user's "military production" is the Mobilize discount and, at
   level III, faster reloads for nearby airports and silos once they exist).
-- **Port** — builds on the naval plan (§6.3: boats launch from *any* coast; a port makes
-  them better). Level III's warship patrol waits for the naval follow-up (only if boats
-  prove fun); its coastal fortification will be a coastal wall (§3.17.6).
+- **Port** ✅ I–II (2.7, §3.18) — boats launch from *any* coast; a Port makes them better.
+  Level III's warship patrol waits for the naval follow-up (only if boats prove fun); its
+  coastal fortification will be a coastal wall (§3.17.6).
 
 #### 3.17.10 The 21-tier matrix (proposed starting numbers)
 
@@ -826,8 +833,8 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Factory ✅ | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | hall + one chimney |
 | Factory ✅ | II Industrial Complex | +120k (180k) | 10 s | +90 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | hall + two chimneys |
 | Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B — not built yet) | 60 | — | — | same — a prime target | hall + three chimneys |
-| Port | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
-| Port | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
+| Port ✅ | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
+| Port ✅ | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
 | Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (a Stone Wall along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
 | Wall ✅ (D-024) | I Palisade | 600/tile | 4 s + 0.1 s/tile | wall tiles hold 3 s, ×3 + 150 losses | drawn A, B, C … anywhere on your land | — | ≤ 80 tiles | — | go around, break through (a gap), airborne, strike, missile | brown stakes |
 | Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
@@ -950,6 +957,52 @@ tune the game's pace (crush curve, win share) rather than make L3 cheaper.
   by level (stakes, blocks, merlons and towers); suppressed zones briefly hatched.
 - **Upgrade feedback:** the icon changes, pips fill, a soft pulse, the range ring grows
   once, a toast "Air Base ready — air strikes unlocked". No big animations.
+
+### 3.18 Boats & Ports (milestone 2.7 · as built · D-025)
+
+Boats carry troops across the sea and land them as an attack on the far coast — the way to
+reach islands, and a way around fronts and walls. Like OpenFront: any coast will do, no
+Port needed; Ports make boats better.
+
+**Sending a boat.** Click land you can't reach over your own border — land on another
+landmass, or a player you don't border — and a boat goes instead of an attack (the hover
+card says "Click: ⛵ boat with N · lands in X s", a dashed route with a landing ring shows
+on the map). The right-click menu offers "⛵ Boat with N%" for any coastal target, even one
+you border by land. The boat carries the current send % of your home troops.
+
+| Rule | Value / behaviour | Why |
+|---|---|---|
+| Landing | the target's coast tile nearest the click (searched up to 60 tiles around it); neutral land too (settling an island) | Click where you want to land |
+| Launch | your coast tile on the same sea that lands soonest: the nearest one, or a Port's tile if its speed makes it sooner | Any coast works; Ports matter |
+| Route | shortest path over sea tiles, 8 directions, never cutting a corner of land; found once at launch (deterministic A*, gives up after 600k sea tiles: "no sea route") | Visible, predictable, cheap |
+| Speed | 1 sea tile per tick = 10 tiles/s (a 100-tile crossing takes 10 s); ×1.5 from a Port I, ×2 from a Naval Port within 30 tiles of the launch | Long enough to see coming, short enough to matter |
+| Boats at sea | 3 at once; +1 per Port I, +2 per Naval Port; at most 6 | OpenFront's 3; Ports raise it |
+| Troops aboard | count toward your capacity (like an army in the field) | D-011: no stockpiling at sea |
+| Landing | a **beachhead attack**: it takes the landing tile (paying the normal cost) and spreads from it toward the click; it never merges with your land army against the same player | OpenFront's boat attacks don't merge either; airborne assaults (2B) reuse it |
+| Landing pocket | can't be encircled while its attack advances; once it stops (spent, retreated, done) it can | A landing isn't wiped out by the encirclement rule the moment it lands |
+| Landed on friendly land | if the landing tile became yours or a friend's meanwhile, the troops go home | Never attack a friend by accident (an OpenFront bug) |
+| Recall | the boat turns around; troops come home when it is back (no loss) | A changed mind costs time, not troops |
+| Owner eliminated | their boats sink | — |
+| Marines (Naval Port) | landings launched within its range pay ×0.8 losses per tile | Level II's new ability (§3.17.10) |
+
+**Ports (I–II).** Built on a coast tile (the ghost is red inland). Port I: 50k, 10 s, +15
+gold/tick, boats ×1.5, +1 boat. Naval Port: +120k, 15 s, +40 gold/tick, boats ×2, +2 boats,
+Marines. The best Port in range counts (speeds don't stack). Captured Ports are adopted
+like any building. Level III (Naval Base) comes with Phase 2B. A game without boats offers
+no Ports.
+
+**Warnings.** A boat sailing for your coast: a red toast "⛵ X's boat is heading for your
+coast", a red chip counting down "X's boat lands in N s", and its route drawn in red to a red
+landing ring. A landing: "X landed on your coast". Your own boats: a chip "⛵ To X · troops
+· Lands in N s" with a Recall button (↩); beachhead armies show ⛵ in their chips.
+
+**Nations.** A nation with no open land next to it sails for the nearest unclaimed coast
+within 300 tiles (one settling boat at a time). One that finds no land target worth it
+looks across the sea for a player it can beat (the same estimate as on land, weighed ×0.7
+for the crossing) and lands on their coast nearest it (one attacking boat at a time); it
+mobilizes before a boat attack like before a land attack. Nations build one Port (valued
+for its income plus 0.2 × capacity per unit of boat speed) and upgrade it. Tribes stay on
+land.
 
 ---
 
@@ -1139,9 +1192,10 @@ earlier "no silos/SAMs before Phase 4"). The original idea, kept for history:*
 
 ### 6.3 Naval (Phase 2)
 
-Transport boats launched from any coast toward a target shore (max 3 at once),
-visible route and ETA, landing starts a directed attack from the beachhead, recall
-allowed, boat troops count toward the cap. Warships only if transports prove fun.
+*Built in milestone 2.7 — see **§3.18**.* Transport boats launched from any coast toward a
+target shore (max 3 at once), visible route and ETA, landing starts a directed attack from
+the beachhead, recall allowed, boat troops count toward the cap. Warships only if
+transports prove fun.
 
 ### 6.4 Diplomacy (Phase 2)
 

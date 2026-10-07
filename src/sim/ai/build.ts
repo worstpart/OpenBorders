@@ -29,7 +29,7 @@
  * `wallLength` tiles and clipped to the bot's own clear land.
  */
 import type { Command } from "../commands.ts";
-import { isLand, tileAt, type GameMap } from "../map/gameMap.ts";
+import { isCoast, isLand, tileAt, type GameMap } from "../map/gameMap.ts";
 import { detPow } from "../math/detmath.ts";
 import {
   BUILDING_TYPES,
@@ -38,11 +38,12 @@ import {
   type Personality,
 } from "../rules.ts";
 import {
+  buildingAvailable,
   buildingPrice,
   buildingsEnabled,
   levelRules,
   levelsOwned,
-  MAX_LEVEL,
+  maxLevel,
   placementProblem,
 } from "../systems/buildings.ts";
 import { distanceSq } from "../geometry.ts";
@@ -111,7 +112,7 @@ function buildingGoal(world: World, bot: Player): Goal | null {
   };
   const none = { upgrade: null, newType: null, wallUpgrade: null, wallPoints: null };
   for (const b of mine) {
-    if (b.level >= MAX_LEVEL) continue;
+    if (b.level >= maxLevel(rules, b.type)) continue;
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
     const value =
@@ -121,6 +122,10 @@ function buildingGoal(world: World, bot: Player): Goal | null {
   }
   if (mine.length < Math.floor(bot.tiles / ai.tilesPerBuilding)) {
     for (const type of BUILDING_TYPES) {
+      if (!buildingAvailable(rules, type)) continue;
+      // One Port is enough (its speed doesn't stack); it needs a coast.
+      if (type === "port" && (mine.some((b) => b.type === "port") || !hasCoast(world, bot)))
+        continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
       consider(price, worth(world, bot, levelRules(rules, type, 1)), { ...none, newType: type });
     }
@@ -161,8 +166,12 @@ export function decideBuild(world: World, bot: Player, incoming: number): Comman
   if (incoming > bot.homeTroops * 0.5) return null;
   if (goal.wallUpgrade !== null) return { type: "upgradeWall", wallId: goal.wallUpgrade };
   if (goal.upgrade !== null) return { type: "upgrade", buildingId: goal.upgrade };
-  const tile = buildSite(world, bot);
-  return tile < 0 ? null : { type: "build", buildingType: goal.newType!, tile };
+  const type = goal.newType!;
+  const tile =
+    world.rules.buildings.types[type].placement === "coast"
+      ? portSite(world, bot)
+      : buildSite(world, bot);
+  return tile < 0 ? null : { type: "build", buildingType: type, tile };
 }
 
 /** Gold a nation keeps out of its war chest while saving for its goal. */
@@ -341,7 +350,10 @@ function planWall(
   return null;
 }
 
-/** What a level's effects are worth to this bot, in troop-equivalents. */
+/**
+ * What a level's effects are worth to this bot, in troop-equivalents. A Port's faster
+ * boats and extra slots count as `portWorth` × capacity per boat speed step (§3.18).
+ */
 function worth(world: World, bot: Player, effect: BuildingLevelRules): number {
   const ai = world.rules.ai.build;
   const troops = world.rules.troops;
@@ -351,8 +363,62 @@ function worth(world: World, bot: Player, effect: BuildingLevelRules): number {
     (effect.capacity ?? 0) +
     (effect.growthBonus ?? 0) * peakGrowth * ai.growthHorizonTicks +
     (effect.income ?? 0) * ai.incomeHorizonTicks +
-    (effect.mobilizeDiscount ?? 0) * income
+    (effect.mobilizeDiscount ?? 0) * income +
+    ((effect.boatSpeed ?? 1) - 1) * ai.portWorth * bot.capacity
   );
+}
+
+/** The bot owns a coast tile (a Port could stand there). */
+function hasCoast(world: World, bot: Player): boolean {
+  for (const tile of bot.border) if (isCoast(world.map, tile)) return true;
+  return false;
+}
+
+/**
+ * A coast tile of the bot's where a Port may stand, or -1: sampled among its coast tiles,
+ * preferring the one farthest from other players' land (safest).
+ */
+function portSite(world: World, bot: Player): number {
+  const { map } = world;
+  const coast: number[] = [];
+  for (const tile of bot.border) if (isCoast(map, tile)) coast.push(tile);
+  if (coast.length === 0) return -1;
+  let best = -1;
+  let bestDepth = 0;
+  const samples = world.rules.ai.build.placementSamples;
+  for (let k = 0; k < samples; k++) {
+    const tile = coast[world.rng.nextInt(coast.length)]!;
+    if (world.wallAt[tile]! >= 0) continue;
+    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile, "port"))
+      continue;
+    const depth = landDepth(world, bot, tile);
+    if (depth > bestDepth || (depth === bestDepth && tile < best)) {
+      best = tile;
+      bestDepth = depth;
+    }
+  }
+  return best;
+}
+
+/** Steps (up to DEPTH_REACH) from `tile` to the nearest land the bot doesn't own, on 8 rays. */
+function landDepth(world: World, bot: Player, tile: number): number {
+  const { map } = world;
+  const x = tile % map.width;
+  const y = Math.floor(tile / map.width);
+  let depth = DEPTH_REACH;
+  for (const [dx, dy] of DIRECTIONS) {
+    for (let step = 1; step < depth; step++) {
+      const nx = x + dx * step;
+      const ny = y + dy * step;
+      if (!inBounds(map, nx, ny)) break;
+      const t = tileAt(map, nx, ny);
+      if (isLand(map, t) && world.owner[t] !== bot.id) {
+        depth = step;
+        break;
+      }
+    }
+  }
+  return depth;
 }
 
 /**
@@ -387,7 +453,8 @@ function buildSite(world: World, bot: Player): number {
     const tile = tileAt(map, x, y);
     if (world.owner[tile] !== bot.id || !isLand(map, tile)) continue;
     if (world.wallAt[tile]! >= 0) continue;
-    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile)) continue;
+    if (placementProblem(world.rules, map, world.owner, world.buildings, bot.id, tile, "housing"))
+      continue;
     const depth = depthOf(world, bot, x, y);
     if (depth > bestDepth) {
       best = tile;

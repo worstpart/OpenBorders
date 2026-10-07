@@ -30,6 +30,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-022 | Border Defense = posts that fortify the owner's border inside a zone, drawn as walls | **Superseded** by D-024 (2026-10-02) |
 | D-023 | Air rules: sender-only airports, deterministic SAM interceptors, level = health; troop gifts only over a shared border or by airlift | **Accepted** 2026-10-02 (user) |
 | D-024 | Border Defense = walls the player draws point by point (Clash of Clans style); hard tiles that hold attacks and break piece by piece | **Accepted** 2026-10-02 (user) |
+| D-025 | Islands on every generated map; boats from any coast land as beachhead attacks; Ports make them better | **Accepted** 2026-10-02 (user: islands always) |
 
 ---
 
@@ -424,3 +425,31 @@ the first push; walls built a few tiles inside your land are the strong play —
 line, like Clash of Clans' inner walls. D-022's concern (painted segments go stale) is
 answered by that: a wall is a fixed object on your land, not a property of the border.
 
+---
+
+## D-025 — Islands always; boats land as beachheads · Accepted 2026-10-02
+
+**Context.** Milestone 2.7 adds boats, but the generated map kept only its largest
+landmass (D-009, "no boats yet"), so boats could only cut across bays. Asked how boats
+should get something to cross — a map choice (continent or islands), islands always, or
+one continent until real maps (2.8) — **the user chose islands always**.
+
+**Decision.** Every generated map is a continent plus 5–7 islands (§3.2): the islands are
+their own layer, held to ~8% of the map and at least 18 tiles of open sea from the
+continent; total land drops from 55% to 50%. `generateContinent({ islands: false })` still
+makes the old map, byte for byte (a golden test pins it), so `--continent --no-boats`
+headless runs reproduce 2.6 exactly. Boats (GAME_DESIGN §3.18): launched from any coast,
+no Port needed; the route is a deterministic A* over sea tiles found once at launch; troops
+aboard count toward the cap; on arrival they land as a **beachhead attack** — it takes the
+landing tile and spreads from it, never merging with the land army, and its pocket can't be
+encircled while it advances (built generically, for airborne assaults in 2B). Recall turns
+a boat back. Port I–II: faster boats from its stretch of coast, more boats at sea, harbour
+income, Marines (cheaper landings) at level II.
+
+**Consequences.** Balance numbers from before 2.7 are no longer directly comparable (a
+different map with less land); 2.7's report gives both. Clicking land you can't reach over
+your border — another landmass, or a player you don't border — sends a boat (OpenFront
+does the same).
+
+**Alternatives.** A map choice on the start screen (my recommendation: keeps the old map
+for comparison); one continent until real maps arrive in 2.8 (boats would barely matter).

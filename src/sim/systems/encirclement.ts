@@ -54,13 +54,20 @@ export function encircle(world: World): void {
 }
 
 function annexEnclosedPieces(world: World, player: Player): void {
+  // Landing pockets: the piece holding the landing tile of one of the player's advancing
+  // beachhead attacks can't be encircled (GAME_DESIGN.md §3.18) — once it stops, it can.
+  const landings: number[] = [];
+  for (const a of world.attacks) {
+    if (a.attacker === player.id && a.landingTile >= 0 && a.retreatTick < 0 && !a.ended)
+      landings.push(a.landingTile);
+  }
   // Every piece has at least one border tile, so flooding from border tiles finds all of
   // them. Collect first: annexing changes the border set being iterated.
   const stamp = nextScratchStamp(world);
   const pieces: Piece[] = [];
   for (const tile of player.border) {
     if (world.scratchMarks[tile] !== stamp)
-      pieces.push(measurePiece(world, player.id, tile, stamp));
+      pieces.push(measurePiece(world, player.id, tile, stamp, landings));
   }
   let main = pieces[0];
   for (const piece of pieces) if (main && piece.size > main.size) main = piece;
@@ -86,7 +93,13 @@ function annexEnclosedPieces(world: World, player: Player): void {
 }
 
 /** Flood-fills one piece of `owner`'s land, marking its tiles with `stamp`. */
-function measurePiece(world: World, owner: PlayerId, start: number, stamp: number): Piece {
+function measurePiece(
+  world: World,
+  owner: PlayerId,
+  start: number,
+  stamp: number,
+  landings: readonly number[],
+): Piece {
   const { width } = world.map;
   const o = world.owner;
   const marks = world.scratchMarks;
@@ -116,6 +129,7 @@ function measurePiece(world: World, owner: PlayerId, start: number, stamp: numbe
     const tile = queue[head++]!;
     const x = tile % width;
     if (tile < width || tile + width >= o.length || x === 0 || x === width - 1) safe = true;
+    if (landings.length > 0 && landings.includes(tile)) safe = true;
     if (tile >= width) look(tile - width);
     if (tile + width < o.length) look(tile + width);
     if (x > 0) look(tile - 1);

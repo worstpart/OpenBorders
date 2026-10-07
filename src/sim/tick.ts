@@ -26,6 +26,7 @@ import {
 } from "./systems/buildings.ts";
 import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
+import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
 import { applyConfirmSpawn, applySpawnCommand, updateSpawnPhase } from "./systems/spawn.ts";
@@ -41,6 +42,7 @@ export const TICK_STEPS = [
   "commands",
   "diplomacy",
   "collisions",
+  "boats",
   "attacks",
   "encircle",
   "eliminate",
@@ -80,6 +82,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 2. Opposing armies cancel out.
     resolveCollisions(world);
     probe?.("collisions");
+    // 2b. Boats land (as beachhead attacks) or get home (GAME_DESIGN.md §3.18).
+    advanceBoats(world);
+    probe?.("boats");
     // 3. Fronts advance; retreating armies come home.
     advanceAttacks(world);
     probe?.("attacks");
@@ -142,6 +147,10 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       );
     case "retreat":
       return applyRetreatCommand(world, player, command.attackId);
+    case "boat":
+      return applyBoatCommand(world, player, command.target, command.tile, command.percentBp);
+    case "recallBoat":
+      return applyRecallBoat(world, player, command.boatId);
     case "allianceRequest":
       return applyAllianceRequest(world, player, command.target);
     case "allianceReply":
