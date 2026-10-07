@@ -1,6 +1,7 @@
 /**
  * Generates a map in a short-lived worker (mapWorker.ts) so the page stays responsive;
- * falls back to the main thread where workers aren't available. Same spec, same map.
+ * falls back to the main thread where workers aren't available or the worker fails to load
+ * (e.g. the dev server went away). Same spec, same map.
  */
 import { createMap, type GameMap } from "../sim/map/gameMap.ts";
 import { generateMap, type MapSpec } from "../sim/map/generate.ts";
@@ -20,7 +21,12 @@ export function generateMapOffThread(spec: MapSpec): Promise<GameMap> {
     };
     worker.onerror = (event) => {
       worker.terminate();
-      reject(new Error(event.message || "map worker failed"));
+      console.warn(`map worker failed (${event.message || "no message"}); generating here`);
+      try {
+        resolve(generateMap(spec));
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     };
     worker.postMessage(spec);
   });
