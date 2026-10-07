@@ -752,7 +752,11 @@ A whole wall upgrades at once (the price counts the tiles still standing). Price
 like buildings: +25% per 60 wall tile-levels you own (at most ×3). Cancelling refunds 50%.
 A 40-tile Palisade costs ~24k (about a Housing); upgrading it to a Fortress Wall ~250k more.
 The HUD odds include a wall where you point (the same loss factor as the simulation); the
-hover card names the wall and its effect. Level III's flak (aircraft) waits for Phase 2B.
+hover card names the wall and its effect. *As built (2B.3):* a Fortress Wall's **flak** — a
+hostile flight (anyone's who isn't your friend: assaults, airlifts, later strikes) that flies
+within 3 km of a standing tile of it loses one plane, each time it flies into that reach
+(crossing a wall line once = one plane). A wall never shoots at friends. Cheap compared to
+its price, and exactly the counter airborne assaults over walls needed.
 
 **Why it still feels like OpenFront:** walls are lines on the map you react to, not a
 base-building screen; there are no HP bars — a wall tile simply falls later and costs more;
@@ -849,6 +853,37 @@ air threat — an Airport of a non-friend that can reach their Housing, Factorie
 placed among those buildings (at most two, upgraded when worth it), and route airlifts around
 hostile SAMs (or not at all when every route would lose every plane).
 
+*As built (2B.3):* **Military Airport** (Airport II: +300k, 20 s): lifts grow to 15% of your
+troop capacity, range 300 km, ready every 25 s — and its card gains **"🪂 Airborne assault —
+up to N"**. Click it, then an enemy's land within the ring: four helicopters fly the send %
+of your home troops (capped like an airlift) and, over the target, the troops land as a
+**beachhead attack** from that tile — exactly the boats' landing (§3.18): it takes the tile,
+spreads from it like any attack, never merges with your land army, and its pocket can't be
+encircled while it advances (once it stops, it can). Airborne troops pay **×1.25** losses
+per tile. If the tile became yours meanwhile, the troops just come home; a friend's, they
+fly back. Airlifts and assaults share the Airport's cooldown. Not allowed: your own,
+teammates', allies' or neutral land, sea, and spawn-protected players. SAMs shoot assault
+helicopters like any plane, and **Fortress Wall flak** (§3.17.6) takes one helicopter per
+wall line crossed. On screen: the aiming line and "🪂 troops · s" (red with the reason
+where it can't go), the SAM warning as for airlifts, helicopters (the icon pack's, by the
+Airport's era) on the map, the incoming-threat chip and horn for whoever is targeted
+("X's airborne assault is heading for your land", "X's airborne troops landed on your
+land"), "🪂 Assault landed: N troops attack X" for you, 🪂 on airborne armies' chips.
+**Nations:** with a ready Military Airport they also look for a target by air — an enemy
+nation or human they don't border, or one behind walls — using the attack estimate with
+the airborne losses, the lift's cap and the planes the SAMs on the route would shoot down,
+preferring enemies busy elsewhere or depleted; it competes with the best land target and
+wins only when it scores higher (a landing behind the lines weighs 0.6 of a land war). They
+land at the heart of the enemy's land (their start) when it is in range, or, for an enemy
+across the sea, on the quietest coast in range. They invest in an Airport and its upgrade
+only while such an enemy is weak enough that one lift would pay off — a late investment
+that loses to every economy building per gold. In headless games (same settings as 2B.2)
+assaults appear where they belong — on Islands (0.7 a game, ~1,350 tiles taken by landed
+armies; median length 21.9 min vs 20.4, and no game over 30 min vs 2 of 30) — and not on
+the Continent, where nations reach an Airport only in the last minute of a game; team
+games are unchanged (Two lands 6.4 min median). No "teleport army": a lift of 15% of
+capacity at ×1.25 losses only beats a busy or depleted enemy.
+
 #### 3.17.8 Missile Silo
 
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
@@ -886,7 +921,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (a Stone Wall along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
 | Wall ✅ (D-024) | I Palisade | 600/tile | 4 s + 0.1 s/tile | wall tiles hold 3 s, ×3 + 150 losses | drawn A, B, C … anywhere on your land | — | ≤ 80 tiles | — | go around, break through (a gap), airborne, strike, missile | brown stakes |
 | Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
-| Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** (Phase 2B) | — | — | — | same | thick stone, merlons, big towers |
+| Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** ✅ (2B.3: one plane per hostile flight that flies within 3 km) | — | — | — | same | thick stone, merlons, big towers |
 | SAM ✅ | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
 | SAM ✅ | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles (with missiles, 2B.5) | 35 | 2 | 8 | same | twin launcher + radar |
 | SAM ✅ | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning (with missiles, 2B.5) | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
@@ -894,7 +929,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
 | Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
 | Airport ✅ | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
-| Airport | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
+| Airport ✅ | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
 | Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
 
 **Visual progression.** Every building is one original icon with three drawings of growing

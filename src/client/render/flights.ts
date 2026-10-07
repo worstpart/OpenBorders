@@ -1,13 +1,14 @@
 /**
  * Flights on the map (GAME_DESIGN.md §3.17.7, milestone 2B.0): each flight the icon pack's
- * airplane (D-028) in the era of the Airport it took off from (test flights: level I),
+ * airplane (D-028) — a helicopter for an airborne assault (2B.3) — in the era of the Airport
+ * it took off from (test flights: level I),
  * mirrored to face where it flies, over a shadow in its owner's colour, with the number of
  * planes; a dotted line
  * on to its target — yours light, hostile ones at your land red (with a ring and the ETA),
  * everyone else's faint (flights are visible to everyone).
  *
  * SAM shots (GAME_DESIGN.md §3.17.13): a short bright streak from the SAM to the plane, then
- * a puff of flame and smoke where it was hit.
+ * a puff of flame and smoke where it was hit; Fortress Wall flak (2B.3) the same from the wall.
  *
  * Drawn with Canvas2D on the label overlay, like boats. Positions come from the tick alone
  * (app/flights.ts → the simulation's flightPoint), so flights glide smoothly between ticks.
@@ -16,10 +17,11 @@
 import type { BuildingSnapshot, FlightSnapshot } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import {
-  AIRLIFT_PREVIEW_TEXT,
   FLIGHT_INFO,
   flightPosition,
   flightSecondsLeft,
+  flightSprite,
+  liftProblemText,
   PUFF_MS,
   SHOT_MS,
   type AirliftPreview,
@@ -127,10 +129,11 @@ export class FlightLayer {
         flight.source >= 0 ? input.buildings.find((b) => b.id === flight.source) : null;
       const level = Math.max(1, source?.level ?? 1);
       const color = input.colorOf(flight.owner);
-      const height = spriteHeight("plane", level, size);
+      const sprite = flightSprite(flight.kind);
+      const height = spriteHeight(sprite, level, size);
       this.shadow(p.x, p.y + height * 0.55, size, color);
-      const flip = FACES_LEFT.plane ? at.dx > 0 : at.dx < 0;
-      if (!drawSprite(ctx, "plane", level, p.x, p.y, size, flip)) {
+      const flip = FACES_LEFT[sprite] ? at.dx > 0 : at.dx < 0;
+      if (!drawSprite(ctx, sprite, level, p.x, p.y, size, flip)) {
         this.aircraft(p.x, p.y, at.dx, at.dy, size * 0.7, color);
       }
       if (view.zoom >= 1.5 || flight.owner === me) {
@@ -252,8 +255,8 @@ export class FlightLayer {
     this.route(from, to, color, 2);
     this.ring(to.x, to.y, Math.max(6, zoom * 1.5), color);
     const text = aim.problem
-      ? AIRLIFT_PREVIEW_TEXT[aim.problem]
-      : `✈ ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
+      ? liftProblemText(aim.mode, aim.problem)
+      : `${aim.mode === "assault" ? "🪂" : "✈"} ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
     this.label(to.x, to.y - Math.max(10, zoom * 1.5) - 8, text);
     if (!aim.problem && aim.planesLost > 0) {
       // Hostile SAMs on the route (their rings are drawn under it, render/buildings.ts).

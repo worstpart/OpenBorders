@@ -225,10 +225,11 @@ export interface TradeShip {
 
 /**
  * What a flight is (GAME_DESIGN.md §3.17.7): "test" (a debug flight of empty transports,
- * 2B.0), "airlift" (troops to a friend, 2B.1) and "return" (an airlift's troops that didn't
- * fit, flying home); 2B.3 adds assaults, 2B.4 strikes, 2B.5 missiles.
+ * 2B.0), "airlift" (troops to a friend, 2B.1), "return" (an airlift's troops that didn't
+ * fit, flying home) and "assault" (an airborne assault onto an enemy's land, 2B.3); 2B.4 adds
+ * strikes, 2B.5 missiles.
  */
-export type FlightKind = "test" | "airlift" | "return";
+export type FlightKind = "test" | "airlift" | "return" | "assault";
 
 /**
  * A flight (GAME_DESIGN.md §3.17.7, ARCHITECTURE.md §5.7): a group of planes flying in a
@@ -394,13 +395,15 @@ export interface Attack {
   /** Retreating without the usual loss (the two sides just became allies). */
   freeRetreat: boolean;
   /**
-   * Beachhead attacks (boats, later airborne assaults): the tile the army lands on, -1 for
+   * Beachhead attacks (boats and airborne assaults): the tile the army lands on, -1 for
    * a land attack. A beachhead never merges with the land army against the same target,
    * and its front starts from that tile only.
    */
   readonly landingTile: number;
-  /** Losses per tile as a share of normal (Marines 0.8; 1 for ordinary armies). */
+  /** Losses per tile as a share of normal (Marines 0.8; airborne 1.25; 1 for ordinary armies). */
   readonly lossFactor: number;
+  /** A beachhead that came by air (an airborne assault, 2B.3) rather than by boat. */
+  readonly airborne: boolean;
 }
 
 /** Two players who can't attack each other until the alliance ends or one breaks it. */

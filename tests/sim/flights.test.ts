@@ -206,6 +206,7 @@ describe("losing planes", () => {
         by: 2,
         tile: at(3, 3),
         fromTile: -1,
+        weapon: "sam",
         planes: 1,
         planesLeft: 3,
         troopsLost: 2_000,

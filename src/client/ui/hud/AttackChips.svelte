@@ -87,8 +87,14 @@
       <li class="chip incoming" style:--player-color={ui.colorOf(attack.attacker)}>
         <span class="dot" aria-hidden="true"></span>
         <span class="label"
-          >{attack.landingTile >= 0 ? "⛵ " : ""}{ui.playerName(attack.attacker)}
-          {attack.landingTile >= 0 ? "landed on your coast" : "attacks you"}</span
+          >{attack.airborne ? "🪂 " : attack.landingTile >= 0 ? "⛵ " : ""}{ui.playerName(
+            attack.attacker,
+          )}
+          {attack.airborne
+            ? "landed by air"
+            : attack.landingTile >= 0
+              ? "landed on your coast"
+              : "attacks you"}</span
         >
         <span class="troops">{formatTroops(attack.troops)}</span>
         {#if threat}
@@ -148,7 +154,7 @@
       >
         <span class="dot" aria-hidden="true"></span>
         <span class="label">
-          {attack.landingTile >= 0 ? "⛵ " : ""}{attack.target === 0
+          {attack.airborne ? "🪂 " : attack.landingTile >= 0 ? "⛵ " : ""}{attack.target === 0
             ? attack.landingTile >= 0
               ? "Settling"
               : "Expanding"

@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -510,7 +510,7 @@ bot games before anyone has to play them.
 | 2B.0b ✅ | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
 | 2B.1 ✅ | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
 | 2B.2 ✅ | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
-| 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
+| 2B.3 ✅ | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
 | 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
 | 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
@@ -636,6 +636,50 @@ flight over our SAM lost a plane (toast, ring mark emptied); our test flight int
 lost a plane (toast, red ring in the air defence view, puff); SAM placement ghost; no console
 errors. The map gave no enemy land under an airlift route, so the airlift warning is covered by
 unit tests. Tests: 392 (16 new: `tests/sim/sam.test.ts`, `tests/client/sam.test.ts`).
+
+**Milestone 2B.3 result (2026-10-07)** — Airport II airborne assault and Fortress Wall flak
+(GAME_DESIGN §3.17.7 "as built (2B.3)", §3.17.6, ARCHITECTURE §5.7). **Rules:** Airport level II
+"Military Airport" (+300k, 20 s; 300 km, lifts 15% of capacity, 25 s cooldown shared by airlifts
+and assaults). Command `assault {buildingId, tile, percentBp}`: onto a living enemy's land in
+range (not your own, a teammate's, an ally's, neutral land or sea; not during spawn protection);
+four transports (helicopters on screen) carry the send share capped like an airlift; over the
+tile the troops land as a **beachhead attack** (2.7's `launchBeachhead`, focus = the landing
+tile) with **×1.25** losses per tile; the pocket is safe from encirclement while it advances.
+Landing on land that became yours: home; a friend's: they fly back. SAMs shoot assaults like any
+flight. **Fortress Wall flak** (defined here — the design only named it): a hostile flight that
+flies into the 3 km reach of a standing Fortress Wall tile loses one plane to that wall — once
+per entry (stateless: "inside now, not a tick ago"), friends never shot. `Attack.airborne` (and
+on `attackStarted` / attack snapshots), event `assaultLanded`, `flightIntercepted.weapon`.
+**Decided here (minor):** assaults and airlifts share one cooldown; an assault lands exactly on
+the clicked tile (no coast search: anywhere in range); a landing on a friend flies back instead
+of attacking; flak = one plane per wall per entry, no reload, same "hostile" rule as SAMs; the
+hover card and boat preview hide while aiming a lift (they offered a boat on enemy land — found
+in the browser). **Nations:** `chooseAirTarget` — with a ready Military Airport, enemy nations
+and humans they don't border or whose front is walled, estimated like a land attack with the
+airborne losses, the lift cap and the planes the route's SAMs would down, ×`airPreference` 0.6,
+busy/depleted enemies preferred; landing at the enemy's heart (behind walls) or, across the sea,
+the quietest coast in range; it competes with the best land target by score (as a pure fallback
+nations never used it). Airport + upgrade valued at `assaultWorth` 0.15 × capacity only while
+such an enemy is weak enough that one lift pays off (valued for any enemy in reach, Continent
+nations built 0.8 Airports a game and never assaulted). **Headless** (same settings as 2B.2,
+whose numbers are in brackets): Islands FFA (30 games) 0.7 assaults a game, 0.6 landed, ~1,350
+tiles taken by landed armies, 2.0 Airports / 1.3 upgrades, 1.7 SAMs, median 21.9 min [20.4], max
+24 [35.9], no game over 30 min [2]; Continent FFA (60) 0 assaults — nations reach an Airport
+only in the last minute (trace: built at 6.8–9 min of 6–10-minute games), median 8.8 [8.9];
+Two lands teams (60) median 6.4 [6.4], 0.1 assaults. No teleport-army meta: a lift of 15% of
+capacity at ×1.25 losses only beats a busy or depleted enemy. **0 planes shot down** by SAMs or
+flak in bot games again — nations route around SAMs and only assault reachable hearts; SAMs
+deter rather than kill, `samWorth` left as is. **Regression:** with flights off the 18
+seed-by-seed games replay 2B.2 exactly; before the AI changes, flights-on games did too.
+**Browser** (own tab, port 5178, Teams ×4 on Islands, Easy; gold from teammates by `sendAs`):
+Airport → Military Airport, card ("Airlift troops" + "🪂 Airborne assault — up to 23K", the ×1.25
+note, "Level III … later update"), 300 km ring, aiming line "🪂 23K · 11 s", refusal text over a
+teammate's land, the helicopter in flight (mirrored, owner shadow, troops label), the landed
+pocket attacking in the middle of the enemy's island, the chip "🪂 Solmere 23K Hopeless" (they
+had 230K at home: as designed), a Fortress Wall's flak hitting an enemy test flight (event
+`weapon: "flak"`, toast "Your … flak shot down one of Solmere's planes"), no console errors.
+Not seen in the browser (unit-tested): being the target of an assault. Tests: 414 (22 new:
+`tests/sim/assault.test.ts`, `tests/client/assault.test.ts`).
 
 **Dependency map** (what must exist first):
 

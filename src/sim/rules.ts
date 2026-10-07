@@ -277,7 +277,7 @@ export interface BuildingLevelRules {
 }
 
 export interface BuildingTypeRules {
-  /** Levels I, II, III (Port: I–II so far; Airport: I so far — the rest in Phase 2B). */
+  /** Levels I, II, III (Port: I–II so far; Airport: I–II so far — the rest in Phase 2B). */
   readonly levels: readonly BuildingLevelRules[];
   /**
    * Where it can stand: any land of yours, a coast tile (next to the sea), or flat land
@@ -325,6 +325,11 @@ export interface WallLevelRules {
   readonly breakTroops: number;
   /** …and the tile falls this many ticks later than a normal tile would. */
   readonly holdTicks: number;
+  /**
+   * Flak (Fortress Wall, 2B.3): a hostile flight that flies within this many tiles of a
+   * standing tile of the wall loses one plane — each time it flies into that reach.
+   */
+  readonly flakRadius?: number;
 }
 
 /**
@@ -441,6 +446,12 @@ export interface FlightRules {
   readonly enabled: boolean;
   /** Transports per airlift (GAME_DESIGN.md §3.17.7): the load is split evenly over them. */
   readonly airliftPlanes: number;
+  /**
+   * Airborne assaults (Airport II, GAME_DESIGN.md §3.17.7, 2B.3): transports per assault, and
+   * the landed army's losses per tile as a share of normal (light infantry: dearer).
+   */
+  readonly assaultPlanes: number;
+  readonly airborneLoss: number;
 }
 
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
@@ -499,6 +510,12 @@ export interface BuildAiRules {
   readonly samThreatMargin: number;
   /** …and a nation keeps at most this many SAMs. */
   readonly maxSams: number;
+  /**
+   * Airborne assaults (2B.3): a Military Airport is worth this share of capacity while an
+   * enemy nation or human has land within its reach (the Airport and its upgrade each count
+   * their share of the price, so both steps are worth the same per gold).
+   */
+  readonly assaultWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -607,6 +624,12 @@ export interface AiRules {
   readonly seaReach: number;
   /** …and weigh a target across the sea this much (the crossing is slow and seen coming). */
   readonly seaPreference: number;
+  /**
+   * Airborne assaults (GAME_DESIGN.md §3.17.7, 2B.3): a target reached by air — behind its
+   * walls, or not a land neighbour — weighs this much (light troops, SAMs, a pocket that
+   * can be encircled once it stalls).
+   */
+  readonly airPreference: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -847,6 +870,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // ai/bot.ts seaReach); a landing is worth 70% of a land war.
     seaReach: 300,
     seaPreference: 0.7,
+    // Air (§3.17.7): a landing behind the lines is worth a bit less than a sea landing.
+    airPreference: 0.6,
     counterAbove: 1.1,
     counterSize: 1.3,
     retreatBelow: 0.3,
@@ -953,6 +978,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       samWorth: 0.12,
       samThreatMargin: 60,
       maxSams: 2,
+      // A late investment: worth less per gold than any economy building, so only nations
+      // that have built up (or face walls) fly assaults.
+      assaultWorth: 0.15,
     },
   },
   tribe: {
@@ -1090,8 +1118,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         ],
       },
       // Air (§3.17.7): airlifts to friends anywhere within 250 km — the only way to send
-      // troops to a friend you don't border (D-023). Levels II–III (airborne assault, air
-      // strikes) come in 2B.3–2B.4. On plains: a runway needs flat land.
+      // troops to a friend you don't border (D-023). Level II adds the airborne assault
+      // (2B.3): bigger, longer lifts that may land on an enemy's land. Level III (air
+      // strikes) comes in 2B.4. On plains: a runway needs flat land.
       airport: {
         onCapture: "adopt",
         placement: "plains",
@@ -1103,6 +1132,14 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 250,
             liftShare: 0.1,
             missionCooldownTicks: 300,
+          },
+          {
+            name: "Military Airport",
+            cost: 300_000,
+            buildTicks: 200,
+            range: 300,
+            liftShare: 0.15,
+            missionCooldownTicks: 250,
           },
         ],
       },
@@ -1178,6 +1215,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         loss: 8,
         breakTroops: 1_500,
         holdTicks: 100,
+        // 3 km: a flight (2 tiles a tick) crossing the wall line is always seen inside it.
+        flakRadius: 3,
       },
     ],
   },
@@ -1230,6 +1269,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     testFlightPlanes: 4,
     enabled: true,
     airliftPlanes: 4,
+    // An airdrop must stay a surprise or a second front, never a better ground attack.
+    assaultPlanes: 4,
+    airborneLoss: 1.25,
   },
 });
 

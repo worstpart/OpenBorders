@@ -20,6 +20,7 @@ import type { ThreatContext } from "./threats.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import type { BoatContext, BoatPreview } from "./boats.ts";
 import type { BuildContext, Placeable } from "./buildings.ts";
+import type { LiftMode } from "./flights.ts";
 import { alliesOf, type DiplomacyContext } from "./diplomacy.ts";
 import type { DonationContext } from "./economy.ts";
 import { DEFAULT_RULES } from "../../sim/rules.ts";
@@ -120,8 +121,12 @@ class UiState {
   boatPreview = $state.raw<BoatPreview | null>(null);
   /** The building picked up from the build bar, following the mouse until placed. */
   placing = $state<Placeable | null>(null);
-  /** The Airport whose airlift target is being chosen (GAME_DESIGN.md §3.17.7), or null. */
+  /**
+   * The Airport whose airlift (or airborne assault, `liftMode`) target is being chosen
+   * (GAME_DESIGN.md §3.17.7), or null.
+   */
   airliftFrom = $state<number | null>(null);
+  liftMode = $state<LiftMode>("airlift");
   /** The air defence view (GAME_DESIGN.md §3.17.7, key V): every SAM's ring on the map. */
   airDefense = $state(false);
   /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */

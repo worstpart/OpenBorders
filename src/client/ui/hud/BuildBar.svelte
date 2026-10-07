@@ -19,11 +19,12 @@
 
   const items = $derived(ui.screen === "game" ? buildBarItems(ui.buildContext) : []);
   const placing = $derived(items.find((i) => i.type === ui.placing) ?? null);
-  // Choosing where an Airport airlifts to (GAME_DESIGN.md §3.17.7).
+  // Choosing where an Airport airlifts to, or lands an airborne assault (GAME_DESIGN.md §3.17.7).
   const airlift = $derived.by(() => {
     const airport = ui.buildings.find((b) => b.id === ui.airliftFrom);
     if (!airport || !ui.me) return null;
     return {
+      mode: ui.liftMode,
       troops: airliftTroops(
         DEFAULT_RULES,
         airport.level,
@@ -55,6 +56,9 @@
             build
           {/if}
           <span class="muted">· Esc to cancel</span>
+        {:else if airlift?.mode === "assault"}
+          Click an enemy's land within range to land {formatTroops(airlift.troops)} troops by air
+          <span class="muted">· Esc or right-click to cancel</span>
         {:else if airlift}
           Click an ally's or teammate's land within range to airlift {formatTroops(airlift.troops)}
           troops

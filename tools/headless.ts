@@ -37,7 +37,9 @@
  * Each game reports boats launched (to settle / to strike), landings, recalls and Ports.
  * --no-flights turns Airports and air missions off (Phase 2B); each game reports Airports
  * built, airlifts flown and the troops they carried (delivered / flown back), SAMs built and
- * upgraded, and the planes they shot down with the troops aboard (2B.2).
+ * upgraded, and the planes they shot down with the troops aboard (2B.2); Military Airports,
+ * airborne assaults flown and landed, the troops they carried, the tiles the landed armies
+ * took, and the planes Fortress Wall flak shot down (2B.3).
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -187,6 +189,12 @@ export interface GameReport {
     samUpgrades: number;
     planesShotDown: number;
     troopsShotDown: number;
+    airportUpgrades: number;
+    assaults: number;
+    assaultTroops: number;
+    assaultsLanded: number;
+    assaultTiles: number;
+    flakShots: number;
   };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -421,7 +429,15 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     samUpgrades: 0,
     planesShotDown: 0,
     troopsShotDown: 0,
+    airportUpgrades: 0,
+    assaults: 0,
+    assaultTroops: 0,
+    assaultsLanded: 0,
+    assaultTiles: 0,
+    flakShots: 0,
   };
+  // The armies airborne assaults landed: their tiles are summed at the end.
+  const airborneArmies: { tilesTaken: number }[] = [];
   let reason = "timeout";
   let error: string | null = null;
 
@@ -484,14 +500,23 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         }
         if (event.type === "buildingStarted" && event.buildingType === "airport") {
           if (event.level === 1) air.airports++;
+          else air.airportUpgrades++;
         } else if (event.type === "buildingStarted" && event.buildingType === "sam") {
           if (event.level === 1) air.sams++;
           else air.samUpgrades++;
         } else if (event.type === "flightIntercepted") {
           air.planesShotDown += event.planes;
           air.troopsShotDown += event.troopsLost;
+          if (event.weapon === "flak") air.flakShots += event.planes;
         } else if (event.type === "flightLaunched" && event.kind === "airlift") air.airlifts++;
-        else if (event.type === "airliftDelivered") {
+        else if (event.type === "flightLaunched" && event.kind === "assault") {
+          air.assaults++;
+          air.assaultTroops += event.troops;
+        } else if (event.type === "assaultLanded" && event.attackId >= 0) {
+          air.assaultsLanded++;
+          const army = world.attacks.find((a) => a.id === event.attackId);
+          if (army) airborneArmies.push(army);
+        } else if (event.type === "airliftDelivered") {
           air.troopsDelivered += event.troops;
           air.troopsReturned += event.returning;
         }
@@ -562,6 +587,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   const sorted = [...times].sort((a, b) => a - b);
   const winner = world.winner !== null ? world.players[world.winner - 1]! : null;
   const playTicks = world.tick - Math.max(0, world.playStartTick);
+  for (const army of airborneArmies) air.assaultTiles += army.tilesTaken;
   return {
     seed,
     winner: winner?.name ?? null,

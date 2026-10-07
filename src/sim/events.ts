@@ -21,8 +21,10 @@ export type SimEvent =
       readonly attacker: PlayerId;
       /** 0 = expanding into neutral land. */
       readonly target: PlayerId;
-      /** A beachhead (a boat landing): the tile it landed on; -1 for a land attack. */
+      /** A beachhead (a boat or airborne landing): the tile it landed on; -1 for a land attack. */
       readonly landingTile: number;
+      /** The beachhead came by air (an airborne assault, 2B.3). */
+      readonly airborne?: boolean;
     }
   | {
       readonly type: "attackEnded";
@@ -273,8 +275,10 @@ export type SimEvent =
       readonly owner: PlayerId;
       readonly by: PlayerId;
       readonly tile: number;
-      /** Where the shot came from (a SAM's tile, GAME_DESIGN.md §3.17.7), or -1. */
+      /** Where the shot came from (a SAM's tile, GAME_DESIGN.md §3.17.7, or a wall's), or -1. */
       readonly fromTile: number;
+      /** A SAM's interceptor, or a Fortress Wall's flak (2B.3). */
+      readonly weapon: "sam" | "flak";
       readonly planes: number;
       readonly planesLeft: number;
       readonly troopsLost: number;
@@ -290,6 +294,21 @@ export type SimEvent =
       readonly to: PlayerId;
       readonly troops: number;
       readonly returning: number;
+    }
+  | {
+      /**
+       * An airborne assault (GAME_DESIGN.md §3.17.7, 2B.3) reached its tile: its troops attack
+       * from there (`attackId`), or — if that land is now the owner's (home) or a friend's
+       * (they fly back) — don't (`attackId` -1).
+       */
+      readonly type: "assaultLanded";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      /** Who owned the tile when it arrived. */
+      readonly target: PlayerId;
+      readonly tile: number;
+      readonly troops: number;
+      readonly attackId: number;
     }
   | {
       /** The flight's owner was eliminated: it is lost with everything aboard. */

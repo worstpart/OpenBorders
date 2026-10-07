@@ -3,6 +3,7 @@
   import type { HintId } from "../app/hints.ts";
   import type { MapChoice } from "../app/setup.ts";
   import type { Placeable } from "../app/buildings.ts";
+  import type { LiftMode } from "../app/flights.ts";
   import type { PingKind } from "../../sim/rules.ts";
 
   export interface AppActions {
@@ -37,8 +38,11 @@
     /** Walls (GAME_DESIGN.md §3.17.6): drawn with the build bar's wall tool. */
     upgradeWall: (wallId: number) => void;
     cancelWall: (wallId: number) => void;
-    /** Choose where an Airport of ours airlifts to (GAME_DESIGN.md §3.17.7). */
-    startAirlift: (buildingId: number) => void;
+    /**
+     * Choose where an Airport of ours airlifts to, or lands an airborne assault
+     * (GAME_DESIGN.md §3.17.7).
+     */
+    startAirlift: (buildingId: number, mode: LiftMode) => void;
     /** Emojis and map pings (GAME_DESIGN.md §3.20). `to` 0 = everyone. */
     ping: (tile: number, kind: PingKind) => void;
     emote: (to: number, emoji: number) => void;

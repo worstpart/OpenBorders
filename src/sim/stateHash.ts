@@ -88,6 +88,8 @@ export function hashWorld(world: World): number {
       .addNumber(a.lossFactor)
       .addInt(a.front.size)
       .addNumber(a.front.peekTime());
+    // Airborne (2B.3) only when true, so games without assaults keep their hashes.
+    if (a.airborne) h.addInt(1);
   }
   h.addInt(world.nextBoatId).addInt(world.boats.length);
   for (const b of world.boats) {

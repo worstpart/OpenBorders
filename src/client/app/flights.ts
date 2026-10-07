@@ -8,15 +8,18 @@ import type { GameMap } from "../../sim/map/gameMap.ts";
 import type { GameRules } from "../../sim/rules.ts";
 import {
   AIRLIFT_PROBLEM_TEXT,
+  ASSAULT_PROBLEM_TEXT,
   airliftProblem,
+  assaultProblem,
   airliftTroops,
   airportRange,
   flightPoint,
   flightTicks,
   interceptorsOnRoute,
   type AirliftProblem,
+  type AssaultProblem,
 } from "../../sim/systems/flights.ts";
-import type { FlightKind, PlayerId } from "../../sim/world.ts";
+import { NEUTRAL, type FlightKind, type PlayerId } from "../../sim/world.ts";
 
 export interface FlightInfo {
   /** Map and chip icon. */
@@ -34,14 +37,25 @@ export const FLIGHT_INFO: Readonly<Record<FlightKind, FlightInfo>> = {
   test: { icon: "✈", name: "test flight", hostile: true },
   airlift: { icon: "✈", name: "airlift", hostile: false },
   return: { icon: "✈", name: "return flight", hostile: false },
+  assault: { icon: "🪂", name: "airborne assault", hostile: true },
 };
 
+/** An Airport's two lift missions (GAME_DESIGN.md §3.17.7): to a friend, or onto an enemy. */
+export type LiftMode = "airlift" | "assault";
+
+/** The map sprite of a flight: helicopters carry airborne assaults (D-028). */
+export function flightSprite(kind: FlightKind): "plane" | "helicopter" {
+  return kind === "assault" ? "helicopter" : "plane";
+}
+
 /**
- * The airlift a click would send (GAME_DESIGN.md §3.17.7): from the chosen Airport to the
- * tile under the mouse, with the troops it would carry and its flight time — or why it
- * can't go there. The rules are the simulation's own (airliftProblem / airliftTroops).
+ * The airlift (or airborne assault, 2B.3) a click would send (GAME_DESIGN.md §3.17.7): from
+ * the chosen Airport to the tile under the mouse, with the troops it would carry and its
+ * flight time — or why it can't go there. The rules are the simulation's own
+ * (airliftProblem / assaultProblem / airliftTroops).
  */
 export interface AirliftPreview {
+  readonly mode: LiftMode;
   readonly airport: BuildingSnapshot;
   /** The Airport's range in tiles (the ring drawn around it). */
   readonly range: number;
@@ -49,7 +63,7 @@ export interface AirliftPreview {
   readonly tile: number | null;
   readonly troops: number;
   readonly seconds: number;
-  readonly problem: AirliftProblem | "noTroops" | null;
+  readonly problem: AirliftProblem | AssaultProblem | "noTroops" | null;
   /**
    * Planes the hostile SAMs on the route would shoot down with the interceptors they have
    * ready now (GAME_DESIGN.md §3.17.7), at most all of them, and how many planes fly.
@@ -58,10 +72,16 @@ export interface AirliftPreview {
   readonly planes: number;
 }
 
-export const AIRLIFT_PREVIEW_TEXT: Record<AirliftProblem | "noTroops", string> = {
-  ...AIRLIFT_PROBLEM_TEXT,
-  noTroops: "no troops to send",
-};
+/** Why a lift can't go there, in words (the two modes share some problems, not the words). */
+export function liftProblemText(
+  mode: LiftMode,
+  problem: AirliftProblem | AssaultProblem | "noTroops",
+): string {
+  if (problem === "noTroops") return "no troops to send";
+  return mode === "assault"
+    ? ASSAULT_PROBLEM_TEXT[problem as AssaultProblem]
+    : AIRLIFT_PROBLEM_TEXT[problem as AirliftProblem];
+}
 
 export function airliftPreview(
   rules: GameRules,
@@ -74,16 +94,27 @@ export function airliftPreview(
   tile: number | null,
   percent: number,
   buildings: readonly BuildingSnapshot[] = [],
+  mode: LiftMode = "airlift",
 ): AirliftPreview {
   const range = airportRange(rules, airport);
   const troops = airliftTroops(rules, airport.level, me, Math.round(percent * 100));
-  const planes = rules.flights.airliftPlanes;
+  const planes = mode === "assault" ? rules.flights.assaultPlanes : rules.flights.airliftPlanes;
   if (tile === null) {
-    return { airport, range, tile, troops, seconds: 0, problem: null, planesLost: 0, planes };
+    return { mode, airport, range, tile, troops, seconds: 0, problem: null, planesLost: 0, planes };
   }
-  const friendly = owner[tile] !== me.id && friends.has(owner[tile]!);
+  const holder = owner[tile]!;
   const problem =
-    airliftProblem(rules, map, airport, tick, tile, friendly) ?? (troops < 1 ? "noTroops" : null);
+    (mode === "assault"
+      ? assaultProblem(
+          rules,
+          map,
+          airport,
+          tick,
+          tile,
+          holder !== NEUTRAL && isHostile(holder, me.id, friends),
+        )
+      : airliftProblem(rules, map, airport, tick, tile, holder !== me.id && friends.has(holder))) ??
+    (troops < 1 ? "noTroops" : null);
   const seconds = (flightTicks(rules, map, airport.tile, tile, "transport") * rules.tickMs) / 1000;
   const shots = problem
     ? 0
@@ -98,6 +129,7 @@ export function airliftPreview(
         tick,
       ).interceptors;
   return {
+    mode,
     airport,
     range,
     tile,

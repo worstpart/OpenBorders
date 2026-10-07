@@ -65,8 +65,9 @@ export function toastsForEvents(
       case "attackStarted":
         if (event.target === me) {
           toasts.push({
-            text:
-              event.landingTile >= 0
+            text: event.airborne
+              ? `🪂 ${nameOf(event.attacker)}'s airborne troops landed on your land`
+              : event.landingTile >= 0
                 ? `${nameOf(event.attacker)} landed on your coast`
                 : `${nameOf(event.attacker)} is attacking you`,
             tone: "danger",
@@ -108,25 +109,45 @@ export function toastsForEvents(
         }
         break;
       }
-      case "flightIntercepted":
-        // SAMs (GAME_DESIGN.md §3.17.7): our planes lost, or our SAM's hit.
+      case "flightIntercepted": {
+        // SAMs (GAME_DESIGN.md §3.17.7) and Fortress Wall flak (2B.3): our planes lost, or our hit.
+        const weapon = event.weapon === "flak" ? "Fortress Wall flak" : "SAM";
         if (event.owner === me) {
           const troops =
             event.troopsLost >= 1 ? ` (−${formatTroops(event.troopsLost)} troops)` : "";
           toasts.push({
             text:
               event.planesLeft === 0
-                ? `💥 ${nameOf(event.by)}'s SAMs shot down your last plane${troops}`
-                : `💥 ${nameOf(event.by)}'s SAM shot down ${event.planes === 1 ? "one of your planes" : `${event.planes} of your planes`}${troops}`,
+                ? `💥 ${nameOf(event.by)}'s ${event.weapon === "flak" ? weapon : "SAMs"} shot down your last plane${troops}`
+                : `💥 ${nameOf(event.by)}'s ${weapon} shot down ${event.planes === 1 ? "one of your planes" : `${event.planes} of your planes`}${troops}`,
             tone: "danger",
             player: event.by,
           });
         } else if (event.by === me) {
           toasts.push({
-            text: `🎯 Your SAM shot down one of ${nameOf(event.owner)}'s planes`,
+            text: `🎯 Your ${weapon} shot down one of ${nameOf(event.owner)}'s planes`,
             tone: "success",
             player: event.owner,
           });
+        }
+        break;
+      }
+      case "assaultLanded":
+        // Our airborne assault arrived (GAME_DESIGN.md §3.17.7, 2B.3). The target hears of it
+        // from attackStarted.
+        if (event.owner === me) {
+          toasts.push(
+            event.attackId >= 0
+              ? {
+                  text: `🪂 Assault landed: ${formatTroops(event.troops)} troops attack ${event.target === 0 ? "open land" : nameOf(event.target)}`,
+                  tone: "success",
+                  player: event.target === 0 ? undefined : event.target,
+                }
+              : {
+                  text: "🪂 The landing site isn't an enemy's any more — the troops didn't attack",
+                  tone: "info",
+                },
+          );
         }
         break;
       case "airliftDelivered":

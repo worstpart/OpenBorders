@@ -119,6 +119,7 @@ describe("SAM toasts", () => {
     by,
     tile: at(40, 10),
     fromTile: at(40, 12),
+    weapon: "sam",
     planes: 1,
     planesLeft,
     troopsLost: 2_500,

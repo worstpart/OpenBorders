@@ -95,6 +95,7 @@ export function applyAttackCommand(
       freeRetreat: false,
       landingTile: -1,
       lossFactor: 1,
+      airborne: false,
     };
     world.attacks.push(attack);
     world.events.push({
@@ -116,8 +117,8 @@ export function applyAttackCommand(
  * A beachhead attack (GAME_DESIGN.md §3.18): an army landing on `landingTile` (the
  * target's, or neutral land) that first takes that tile — paying for it like any tile —
  * and then spreads from it toward `focusTile`. It never merges with the land army against
- * the same target. Used by boats now and by airborne assaults in Phase 2B. Its pocket can't
- * be encircled while the attack advances (encirclement.ts).
+ * the same target. Used by boats and by airborne assaults (`airborne`, 2B.3). Its pocket
+ * can't be encircled while the attack advances (encirclement.ts).
  */
 export function launchBeachhead(
   world: World,
@@ -127,6 +128,7 @@ export function launchBeachhead(
   focusTile: number,
   troops: number,
   lossFactor: number,
+  airborne = false,
 ): Attack {
   const attack: Attack = {
     id: world.nextAttackId++,
@@ -144,6 +146,7 @@ export function launchBeachhead(
     freeRetreat: false,
     landingTile,
     lossFactor,
+    airborne,
   };
   world.attacks.push(attack);
   world.events.push({
@@ -152,6 +155,7 @@ export function launchBeachhead(
     attacker: player.id,
     target,
     landingTile,
+    airborne,
   });
   if (target !== NEUTRAL) getPlayer(world, target)!.encircleDirty = true;
   schedule(attack, landingTile, world.tick);

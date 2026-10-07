@@ -8,6 +8,7 @@
    * a click elsewhere.
    */
   import { buildingCard, wallCard } from "../../app/buildings.ts";
+  import type { LiftMode } from "../../app/flights.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { formatTroops } from "../../format.ts";
@@ -17,8 +18,8 @@
     /** `wall`: the card is a wall's (GAME_DESIGN.md §3.17.6). */
     onUpgrade: (id: number, wall: boolean) => void;
     onCancel: (id: number, wall: boolean) => void;
-    /** Start choosing where this Airport airlifts to. */
-    onAirlift: (id: number) => void;
+    /** Start choosing where this Airport airlifts to (or lands an airborne assault). */
+    onAirlift: (id: number, mode: LiftMode) => void;
     onClose: () => void;
   }
 
@@ -26,6 +27,7 @@
 
   const WIDTH = 270;
   const REFUND = Math.round(DEFAULT_RULES.buildings.cancelRefund * 100);
+  const AIRBORNE_LOSS = DEFAULT_RULES.flights.airborneLoss;
   const TYPE_LABEL = {
     housing: "Housing",
     factory: "Factory",
@@ -150,7 +152,7 @@
         type="button"
         class="upgrade"
         disabled={card.airlift.secondsLeft > 0}
-        onclick={() => onAirlift(card.id)}
+        onclick={() => onAirlift(card.id, "airlift")}
       >
         <span>✈ Airlift troops</span>
         <span class="muted"
@@ -162,6 +164,25 @@
       <div class="muted hint">
         To an ally's or teammate's land in range; what they can't hold flies back
       </div>
+      {#if card.airlift.assault}
+        <button
+          type="button"
+          class="upgrade"
+          disabled={card.airlift.secondsLeft > 0}
+          onclick={() => onAirlift(card.id, "assault")}
+        >
+          <span>🪂 Airborne assault</span>
+          <span class="muted"
+            >{card.airlift.secondsLeft > 0
+              ? `ready in ${Math.ceil(card.airlift.secondsLeft)} s`
+              : `up to ${formatTroops(card.airlift.capacity)}`}</span
+          >
+        </button>
+        <div class="muted hint">
+          Lands on an enemy's land and attacks from there; airborne troops lose ×{AIRBORNE_LOSS}
+          per tile
+        </div>
+      {/if}
     {/if}
 
     {#if card.upgrade}

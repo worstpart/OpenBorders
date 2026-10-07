@@ -41,6 +41,13 @@
  * unclaimed coast; one that finds no land target worth it looks across the sea, with the
  * same estimate and a discount for the crossing. One boat of each kind at a time. Tribes
  * stay on land.
+ *
+ * Airborne assaults (GAME_DESIGN.md §3.17.7, 2B.3): a nation with a ready Military Airport
+ * also looks for a target by air (and takes it when it scores higher than the best by land) — an enemy nation or human it
+ * doesn't border, or one behind walls — with the same estimate (airborne losses, the planes
+ * the SAMs on the route would shoot down, `airPreference`), favouring enemies busy elsewhere
+ * or depleted. It lands at their heart (behind any wall), or for a non-neighbour also on their
+ * nearest land in range, routing around SAMs. The landing counts as its one war on a nation.
  */
 import {
   attackLossFactor,
@@ -64,7 +71,13 @@ import { bordersTarget } from "../systems/attacks.ts";
 import { coastTiles, seasOf, touchesSea } from "../systems/naval.ts";
 import { distanceSq } from "../geometry.ts";
 import { wallLevel } from "../systems/walls.ts";
-import { airliftCooldownLeft, airliftSite } from "../systems/flights.ts";
+import {
+  airliftCapacity,
+  airliftCooldownLeft,
+  airliftSite,
+  ASSAULT_LEVEL,
+  assaultSite,
+} from "../systems/flights.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
 import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
@@ -129,7 +142,9 @@ export function thinkBots(world: World): void {
     // Buildings (GAME_DESIGN.md §3.17): only with gold left over — not right before an
     // attack (the war chest goes to Mobilize) nor when giving gold away.
     const strikes = actions.some(
-      (c) => (c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL,
+      (c) =>
+        ((c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL) ||
+        c.type === "assault",
     );
     if (
       !tribe &&
@@ -172,7 +187,13 @@ function economy(
   let home = bot.homeTroops;
   // Gold saved toward a building stays out of the war chest (GAME_DESIGN.md §3.17).
   let gold = bot.gold - buildingReserve(world, bot, bot.brain!.personality);
-  if (actions.some((c) => (c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL)) {
+  if (
+    actions.some(
+      (c) =>
+        ((c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL) ||
+        c.type === "assault",
+    )
+  ) {
     const discount = bot.bonus.mobilizeDiscount;
     const chest = Math.min(troopRoom(bot), gold / goldPerTroop(world.rules, discount));
     if (chest >= ai.mobilizeMinShare * capacity) {
@@ -183,7 +204,9 @@ function economy(
   }
   // Home troops once this think's attacks have left.
   for (const c of actions) {
-    if (c.type === "attack" || c.type === "boat") home -= (home * c.percentBp) / 10_000;
+    if (c.type === "attack" || c.type === "boat" || c.type === "assault") {
+      home -= (home * c.percentBp) / 10_000;
+    }
   }
   if (incomingTroops(world, bot.id) > 0) return { before, after };
 
@@ -376,13 +399,25 @@ function decide(
   if (wars.length >= ai.maxTribeWars) {
     return skill.reinforces ? reinforce(world, bot, style, wars[0]!, around) : null;
   }
+  // An assault competes with the best land target (2B.3: as a fallback only, nations at war
+  // over land all the time never used their Airports); boats come last.
+  const land = chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars, intel);
+  const air = chooseAirTarget(world, bot, style, around, idleThinks, wars, intel);
   const choice =
-    chooseTarget(world, bot, style, skill, around, incoming, idleThinks, wars, intel) ??
+    (air && (!land || air.score > land.score) ? air : land) ??
     chooseSeaTarget(world, bot, style, around, idleThinks, wars, intel);
   if (!choice) return null;
-  const attack = choice.bySea
-    ? boatCommand(choice.target.id, choice.focus, choice.share)
-    : attackCommand(choice.target.id, choice.focus, choice.share);
+  const attack: Command =
+    choice.airport >= 0
+      ? {
+          type: "assault",
+          buildingId: choice.airport,
+          tile: choice.focus,
+          percentBp: bps(choice.share),
+        }
+      : choice.bySea
+        ? boatCommand(choice.target.id, choice.focus, choice.share)
+        : attackCommand(choice.target.id, choice.focus, choice.share);
   // Betrayal: break the alliance first; both commands apply next tick, in this order.
   return choice.betray ? [{ type: "allianceBreak", ally: choice.target.id }, attack] : attack;
 }
@@ -449,7 +484,104 @@ function seaExpansion(
   return boatCommand(NEUTRAL, best, style.expandShare);
 }
 
-type Choice = { target: Player; focus: number; share: number; betray: boolean; bySea: boolean };
+type Choice = {
+  target: Player;
+  focus: number;
+  share: number;
+  betray: boolean;
+  bySea: boolean;
+  /** An airborne assault from this Airport (building id), or -1. */
+  airport: number;
+  /** How much the bot wants it (land and air choices compare by it). */
+  score: number;
+};
+
+/** The bot's Military Airport if one is working and off cooldown, or null (2B.3). */
+function readyMilitaryAirport(world: World, bot: Player): Building | null {
+  if (!world.rules.flights.enabled) return null;
+  for (const b of world.buildings) {
+    if (b.owner === bot.id && b.type === "airport" && b.level >= ASSAULT_LEVEL) {
+      if (airliftCooldownLeft(b, world.tick) === 0) return b;
+    }
+  }
+  return null;
+}
+
+/**
+ * The best enemy to assault by air (GAME_DESIGN.md §3.17.7, 2B.3) — compared with the best
+ * land target by score: nations and humans it doesn't border, or whose front is walled, scored like a land
+ * target (busy and depleted enemies first) with the airborne losses, the lift's cap and the
+ * planes the SAMs on the route would shoot down, weighed by `airPreference`.
+ */
+function chooseAirTarget(
+  world: World,
+  bot: Player,
+  style: PersonalityRules,
+  around: Surroundings,
+  idleThinks: number,
+  wars: Attack[],
+  intel: PingIntel | null,
+): Choice | null {
+  const airport = readyMilitaryAirport(world, bot);
+  if (!airport || bot.homeTroops < 1) return null;
+  const ai = world.rules.ai;
+  const flights = world.rules.flights;
+  const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
+  const boredom = Math.max(0, 1 - idleThinks / ai.boredomThinks);
+  const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
+  const lift = airliftCapacity(world.rules, airport.level, bot.capacity);
+  let best: Choice | null = null;
+  let bestScore = 0;
+  for (const target of world.players) {
+    const id = target.id;
+    if (id === bot.id || !target.alive || target.tiles === 0 || isTribe(target)) continue;
+    if (wars.some((a) => a.target === id)) continue;
+    if (sameTeam(world, bot.id, id) || isAllied(world, bot.id, id)) continue;
+    const neighbour = around.neighborFront.has(id);
+    // Over an open front, walking in is cheaper.
+    if (neighbour && frontLoss(around, id) <= 1) continue;
+    const loss = lossFactor(world, bot, target) * flights.airborneLoss;
+    const cost = tileCostOfAllTiles(world.rules, target.tiles, target.homeTroops, loss);
+    const defenders = Math.max(1, target.homeTroops);
+    const sent = Math.min(
+      lift,
+      style.attackMaxShare * bot.homeTroops,
+      Math.max(style.attackEdge * defenders, cost),
+    );
+    // A cheap first look before the routes: even all of it landing must be worth it.
+    const pinged = pingPreference(world, intel, id);
+    const needed = minGain * (pinged > 1 ? world.rules.chat.pingMinGainFactor : 1);
+    const most = Math.min(expectedLandShare(world.rules, sent, defenders, loss), sent / cost);
+    if (most < needed) continue;
+    const site = assaultSite(world, airport, target, !neighbour);
+    if (site.tile < 0) continue;
+    const landed = (sent * (flights.assaultPlanes - site.lost)) / flights.assaultPlanes;
+    const gain = Math.min(expectedLandShare(world.rules, landed, defenders, loss), landed / cost);
+    if (gain < needed) continue;
+    const busy = world.attacks.some((a) => a.attacker === id && a.retreatTick < 0);
+    const targetFill = target.capacity > 0 ? target.homeTroops / target.capacity : 1;
+    const score =
+      gain *
+      target.tiles *
+      ai.airPreference *
+      (1 + (busy ? style.preferBusyTargets : 0)) *
+      (2 - Math.min(1, targetFill)) * // depleted players are vulnerable
+      (isTraitor(world, target) ? ai.traitorPreference : 1) *
+      pinged;
+    if (score <= bestScore) continue;
+    bestScore = score;
+    best = {
+      target,
+      focus: site.tile,
+      share: sent / bot.homeTroops,
+      betray: false,
+      bySea: false,
+      airport: airport.id,
+      score,
+    };
+  }
+  return best;
+}
 
 /**
  * The best player to attack across the sea, when no land neighbour is worth it: the same
@@ -516,7 +648,15 @@ function chooseSeaTarget(
     }
     if (landing < 0) continue;
     bestScore = score;
-    best = { target, focus: landing, share: army / bot.homeTroops, betray: false, bySea: true };
+    best = {
+      target,
+      focus: landing,
+      share: army / bot.homeTroops,
+      betray: false,
+      bySea: true,
+      airport: -1,
+      score,
+    };
   }
   return best;
 }
@@ -786,6 +926,8 @@ function chooseTarget(
         share: army / bot.homeTroops,
         betray: alliance !== undefined,
         bySea: false,
+        airport: -1,
+        score,
       };
     }
   }

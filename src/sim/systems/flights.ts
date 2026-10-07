@@ -9,6 +9,10 @@
  *    where it is with `flightTile`.
  *  - `shootDown` is the one place planes are lost (SAMs 2B.2, Fortress Wall flak 2B.3): a
  *    plane shot down takes its share of the troops aboard with it.
+ *  - Flak (Fortress Wall, 2B.3): after the SAMs, each flight (id order) that has just flown
+ *    into the reach (`flakRadius`) of a hostile Fortress Wall — inside it now, not a tick ago —
+ *    loses one plane to each such wall (id order). Stateless: a flight is shot at again only
+ *    if it leaves the reach and comes back.
  *  - SAMs (2B.2, the one rule of §3.17.7): every tick, before arrivals, each flight (in id
  *    order) is checked against the SAMs (in id order) of every player who isn't a friend of
  *    its owner — the target's and any third player's alike (airspace matters). A working SAM
@@ -24,6 +28,11 @@
  *    the send share of your home troops, capped by the Airport's lift capacity (a share of
  *    your troop capacity), to any land of an ally or teammate within its range; then the
  *    Airport's mission cooldown (slot 0) runs.
+ *  - Airborne assault (Airport II, 2B.3): the same lift, but onto an enemy's land. On arrival
+ *    the troops land as a beachhead attack (the boats' landing, 2.7) from the tile they were
+ *    sent to, paying `airborneLoss`× the normal losses per tile; its pocket can't be encircled
+ *    while it advances. If that tile became the owner's own meanwhile, the troops just join
+ *    the home troops; a friend's, they fly back. Assaults and airlifts share the cooldown.
  *
  * Troops aboard count as field troops, like an army or a boat (updateFieldTroops).
  */
@@ -47,7 +56,7 @@ import {
   type PlayerId,
   type World,
 } from "../world.ts";
-import { updateFieldTroops } from "./attacks.ts";
+import { launchBeachhead, updateFieldTroops } from "./attacks.ts";
 import {
   buildingsEnabled,
   findBuilding,
@@ -58,6 +67,7 @@ import {
 } from "./buildings.ts";
 import { areFriendly } from "./diplomacy.ts";
 import { troopRoom } from "./economy.ts";
+import { hostileTarget } from "./naval.ts";
 
 /** The kinds of plane, which set a flight's speed (GAME_DESIGN.md §3.17.7). */
 export type PlaneType = "transport" | "fighter" | "missile";
@@ -316,6 +326,136 @@ export function applyAirlift(
   return null;
 }
 
+/** The Airport level that flies airborne assaults (Military Airport). */
+export const ASSAULT_LEVEL = 2;
+
+/** Why an assault can't go to `tile` now, or null. Shared with the HUD and the nations. */
+export type AssaultProblem = "notReady" | "cooldown" | "notHostile" | "outOfRange";
+
+export const ASSAULT_PROBLEM_TEXT: Record<AssaultProblem, string> = {
+  notReady: "an airborne assault needs a Military Airport (level II)",
+  cooldown: "the Airport is still on cooldown",
+  notHostile: "assaults land on an enemy's land",
+  outOfRange: "out of the Airport's range",
+};
+
+/**
+ * Whether an airborne assault may fly from `airport` to `tile` at `tick`; `hostile` says
+ * whether the tile belongs to a living player who isn't the owner or a friend of theirs.
+ */
+export function assaultProblem(
+  rules: GameRules,
+  map: GameMap,
+  airport: AirportLike,
+  tick: number,
+  tile: number,
+  hostile: boolean,
+): AssaultProblem | null {
+  if (airport.type !== "airport" || airport.level < ASSAULT_LEVEL) return "notReady";
+  if (airliftCooldownLeft(airport, tick) > 0) return "cooldown";
+  if (!hostile) return "notHostile";
+  if (!withinRange(map, airport.tile, tile, airportRange(rules, airport))) return "outOfRange";
+  return null;
+}
+
+/**
+ * Handles `assault` (GAME_DESIGN.md §3.17.7, 2B.3): `percentBp` of your home troops (capped by
+ * the Airport's lift capacity) fly from your Military Airport to an enemy's land at `tile`,
+ * where they land as a beachhead attack.
+ */
+export function applyAssault(
+  world: World,
+  player: Player,
+  buildingId: number,
+  tile: number,
+  percentBp: number,
+): string | null {
+  const rules = world.rules;
+  if (!rules.flights.enabled || !buildingsEnabled(rules)) {
+    return "there are no flights in this game";
+  }
+  if (world.phase !== "playing") return "the match hasn't started";
+  if (!Number.isInteger(percentBp) || percentBp < 1 || percentBp > 10_000) {
+    return "invalid percentage";
+  }
+  const airport = findBuilding(world, buildingId);
+  if (!airport || airport.owner !== player.id || airport.type !== "airport") {
+    return "not your Airport";
+  }
+  if (!Number.isInteger(tile) || tile < 0 || tile >= world.owner.length) return "invalid tile";
+  const holder = world.owner[tile]!;
+  // Own land, a friend's, a dead player's, or spawn protection: say exactly why.
+  const why = holder === NEUTRAL ? null : hostileTarget(world, player, holder);
+  if (why) return why;
+  const problem = assaultProblem(rules, world.map, airport, world.tick, tile, holder !== NEUTRAL);
+  if (problem) return ASSAULT_PROBLEM_TEXT[problem];
+  const troops = airliftTroops(rules, airport.level, player, percentBp);
+  if (troops < 1) return "no troops to send";
+  player.homeTroops -= troops;
+  launchFlight(world, {
+    owner: player.id,
+    kind: "assault",
+    source: airport.id,
+    fromTile: airport.tile,
+    toTile: tile,
+    plane: "transport",
+    planes: rules.flights.assaultPlanes,
+    troops,
+  });
+  startCooldown(
+    airport,
+    AIRLIFT_SLOT,
+    world.tick,
+    levelRules(rules, "airport", airport.level).missionCooldownTicks ?? 0,
+  );
+  return null;
+}
+
+/**
+ * An assault over its target: the troops land as a beachhead attack on the tile — unless it
+ * is the owner's own now (they join the home troops) or a friend's (they fly back).
+ */
+function landAssault(world: World, flight: Flight): void {
+  const player = getPlayer(world, flight.owner)!;
+  const tile = flight.toTile;
+  const holder = world.owner[tile]!;
+  let attackId = -1;
+  if (holder === player.id) {
+    player.homeTroops += flight.troops;
+  } else if (hostileTarget(world, player, holder) === null) {
+    attackId = launchBeachhead(
+      world,
+      player,
+      holder,
+      tile,
+      tile,
+      flight.troops,
+      world.rules.flights.airborneLoss,
+      true,
+    ).id;
+  } else {
+    launchFlight(world, {
+      owner: flight.owner,
+      kind: "return",
+      source: flight.source,
+      fromTile: flight.toTile,
+      toTile: flight.fromTile,
+      plane: "transport",
+      planes: flight.planes,
+      troops: flight.troops,
+    });
+  }
+  world.events.push({
+    type: "assaultLanded",
+    flightId: flight.id,
+    owner: flight.owner,
+    target: holder,
+    tile,
+    troops: flight.troops,
+    attackId,
+  });
+}
+
 /** True when `other` is a living ally or teammate of `id`. */
 function isFriendOf(world: World, id: PlayerId, other: PlayerId): boolean {
   if (other === NEUTRAL || other === id) return false;
@@ -338,6 +478,51 @@ export function airliftSite(
   airport: AirportLike & { readonly owner: PlayerId },
   friend: Player,
 ): number {
+  return quietSite(world, airport, friend.border, -1, world.rules.flights.airliftPlanes).tile;
+}
+
+/**
+ * Where a nation lands an airborne assault on `target` (2B.3), and how many of its planes the
+ * hostile SAMs on that route would shoot down (tile -1: nowhere worth it). The heart of their
+ * land (their start, while they hold it) if it is in range and no route elsewhere loses fewer
+ * planes — behind any wall, it splits them — else, only when `anywhere`, the quietest of
+ * their border tiles in range (as for an airlift).
+ */
+export function assaultSite(
+  world: World,
+  airport: AirportLike & { readonly owner: PlayerId },
+  target: Player,
+  anywhere: boolean,
+): { readonly tile: number; readonly lost: number } {
+  const heart =
+    target.spawnTile >= 0 &&
+    world.owner[target.spawnTile] === target.id &&
+    withinRange(world.map, airport.tile, target.spawnTile, airportRange(world.rules, airport))
+      ? target.spawnTile
+      : -1;
+  if (heart < 0 && !anywhere) return { tile: -1, lost: 0 };
+  return quietSite(
+    world,
+    airport,
+    anywhere ? target.border : [],
+    heart,
+    world.rules.flights.assaultPlanes,
+  );
+}
+
+/**
+ * The landing tile whose route meets the fewest ready hostile interceptors, of `preferred`
+ * (tried first; -1 = none) and up to SITE_CANDIDATES of `tiles` within the Airport's range,
+ * spread from the nearest to the farthest — nearest first among equals; with no hostile SAM
+ * anywhere, `preferred` or the nearest. Tile -1 when every route would lose every plane.
+ */
+function quietSite(
+  world: World,
+  airport: AirportLike & { readonly owner: PlayerId },
+  tiles: Iterable<number>,
+  preferred: number,
+  planes: number,
+): { tile: number; lost: number } {
   const rules = world.rules;
   const range = airportRange(rules, airport);
   const owner = airport.owner;
@@ -345,30 +530,20 @@ export function airliftSite(
     samOwner !== owner && !areFriendly(world, owner, samOwner);
   const sams = world.buildings.filter((b) => b.type === "sam" && b.level >= 1 && hostile(b.owner));
   if (sams.length === 0) {
+    if (preferred >= 0) return { tile: preferred, lost: 0 };
     let best = -1;
     let bestDistance = range * range;
-    for (const tile of friend.border) {
+    for (const tile of tiles) {
       const d = distanceSq(world.map, airport.tile, tile);
       if (d < bestDistance || (d === bestDistance && (best < 0 || tile < best))) {
         best = tile;
         bestDistance = d;
       }
     }
-    return best;
+    return { tile: best, lost: 0 };
   }
-  const inRange: { tile: number; d: number }[] = [];
-  for (const tile of friend.border) {
-    const d = distanceSq(world.map, airport.tile, tile);
-    if (d <= range * range) inRange.push({ tile, d });
-  }
-  if (inRange.length === 0) return -1;
-  inRange.sort((a, b) => a.d - b.d || a.tile - b.tile);
-  const stride = Math.max(1, Math.ceil(inRange.length / SITE_CANDIDATES));
-  let best = -1;
-  let fewest = rules.flights.airliftPlanes; // as many as the planes: all of them lost
-  for (let k = 0; k < inRange.length; k += stride) {
-    const tile = inRange[k]!.tile;
-    const met = interceptorsOnRoute(
+  const met = (tile: number) =>
+    interceptorsOnRoute(
       rules,
       world.map,
       sams,
@@ -378,13 +553,33 @@ export function airliftSite(
       "transport",
       world.tick,
     ).interceptors;
-    if (met < fewest) {
-      best = tile;
-      fewest = met;
-      if (met === 0) break;
+  let best = -1;
+  let fewest = planes; // as many as the planes: all of them lost
+  if (preferred >= 0) {
+    const lost = met(preferred);
+    if (lost === 0) return { tile: preferred, lost };
+    if (lost < fewest) {
+      best = preferred;
+      fewest = lost;
     }
   }
-  return best;
+  const inRange: { tile: number; d: number }[] = [];
+  for (const tile of tiles) {
+    const d = distanceSq(world.map, airport.tile, tile);
+    if (d <= range * range) inRange.push({ tile, d });
+  }
+  inRange.sort((a, b) => a.d - b.d || a.tile - b.tile);
+  const stride = Math.max(1, Math.ceil(inRange.length / SITE_CANDIDATES));
+  for (let k = 0; k < inRange.length; k += stride) {
+    const tile = inRange[k]!.tile;
+    const lost = met(tile);
+    if (lost < fewest) {
+      best = tile;
+      fewest = lost;
+      if (lost === 0) break;
+    }
+  }
+  return { tile: best, lost: best < 0 ? 0 : fewest };
 }
 
 /** An airlift over its target: the friend takes what fits, the rest flies back. */
@@ -510,13 +705,85 @@ function interceptFlights(world: World): void {
   }
 }
 
+/** The lowest wall level with flak, and its reach (null: no wall level has flak). */
+function flakLevel(rules: GameRules): { level: number; radius: number } | null {
+  const levels = rules.walls.levels;
+  for (let k = 0; k < levels.length; k++) {
+    const radius = levels[k]!.flakRadius ?? 0;
+    if (radius > 0) return { level: k + 1, radius };
+  }
+  return null;
+}
+
 /**
- * Tick system (step 2c, right after the boats): hostile SAMs fire, then flights that reach
- * their target arrive.
+ * The walls with flak whose reach holds `tile` and whose owner isn't `owner` or a friend of
+ * theirs: wall id → the wall's standing tile nearest `tile` (where the shot comes from).
+ */
+function flakWallsNear(
+  world: World,
+  tile: number,
+  flak: { level: number; radius: number },
+  owner: PlayerId,
+): Map<number, number> {
+  const { map } = world;
+  const found = new Map<number, number>();
+  const nearest = new Map<number, number>();
+  const x0 = tile % map.width;
+  const y0 = (tile - x0) / map.width;
+  const r = flak.radius;
+  for (let dy = -r; dy <= r; dy++) {
+    const y = y0 + dy;
+    if (y < 0 || y >= map.height) continue;
+    for (let dx = -r; dx <= r; dx++) {
+      const x = x0 + dx;
+      const d = dx * dx + dy * dy;
+      if (x < 0 || x >= map.width || d > r * r) continue;
+      const t = y * map.width + x;
+      if (world.fortLevel[t]! < flak.level) continue;
+      const holder = world.owner[t]!;
+      if (holder === owner || areFriendly(world, holder, owner)) continue;
+      const id = world.wallAt[t]!;
+      const best = nearest.get(id);
+      if (best === undefined || d < best || (d === best && t < found.get(id)!)) {
+        nearest.set(id, d);
+        found.set(id, t);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Tick system part (GAME_DESIGN.md §3.17.6–3.17.7): Fortress Walls' flak — a flight that has
+ * just flown into a hostile wall's reach loses one plane to it (see the header).
+ */
+function flakFlights(world: World): void {
+  const flak = flakLevel(world.rules);
+  if (!flak || !world.walls.some((w) => w.level >= flak.level)) return;
+  const { map, tick } = world;
+  for (const flight of world.flights.slice()) {
+    if (tick <= flight.launchTick) continue;
+    const now = flakWallsNear(world, flightTile(map, flight, tick), flak, flight.owner);
+    if (now.size === 0) continue;
+    const before = flakWallsNear(world, flightTile(map, flight, tick - 1), flak, flight.owner);
+    const ids = [...now.keys()].sort((a, b) => a - b);
+    for (const id of ids) {
+      if (flight.planes === 0) break;
+      if (before.has(id)) continue;
+      const from = now.get(id)!;
+      shootDown(world, flight, 1, world.owner[from]!, from, "flak");
+    }
+  }
+}
+
+/**
+ * Tick system (step 2c, right after the boats): hostile SAMs fire, then Fortress Walls' flak,
+ * then flights that reach their target arrive.
  */
 export function advanceFlights(world: World): void {
   if (world.flights.length === 0) return;
   interceptFlights(world);
+  flakFlights(world);
   let arrived = false;
   let troops = false;
   for (const flight of world.flights) {
@@ -533,9 +800,9 @@ export function advanceFlights(world: World): void {
       planes: flight.planes,
       troops: flight.troops,
     });
-    // Test flights do nothing on arrival; assaults, strikes and missiles will act here
-    // (2B.3–2B.5).
+    // Test flights do nothing on arrival; strikes and missiles will act here (2B.4–2B.5).
     if (flight.kind === "airlift") deliverAirlift(world, flight);
+    else if (flight.kind === "assault") landAssault(world, flight);
     else if (flight.kind === "return") getPlayer(world, flight.owner)!.homeTroops += flight.troops;
   }
   if (!arrived) return;
@@ -553,6 +820,7 @@ export function shootDown(
   planes: number,
   by: PlayerId,
   fromTile = -1,
+  weapon: "sam" | "flak" = "sam",
 ): void {
   const downed = Math.min(planes, flight.planes);
   if (downed <= 0) return;
@@ -567,6 +835,7 @@ export function shootDown(
     by,
     tile,
     fromTile,
+    weapon,
     planes: downed,
     planesLeft: flight.planes,
     troopsLost,

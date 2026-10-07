@@ -23,6 +23,14 @@
  * Housing, Factories or Airports: then `samWorth` × capacity per interceptor, times the share
  * of those buildings' levels it covers (that no SAM of the bot covers yet, for a new one). It
  * stands among them (at most `maxSams`), and is upgraded by the same measure.
+ * Airborne assaults (2B.3): while an enemy nation or human it can't simply walk into — not a
+ * land neighbour, or one behind walls — has land within reach of a Military Airport in the
+ * middle of its land and is weak enough that one airdrop would be worth it (the same estimate
+ * as an attack, with the airborne losses), the Airport and its upgrade to level II are worth
+ * `assaultWorth` × capacity together, each step its share of the price. (Valued for any
+ * enemy in reach, Continent nations built 0.8 Airports a game and never flew an assault: their
+ * enemies' armies were too big for a lift — 2B.3 headless runs.) Worth less per gold than the
+ * economy, so it comes late.
  * Escalating prices make the next new building dearer, so upgrades win in time. Gold is
  * also its war chest (§3.16, Mobilize right before attacking a player); while saving, it
  * keeps part of the goal's price out of the chest (`saving`, by personality), and builds
@@ -38,6 +46,7 @@
  * tile that no wall guards yet, across the front (perpendicular to the way in), up to
  * `wallLength` tiles and clipped to the bot's own clear land.
  */
+import { attackLossFactor, expectedLandShare, tileCostOfAll } from "../battle.ts";
 import type { Command } from "../commands.ts";
 import { isCoast, isLand, tileAt, type GameMap } from "../map/gameMap.ts";
 import { detPow } from "../math/detmath.ts";
@@ -58,7 +67,7 @@ import {
 } from "../systems/buildings.ts";
 import { distanceSq, withinRange } from "../geometry.ts";
 import { bordersTarget } from "../systems/attacks.ts";
-import { airportRange, samInterceptors } from "../systems/flights.ts";
+import { airportRange, ASSAULT_LEVEL, samInterceptors } from "../systems/flights.ts";
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
@@ -126,10 +135,20 @@ function buildingGoal(world: World, bot: Player): Goal | null {
   };
   const none = { upgrade: null, newType: null, wallUpgrade: null, wallPoints: null };
   const air = airDefence(world, bot, mine);
+  // Worked out only when an Airport option is affordable soon (it scans enemies' borders).
+  let prospect: boolean | null = null;
+  const assaults = () => (prospect ??= assaultProspect(world, bot));
   for (const b of mine) {
     if (b.level >= maxLevel(rules, b.type)) continue;
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
+    if (b.type === "airport") {
+      if (price <= reach && assaults()) {
+        const value = assaultValue(world, bot, level) - assaultValue(world, bot, b.level);
+        consider(price, value, { ...none, upgrade: b.id });
+      }
+      continue;
+    }
     const value =
       b.type === "sam"
         ? air
@@ -146,12 +165,9 @@ function buildingGoal(world: World, bot: Player): Goal | null {
       // One Port is enough (its speed doesn't stack); it needs a coast.
       const coast = type === "port" ? anyCoast(world, bot) : -1;
       if (type === "port" && (mine.some((b) => b.type === "port") || coast < 0)) continue;
-      // One Airport, and only for a friend it can't reach over land.
-      if (
-        type === "airport" &&
-        (mine.some((b) => b.type === "airport") || !friendInNeed(world, bot))
-      )
-        continue;
+      // One Airport, and only for a friend it can't reach over land — or for assaults.
+      const needy = type === "airport" && friendInNeed(world, bot);
+      if (type === "airport" && mine.some((b) => b.type === "airport")) continue;
       // SAMs only under an air threat, a few at most, where they cover the most.
       const samCenter = type === "sam" && air ? bestSamCenter(world, bot, air) : -1;
       if (
@@ -160,9 +176,12 @@ function buildingGoal(world: World, bot: Player): Goal | null {
       )
         continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
+      const assault = type === "airport" && price <= reach && assaults();
+      if (type === "airport" && !needy && !assault) continue;
       const value =
         type === "airport"
-          ? ai.airportWorth * bot.capacity
+          ? (needy ? ai.airportWorth * bot.capacity : 0) +
+            (assault ? assaultValue(world, bot, 1) : 0)
           : type === "sam"
             ? samValue(world, bot, air!, samCenter, 1, mine)
             : worth(world, bot, levelRules(rules, type, 1), coast);
@@ -434,6 +453,68 @@ function friendInNeed(world: World, bot: Player): boolean {
     for (const tile of friend.border) if (withinRange(world.map, middle, tile, reach)) return true;
   }
   return false;
+}
+
+/**
+ * True when an enemy nation or human the bot can't simply walk into — not a land neighbour,
+ * or one with walls — has land within reach of a Military Airport near the middle of the
+ * bot's land (9/10 of its range), and one Military Airport lift (what the bot would send)
+ * would take at least the share of their land the bot's personality asks of an attack.
+ * Tribes don't count: they are eaten over land.
+ */
+function assaultProspect(world: World, bot: Player): boolean {
+  const rules = world.rules;
+  const levels = rules.buildings.types.airport.levels;
+  if (!rules.flights.enabled || levels.length < ASSAULT_LEVEL) return false;
+  const middle = landMiddle(world, bot);
+  if (middle < 0) return false;
+  const military = levels[ASSAULT_LEVEL - 1]!;
+  const reach = Math.floor((military.range ?? 0) * 0.9);
+  const style = rules.ai.personalities[bot.brain?.personality ?? "expander"];
+  const lift = Math.min(
+    bot.capacity * (military.liftShare ?? 0),
+    style.attackMaxShare * Math.max(bot.homeTroops, bot.capacity * style.attackAt),
+  );
+  const loss = attackLossFactor(rules, false, false, false, 1) * rules.flights.airborneLoss;
+  for (const enemy of world.players) {
+    if (!enemy.alive || enemy.id === bot.id || enemy.tiles === 0 || isTribe(enemy)) continue;
+    if (areFriendly(world, bot.id, enemy.id)) continue;
+    const gain = Math.min(
+      expectedLandShare(rules, lift, Math.max(1, enemy.homeTroops), loss),
+      lift / tileCostOfAll(rules, enemy.tiles, enemy.homeTroops, loss),
+    );
+    if (gain < style.minLandGain) continue;
+    if (
+      bordersTarget(world, bot, enemy.id) &&
+      !world.walls.some((w) => w.owner === enemy.id && w.level >= 1)
+    )
+      continue;
+    const heart = enemy.spawnTile;
+    if (
+      heart >= 0 &&
+      world.owner[heart] === enemy.id &&
+      withinRange(world.map, middle, heart, reach)
+    )
+      return true;
+    for (const tile of enemy.border) if (withinRange(world.map, middle, tile, reach)) return true;
+  }
+  return false;
+}
+
+/**
+ * What an Airport at `level` is worth for assaults (2B.3): `assaultWorth` × capacity for the
+ * Military Airport, each level up to it counting its share of the price.
+ */
+function assaultValue(world: World, bot: Player, level: number): number {
+  const levels = world.rules.buildings.types.airport.levels;
+  if (level < 1 || levels.length < ASSAULT_LEVEL) return 0;
+  let total = 0;
+  let paid = 0;
+  for (let l = 1; l <= ASSAULT_LEVEL; l++) {
+    total += levels[l - 1]!.cost;
+    if (l <= level) paid += levels[l - 1]!.cost;
+  }
+  return world.rules.ai.build.assaultWorth * bot.capacity * (paid / total);
 }
 
 /** What SAMs guard (GAME_DESIGN.md §3.17.7): the bot's economy and its Airports. */

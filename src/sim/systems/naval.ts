@@ -554,8 +554,11 @@ export function boatProgress(boat: Boat, tick: number): number {
   return Math.max(0, turned - (tick - boat.recallTick) * boat.tilesPerTick);
 }
 
-/** Can `player` send troops against `target`'s land at all (not a friend, not protected)? */
-function hostileTarget(world: World, player: Player, target: PlayerId): string | null {
+/**
+ * Can `player` send troops against `target`'s land at all (not a friend, not protected)?
+ * Boats and airborne assaults (flights.ts) ask the same.
+ */
+export function hostileTarget(world: World, player: Player, target: PlayerId): string | null {
   if (target === NEUTRAL) return null;
   if (target === player.id) return "that's your own land";
   if (!getPlayer(world, target)?.alive) return "that player is gone";

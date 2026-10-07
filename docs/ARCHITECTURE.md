@@ -394,7 +394,7 @@ runner keep using LocalHost with a manual clock.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs built; the rest PLANNED*
+### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs, 2B.3 Airport II + flak built; the rest PLANNED*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
@@ -487,12 +487,12 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, airAssault, airStrike, launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, assault ✅; airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
-2c. advanceFlights     (2B.0 ✅ arrivals) SAM interceptions first (2B.2 ✅; flak 2B.3), then
+2c. advanceFlights     (2B.0 ✅ arrivals) SAM interceptions first (2B.2 ✅), Fortress Wall flak (2B.3 ✅), then
                        flights over their target arrive, with arrival effects: airlift → friend's home troops (2B.1);
-                       assault → beachhead attack (2.7, 2B.3) — before step 3, like boats, so a
+                       assault → beachhead attack (2.7, 2B.3 ✅) — before step 3, like boats, so a
                        landing's first tile falls the same tick; strike/missile → damageBuilding
                        + suppression zones (2B.4/2B.5)
 3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
@@ -587,6 +587,40 @@ yours light, friends' blue, others red; ready interceptors as marks on the rim);
 down"); `ShotEffect`s from `flightIntercepted` (streak `SHOT_MS`, then puff `PUFF_MS`, drawn by
 `FlightLayer`); toasts for our planes lost and our SAM's hits (no sound — alerts stay rare).
 
+**Airborne assault and flak (2B.3 — as built).** Airport level II (`Military Airport`: range
+300, `liftShare` 0.15, cooldown 250 ticks); `rules.flights.assaultPlanes` (4) and
+`airborneLoss` (1.25). In `systems/flights.ts`: `ASSAULT_LEVEL` (2), `assaultProblem` (same
+shape as `airliftProblem`, `hostile` = the tile's owner is a living non-friend player) +
+`ASSAULT_PROBLEM_TEXT`; `applyAssault` (command `assault {buildingId, tile, percentBp}`;
+`naval.ts` `hostileTarget` — now exported — gives the exact reason for own / teammate / ally /
+spawn-protected land; neutral land and sea are refused) takes the troops (the same
+`airliftTroops` cap) and launches kind `assault`, sharing cooldown slot 0 with airlifts. On
+arrival `landAssault`: own land → home troops; a hostile owner (or neutral land, if the target
+died) → `launchBeachhead(…, focus = landing tile, airborneLoss, airborne = true)`; a friend's →
+a `return` flight. Event `assaultLanded {flightId, owner, target, tile, troops, attackId}`.
+`Attack.airborne` (hashed only when true, so games without assaults keep their hashes;
+`attackStarted.airborne` and `AttackSnapshot.airborne` carry it to the HUD). **Flak:**
+`WallLevelRules.flakRadius` (Fortress Wall: 3). `flakFlights` runs after `interceptFlights`,
+only while some wall has a flak level: for each flight (id order) the hostile flak walls whose
+reach holds `flightTile(tick)` but not `flightTile(tick − 1)` fire once each (id order) —
+stateless, no per-flight memory; the scan is the (2r+1)² tiles around the flight on
+`fortLevel` / `wallAt` / `owner`. `shootDown` gained `weapon` ("sam" | "flak"), carried by
+`flightIntercepted`. **AI:** `assaultSite` (the target's heart if held and in range, else —
+for a non-neighbour — the quietest border tile in range) shares `quietSite` with
+`airliftSite` (same candidates and order as 2B.2, so airlifts land exactly as before);
+`bot.ts` `chooseAirTarget` (ready Military Airport; non-tribe enemies it doesn't border or
+whose front is walled; the land estimate with `airborneLoss`, the lift cap and the planes the
+route's SAMs would down; `airPreference`) competes with `chooseTarget` by `score` (new on
+`Choice`), boats last; assaults count as strikes for Mobilize and pings. `build.ts`
+`assaultProspect` (an air-reachable enemy weak enough that one Military Airport lift would
+take the personality's `minLandGain`) and `assaultValue` (`assaultWorth` × capacity, split
+over levels I–II by price). Headless `airPerGame` adds `airportUpgrades`, `assaults`,
+`assaultTroops`, `assaultsLanded`, `assaultTiles`, `flakShots`. **Client:** `LiftMode`
+("airlift" | "assault") in `ui.liftMode`; `airliftPreview(…, mode)` and `liftProblemText`;
+`startAirlift(id, mode)`; the card's `airlift.assault` → "🪂 Airborne assault" button;
+`flightSprite` (helicopters for assaults); toasts for `assaultLanded`, airborne
+`attackStarted` and flak hits; attack chips show 🪂 for airborne armies.
+
 **Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
 (one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army
 (`launchAttack` finds it by attacker + target), and every front starts from the attacker's
@@ -597,7 +631,7 @@ or a landing) and fronts can be seeded from a landing tile — the main structur
 the plan, done once in 2.7 and reused by 2B. Land attacks are unchanged. Landing pockets are protected from encirclement while their attack advances.
 
 *As built (2.7):* `Attack` gained `landingTile` (-1 for land armies) and `lossFactor`
-(Marines 0.8; airborne will be 1.25). `launchBeachhead(world, player, target, landingTile,
+(Marines 0.8; airborne 1.25 since 2B.3, which also added `airborne`). `launchBeachhead(world, player, target, landingTile,
 focusTile, troops, lossFactor)` in `systems/attacks.ts` creates one: its front holds only
 the landing tile, ready at once; `advance` lets that one tile be taken without touching the
 attacker's land, and everything after spreads by the normal `discover`. `applyAttackCommand`

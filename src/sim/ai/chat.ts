@@ -95,6 +95,7 @@ export function nationPing(
     if (c.type === "boat" && worthIt(c.target)) {
       return { type: "ping", tile: c.tile, kind: "attack" };
     }
+    if (c.type === "assault") return { type: "ping", tile: c.tile, kind: "attack" };
   }
   if (incomingTroops > chat.nationHelpThreshold * Math.max(1, bot.homeTroops)) {
     let biggest = null;

@@ -28,12 +28,13 @@ import { incomingThreats, THREAT_ICON } from "./threats.ts";
 import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
 import {
-  AIRLIFT_PREVIEW_TEXT,
   airliftPreview,
   isHostile,
+  liftProblemText,
   PUFF_MS,
   SHOT_MS,
   type AirliftPreview,
+  type LiftMode,
   type ShotEffect,
 } from "./flights.ts";
 import { airportRange, samInterceptors, samRadius, samReady } from "../../sim/systems/flights.ts";
@@ -446,15 +447,16 @@ export class GameClient {
   }
 
   /**
-   * The Airport card's Airlift button (GAME_DESIGN.md §3.17.7): the card closes and the next
-   * click on a friend's land in range sends the airlift (the attack % sets the share);
-   * right-click or Esc puts it back.
+   * The Airport card's Airlift / Airborne assault buttons (GAME_DESIGN.md §3.17.7): the card
+   * closes and the next click on a friend's land (an enemy's, for an assault) in range sends
+   * it (the attack % sets the share); right-click or Esc puts it back.
    */
-  startAirlift(buildingId: number): void {
+  startAirlift(buildingId: number, mode: LiftMode = "airlift"): void {
     if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
     ui.menu = null;
     ui.placing = null;
     ui.wallPoints = [];
+    ui.liftMode = mode;
     ui.airliftFrom = buildingId;
   }
 
@@ -467,13 +469,13 @@ export class GameClient {
     }
     if (preview.problem) {
       this.toast({
-        text: `Can't airlift there: ${AIRLIFT_PREVIEW_TEXT[preview.problem]}`,
+        text: `Can't ${preview.mode === "assault" ? "land an assault" : "airlift"} there: ${liftProblemText(preview.mode, preview.problem)}`,
         tone: "info",
       });
       return;
     }
     this.host.send({
-      type: "airlift",
+      type: preview.mode,
       buildingId: preview.airport.id,
       tile,
       percentBp: Math.round(ui.attackPercent * 100),
@@ -498,6 +500,7 @@ export class GameClient {
       tile,
       ui.attackPercent,
       ui.buildings,
+      ui.liftMode,
     );
   }
 
@@ -1367,7 +1370,9 @@ export class GameClient {
       !isLand(map, tile) ||
       ui.screen !== "game" ||
       ui.menu ||
-      ui.placing
+      ui.placing ||
+      // Aiming an airlift or assault: a click sends it, not an attack or a boat (2B.3).
+      ui.airliftFrom !== null
     ) {
       if (prev) ui.hover = null;
       if (ui.boatPreview) ui.boatPreview = null;

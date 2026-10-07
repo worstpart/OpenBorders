@@ -91,6 +91,17 @@ export type Command =
       readonly tile: number;
       readonly percentBp: number;
     }
+  /**
+   * Airborne assault (GAME_DESIGN.md §3.17.7, 2B.3): fly a share (basis points) of your home
+   * troops from your Military Airport `buildingId` onto an enemy's land at `tile`, within its
+   * range; they land there as a beachhead attack.
+   */
+  | {
+      readonly type: "assault";
+      readonly buildingId: number;
+      readonly tile: number;
+      readonly percentBp: number;
+    }
   /** Drop a map ping on `tile` for your allies and teammates. */
   | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
   /**

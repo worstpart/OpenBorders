@@ -74,6 +74,8 @@ export interface AttackSnapshot {
   readonly retreating: boolean;
   /** A beachhead (boat landing): the tile it landed on; -1 for a land attack. */
   readonly landingTile: number;
+  /** The beachhead came by air (an airborne assault, 2B.3). */
+  readonly airborne: boolean;
 }
 
 /**
@@ -370,6 +372,7 @@ export function buildFrame(world: World): TickFrame {
       focusTile: a.focusTile,
       retreating: a.retreatTick >= 0,
       landingTile: a.landingTile,
+      airborne: a.airborne,
     })),
     alliances: [...world.alliances.values()].map((a) => ({
       a: a.a,

@@ -29,6 +29,7 @@ import { tradeEnabled, tradePartners } from "../../sim/systems/trade.ts";
 import {
   airliftCapacity,
   airliftCooldownLeft,
+  ASSAULT_LEVEL,
   samInterceptors,
   samRadius,
   samReady,
@@ -54,7 +55,7 @@ export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
   port: "Trade & faster boats",
-  airport: "Airlift troops to friends",
+  airport: "Airlift troops; airborne assault",
   sam: "Shoots down enemy planes",
   wall: "Draw a defence line",
 };
@@ -88,7 +89,11 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   }
   if (effect.liftShare) {
     lines.push(`Airlift: up to ${Math.round(effect.liftShare * 100)}% of your troop capacity`);
-    lines.push(`To friends within ${effect.range ?? 0} km`);
+    if (type === "airport" && level >= ASSAULT_LEVEL) {
+      lines.push(`To friends — or enemies (airborne assault) — within ${effect.range ?? 0} km`);
+    } else {
+      lines.push(`To friends within ${effect.range ?? 0} km`);
+    }
   }
   if (effect.missionCooldownTicks) {
     lines.push(
@@ -119,6 +124,9 @@ export function wallLines(rules: GameRules, level: number): string[] {
   return [
     `Holds an attack ~${l.holdTicks / 10} s per tile`,
     `Attackers lose ×${l.loss} + ${formatTroops(l.breakTroops)} troops per tile`,
+    ...(l.flakRadius
+      ? [`Flak: enemy planes flying within ${l.flakRadius} km of it lose one plane`]
+      : []),
   ];
 }
 
@@ -153,6 +161,15 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     lines.push(
       `${now.boatLoss ? "" : "New: Marines — "}landings lose ${Math.round((1 - next.boatLoss) * 100)}% less`,
     );
+  }
+  if (next.liftShare) {
+    lines.push(`Lifts up to ${Math.round(next.liftShare * 100)}% of your troop capacity`);
+    lines.push(
+      `Range ${next.range ?? 0} km, ready every ${((next.missionCooldownTicks ?? 0) * rules.tickMs) / 1000} s`,
+    );
+    if (type === "airport" && level + 1 === ASSAULT_LEVEL) {
+      lines.push("New: airborne assault — land troops on an enemy's land");
+    }
   }
   if (next.interceptors) {
     lines.push(`Radius ${next.range ?? 0} km`);
@@ -365,12 +382,16 @@ export interface BuildingCard {
     readonly lines: readonly string[];
     readonly affordable: boolean;
   } | null;
-  /** Your working Airport (GAME_DESIGN.md §3.17.7): the airlift it can fly now. */
+  /**
+   * Your working Airport (GAME_DESIGN.md §3.17.7): the airlift it can fly now, and whether it
+   * flies airborne assaults (Military Airport, 2B.3) — they share the lift and the cooldown.
+   */
   readonly airlift: {
     /** The most troops one airlift carries (a share of your capacity). */
     readonly capacity: number;
     /** Seconds until it can fly again (0 = ready). */
     readonly secondsLeft: number;
+    readonly assault: boolean;
   } | null;
   /** A working SAM (GAME_DESIGN.md §3.17.7): its interceptors now. */
   readonly sam: {
@@ -434,6 +455,7 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
         ? {
             capacity: airliftCapacity(rules, building.level, ctx.me.capacity),
             secondsLeft: (airliftCooldownLeft(building, ctx.tick) * rules.tickMs) / 1000,
+            assault: building.level >= ASSAULT_LEVEL,
           }
         : null,
     sam: samStatus(ctx, building),
@@ -460,7 +482,7 @@ function samStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard[
 /** Levels that come in later updates (Phase 2B), by type, after the top level built so far. */
 const LATER_LEVELS: Partial<Record<BuildingType, string>> = {
   port: "Level III (Naval Base) comes in a later update",
-  airport: "Level II (Military Airport: airborne assault) comes in a later update",
+  airport: "Level III (Air Base: air strikes) comes in a later update",
 };
 
 /** A working Port's trade (GAME_DESIGN.md §3.19): its partners, and your trade so far. */
