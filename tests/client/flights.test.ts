@@ -13,6 +13,7 @@ const flight: FlightSnapshot = {
   id: 3,
   owner: 2,
   kind: "test",
+  source: -1,
   target: 1,
   fromTile: at(2, 2),
   toTile: at(22, 12),

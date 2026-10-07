@@ -1,7 +1,8 @@
 /**
  * Building icons on the map (GAME_DESIGN.md §3.17.10): a round dark badge ringed in the
- * owner's colour, the building's drawing for its level (icons.ts — the same art as
- * the build bar), and 1–3 level pips under it; a level-III building gets a gold outer ring.
+ * owner's colour, the painted sprite for its level (sprites.ts, the user's icon pack — D-028;
+ * the same art as the build bar), and 1–3 level pips under it; a level-III building gets a
+ * gold outer ring.
  * The tier reads without clicking. A building under construction is faded with a progress
  * ring; one being upgraded shows the ring at full strength.
  *
@@ -23,6 +24,7 @@ import type { BuildingType } from "../../sim/rules.ts";
 import type { WallPreview } from "../app/buildings.ts";
 import { formatTroops } from "../format.ts";
 import { iconPath } from "../icons.ts";
+import { drawSprite, sprites } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
 export interface BuildGhost {
@@ -53,11 +55,13 @@ export interface BuildingDrawInput {
 
 /** Icon size in CSS px per unit of zoom (pixels per tile), and its bounds. */
 export const ICON_PX_PER_ZOOM = 8;
-export const ICON_MAX_PX = 40;
+export const ICON_MAX_PX = 48;
 /** Below this size only your own and level-III buildings keep their icon (at this size); others are dots. */
 export const ICON_MIN_PX = 18;
 
 const ICON_INK = "#f6f1e4";
+/** A building sprite's width, in badge diameters. */
+const SPRITE_WIDTH = 1.12;
 const GOLD = "#ffd166";
 
 /** The icon size (CSS px) at a zoom level. */
@@ -75,6 +79,7 @@ export class BuildingLayer {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas 2D is not available");
     this.context = context;
+    sprites.preload();
   }
 
   draw(view: MapView, input: BuildingDrawInput): void {
@@ -397,12 +402,15 @@ export class BuildingLayer {
       ctx.stroke();
     }
 
-    // The drawing: 24 × 24 art scaled into ~62% of the badge.
-    const scale = (size * 0.62) / 24;
-    ctx.translate(x - 12 * scale, y - 12 * scale - size * 0.01);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = ICON_INK;
-    ctx.fill(this.path(type, level), "evenodd");
+    // The painted sprite for its level (sprites.ts), a little wider than the badge so the
+    // art reads; the line drawing (icons.ts) until the image has loaded.
+    if (!drawSprite(ctx, type, level, x, y - size * 0.02, size * SPRITE_WIDTH)) {
+      const scale = (size * 0.62) / 24;
+      ctx.translate(x - 12 * scale, y - 12 * scale - size * 0.01);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = ICON_INK;
+      ctx.fill(this.path(type, level), "evenodd");
+    }
     ctx.restore();
 
     if (style.pips !== false && level > 0) {

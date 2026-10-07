@@ -1,16 +1,19 @@
 /**
- * Flights on the map (GAME_DESIGN.md §3.17.7, milestone 2B.0): each flight a small aircraft
- * in its owner's colour, pointing where it flies, with the number of planes; a dotted line
+ * Flights on the map (GAME_DESIGN.md §3.17.7, milestone 2B.0): each flight the icon pack's
+ * airplane (D-028) in the era of the Airport it took off from (test flights: level I),
+ * mirrored to face where it flies, over a shadow in its owner's colour, with the number of
+ * planes; a dotted line
  * on to its target — yours light, hostile ones at your land red (with a ring and the ETA),
  * everyone else's faint (flights are visible to everyone).
  *
  * Drawn with Canvas2D on the label overlay, like boats. Positions come from the tick alone
  * (app/flights.ts → the simulation's flightPoint), so flights glide smoothly between ticks.
- * 2B.0b replaces the glyph with the icon pack's airplanes (D-028).
+ * Until the image has loaded, a plain aircraft glyph stands in.
  */
-import type { FlightSnapshot } from "../../sim/frame.ts";
+import type { BuildingSnapshot, FlightSnapshot } from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import { FLIGHT_INFO, flightPosition, flightSecondsLeft } from "../app/flights.ts";
+import { drawSprite, FACES_LEFT, spriteHeight } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
 export interface FlightDrawInput {
@@ -25,6 +28,8 @@ export interface FlightDrawInput {
   readonly colorOf: (id: number) => string;
   /** Who owns each tile now (which flights are coming for our land). */
   readonly owner: Uint16Array;
+  /** Airports decide each flight's era (D-028). */
+  readonly buildings: readonly BuildingSnapshot[];
 }
 
 const MINE = "rgba(246, 241, 228, 0.8)";
@@ -59,7 +64,7 @@ export class FlightLayer {
     const tileScreen = (tile: number) =>
       toScreen((tile % width) + 0.5, Math.floor(tile / width) + 0.5);
     const me = input.localPlayerId;
-    const size = Math.max(18, Math.min(30, view.zoom * 4));
+    const size = Math.max(26, Math.min(44, view.zoom * 5));
 
     // Routes first, so every aircraft sits on top of every line.
     const labels: { x: number; y: number; text: string }[] = [];
@@ -91,10 +96,19 @@ export class FlightLayer {
       const at = flightPosition(input.map, flight, input.tick);
       const p = toScreen(at.x, at.y);
       if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) continue;
-      this.aircraft(p.x, p.y, at.dx, at.dy, size, input.colorOf(flight.owner));
+      const source =
+        flight.source >= 0 ? input.buildings.find((b) => b.id === flight.source) : null;
+      const level = Math.max(1, source?.level ?? 1);
+      const color = input.colorOf(flight.owner);
+      const height = spriteHeight("plane", level, size);
+      this.shadow(p.x, p.y + height * 0.55, size, color);
+      const flip = FACES_LEFT.plane ? at.dx > 0 : at.dx < 0;
+      if (!drawSprite(ctx, "plane", level, p.x, p.y, size, flip)) {
+        this.aircraft(p.x, p.y, at.dx, at.dy, size * 0.7, color);
+      }
       if (view.zoom >= 1.5 || flight.owner === me) {
         const what = flight.kind === "test" ? "test" : "";
-        labels.push({ x: p.x, y: p.y - size * 0.95, text: `${what} ×${flight.planes}`.trim() });
+        labels.push({ x: p.x, y: p.y - height / 2 - 7, text: `${what} ×${flight.planes}`.trim() });
       }
     }
     for (const label of labels) this.label(label.x, label.y, label.text);
@@ -129,6 +143,22 @@ export class FlightLayer {
     ctx.strokeStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** The flight's shadow on the ground, in its owner's colour. */
+  private shadow(x: number, y: number, width: number, color: string): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(x, y, width * 0.42, width * 0.12, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(10, 14, 20, 0.7)";
     ctx.stroke();
     ctx.restore();
   }

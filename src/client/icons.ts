@@ -1,4 +1,8 @@
 /**
+ * Line-drawing icons. Since 2B.0b (D-028) buildings are drawn with the painted sprites
+ * (sprites.ts); these drawings remain for walls (no painted art yet) and stand in on the map
+ * while a sprite image is still loading.
+ *
  * Building icons (GAME_DESIGN.md §3.17.10): one original drawing per building and level, as
  * SVG path data in a 24 × 24 box, filled with the even-odd rule (windows and doors are
  * holes). The same paths are drawn on the map (Canvas2D Path2D) and in the HUD (inline

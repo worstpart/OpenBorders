@@ -560,6 +560,16 @@ one focused pass instead of being mixed into a gameplay milestone. Details:
 came from (D-001: nothing from OpenFront — the README calls the pack "OpenFront-style"); and
 whether the planes' real national markings (a French roundel, US stars) are wanted.
 
+**Answered 2026-10-06 (start of 2B.0b):** the user made/generated the pack themselves — it
+may be committed (the PNGs are kept as the source art; the duplicate SVGs are git-ignored).
+Markings: **remove them** (done by `tools/iconPack.mjs`). Missing art: the user wants **me to
+make SAM, Missile Silo, wall, warship and missile art copying the same style**, each with
+the milestone that adds or reworks the thing (SAM + walls 2B.2, Silo + missiles 2B.5,
+warships 2B.6). Open: how — options are 3D models rendered isometrically in Blender (the
+Blender bridge is installed but Blender was not running), or prompts I write for the same
+image tool the user made the pack with (closest match to the style); to settle with the
+user before 2B.2.
+
 **Alternatives.** Phase 4 polish (the art would wait months, and 2B would build Airport
 and plane drawings only to replace them); inside 2B.1 (mixes an art pass into a gameplay
 milestone, harder to judge either).

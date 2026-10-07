@@ -1,15 +1,18 @@
 /**
- * Boats on the map (GAME_DESIGN.md §3.18): each boat a small hull with a sail in its owner's
- * colour, heading along its route, with the troops aboard; your own boats show the rest of
+ * Boats on the map (GAME_DESIGN.md §3.18): each boat the icon pack's troop ship (D-028) — the
+ * era of the Port it sailed from — on an oval in its owner's colour, mirrored to face along
+ * its route, with the troops aboard; trade ships likewise; your own boats show the rest of
  * their route (dashed), boats sailing for your coast show theirs in red, and the crossing
  * under the mouse is previewed — route, landing ring and ETA.
  *
  * Drawn with Canvas2D on the label overlay, like buildings and walls. Positions come from
  * the route and the tick alone (app/boats.ts), so boats glide smoothly between ticks.
  */
-import type { BoatSnapshot, TradeShipSnapshot } from "../../sim/frame.ts";
-import { boatPosition, boatSteps, type BoatPreview } from "../app/boats.ts";
+import type { BoatSnapshot, BuildingSnapshot, TradeShipSnapshot } from "../../sim/frame.ts";
+import type { GameRules } from "../../sim/rules.ts";
+import { boatLevel, boatPosition, boatSteps, type BoatPreview } from "../app/boats.ts";
 import { formatTroops } from "../format.ts";
+import { drawSprite, FACES_LEFT, spriteHeight, type SpriteKind } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
 export interface BoatDrawInput {
@@ -24,6 +27,9 @@ export interface BoatDrawInput {
   /** Who owns each tile now (to tell which boats sail for our coast). */
   readonly owner: Uint16Array;
   readonly preview: BoatPreview | null;
+  /** Ports decide each ship's era (D-028). */
+  readonly buildings: readonly BuildingSnapshot[];
+  readonly rules: GameRules;
 }
 
 const MINE = "rgba(246, 241, 228, 0.75)";
@@ -35,6 +41,9 @@ export class BoatLayer {
   private readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
   private readonly font: string;
+  /** Each ship's era, fixed when it is first seen (its Port may change later). */
+  private readonly boatLevels = new Map<number, number>();
+  private readonly shipLevels = new Map<number, number>();
 
   constructor(canvas: HTMLCanvasElement, fontFamily: string) {
     this.canvas = canvas;
@@ -66,15 +75,24 @@ export class BoatLayer {
       this.ring(land.x, land.y, Math.max(6, view.zoom * 1.5), color);
     }
 
-    const tradeSize = Math.max(11, Math.min(17, view.zoom * 2.6));
+    prune(this.boatLevels, input.boats);
+    prune(this.shipLevels, input.tradeShips);
+    const tradeSize = Math.max(12, Math.min(34, view.zoom * 4.5));
     for (const ship of input.tradeShips) {
       const at = boatPosition(ship, input.width, input.tick);
       const p = toScreen(at.x, at.y);
-      if (p.x < -20 || p.y < -20 || p.x > halfW * 2 + 20 || p.y > halfH * 2 + 20) continue;
-      this.tradeHull(p.x, p.y, at.dx, at.dy, tradeSize, input.colorOf(ship.owner));
+      if (p.x < -40 || p.y < -40 || p.x > halfW * 2 + 40 || p.y > halfH * 2 + 40) continue;
+      let level = this.shipLevels.get(ship.id);
+      if (level === undefined) {
+        level = Math.max(1, input.buildings.find((b) => b.id === ship.fromPort)?.level ?? 1);
+        this.shipLevels.set(ship.id, level);
+      }
+      if (!this.ship("tradeShip", level, p.x, p.y, at.dx, tradeSize, input.colorOf(ship.owner))) {
+        this.tradeHull(p.x, p.y, at.dx, at.dy, tradeSize * 0.5, input.colorOf(ship.owner));
+      }
     }
 
-    const size = Math.max(9, Math.min(20, view.zoom * 3.2));
+    const size = Math.max(16, Math.min(44, view.zoom * 5.5));
     for (const boat of input.boats) {
       const mine = boat.owner === input.localPlayerId;
       const incoming =
@@ -108,9 +126,17 @@ export class BoatLayer {
       const at = boatPosition(boat, input.width, input.tick);
       const p = toScreen(at.x, at.y);
       if (p.x < -40 || p.y < -40 || p.x > halfW * 2 + 40 || p.y > halfH * 2 + 40) continue;
-      this.hull(p.x, p.y, at.dx, at.dy, size, input.colorOf(boat.owner));
+      let level = this.boatLevels.get(boat.id);
+      if (level === undefined) {
+        level = boatLevel(input.rules, input.width, input.buildings, boat.owner, boat.launchTile);
+        this.boatLevels.set(boat.id, level);
+      }
+      const color = input.colorOf(boat.owner);
+      if (!this.ship("boat", level, p.x, p.y, at.dx, size, color)) {
+        this.hull(p.x, p.y, at.dx, at.dy, size * 0.5, color);
+      }
       if (view.zoom >= 1.5 || boat.owner === input.localPlayerId) {
-        this.label(p.x, p.y - size * 0.95, formatTroops(boat.troops));
+        this.label(p.x, p.y - spriteHeight("boat", level, size) / 2 - 7, formatTroops(boat.troops));
       }
     }
     if (preview?.plan) {
@@ -157,6 +183,36 @@ export class BoatLayer {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  /**
+   * A ship sprite `width` px wide on an oval in its owner's colour, facing along `dx`.
+   * False while the image is still loading (draw the plain hull then).
+   */
+  private ship(
+    kind: SpriteKind,
+    level: number,
+    x: number,
+    y: number,
+    dx: number,
+    width: number,
+    color: string,
+  ): boolean {
+    const ctx = this.context;
+    const height = spriteHeight(kind, level, width);
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(x, y + height * 0.12, width * 0.56, height * 0.5, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = width < 24 ? 1 : 1.5;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.restore();
+    const flip = FACES_LEFT[kind] ? dx > 0 : dx < 0;
+    return drawSprite(ctx, kind, level, x, y, width, flip);
   }
 
   /** A small hull with a sail, pointing along (dx, dy). */
@@ -235,4 +291,11 @@ export class BoatLayer {
     ctx.fillText(text, x, y);
     ctx.restore();
   }
+}
+
+/** Forgets the eras of ships no longer at sea. */
+function prune(levels: Map<number, number>, ships: readonly { readonly id: number }[]): void {
+  if (levels.size <= ships.length + 32) return;
+  const live = new Set(ships.map((s) => s.id));
+  for (const id of levels.keys()) if (!live.has(id)) levels.delete(id);
 }

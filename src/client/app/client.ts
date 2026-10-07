@@ -1070,6 +1070,8 @@ export class GameClient {
         colorOf: (id) => ui.colorOf(id),
         owner: this.owner,
         preview: ui.boatPreview,
+        buildings: ui.buildings,
+        rules: DEFAULT_RULES,
       });
       this.flightLayer.draw(view, {
         map: this.map,
@@ -1080,6 +1082,7 @@ export class GameClient {
         friends,
         colorOf: (id) => ui.colorOf(id),
         owner: this.owner,
+        buildings: ui.buildings,
       });
     }
     this.labels.draw(

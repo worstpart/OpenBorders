@@ -79,6 +79,30 @@ export function boatPosition(
   };
 }
 
+/**
+ * The era a boat is drawn in (D-028): the level of its owner's best Port in range of its
+ * launch coast — the Port that sped it up (naval.ts) — or level I without one.
+ */
+export function boatLevel(
+  rules: GameRules,
+  width: number,
+  buildings: readonly BuildingSnapshot[],
+  owner: number,
+  launchTile: number,
+): number {
+  let best = 1;
+  const x = launchTile % width;
+  const y = Math.floor(launchTile / width);
+  for (const b of buildings) {
+    if (b.type !== "port" || b.owner !== owner || b.level <= best) continue;
+    const range = rules.buildings.types.port.levels[b.level - 1]?.range ?? 0;
+    const dx = (b.tile % width) - x;
+    const dy = Math.floor(b.tile / width) - y;
+    if (dx * dx + dy * dy <= range * range) best = b.level;
+  }
+  return best;
+}
+
 /** A boat in the attack chips: one of yours, or one sailing for your coast. */
 export interface BoatChip {
   readonly id: number;

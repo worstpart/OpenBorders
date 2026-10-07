@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b built, look to approve |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -507,7 +507,7 @@ bot games before anyone has to play them.
 | # | Milestone | Needs | Done when |
 |---|---|---|---|
 | 2B.0 ✅ | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
-| 2B.0b | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
+| 2B.0b 🟡 | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
 | 2B.1 | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
 | 2B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
@@ -537,6 +537,31 @@ toast, one horn; both landed, chips cleared, clean console. The glyph was enlarg
 first look (it was a speck at normal zoom). Not done here: range rings in action mode (no
 action exists before the Airport card, 2B.1). During 2B.0 the user asked for their icon pack
 as the game's art → milestone 2B.0b (D-028).
+
+**Milestone 2B.0b result (2026-10-06)** — built; **waiting for the user's approval of the
+look**. The user confirmed the pack is their own (made/generated by them — D-001 satisfied)
+and asked for the planes' national markings to go. `tools/iconPack.mjs` (plain `node`, no
+packages: `tools/png.mjs` reads/writes PNGs with Node's zlib) turns the pack into 24
+sprites in `src/client/assets/icons/` (268 KB; buildings 96 px, vehicles 80 px on the
+long side): **15 of 24** PNGs still had the "LEVEL n / ERA" caption (not 4) — cut out by
+its exact colour; under it the bottom corner of the ground tile (buildings, airports) and
+the hull (troop boats, first trade ship) were rebuilt by continuing their edges; roundels,
+stars and the tricolour rudder painted over (WW1 and WW2 planes). `client/sprites.ts` loads
+each image once and keeps pre-shrunk copies per drawn size. Map: building badges show the
+sprite (max size 40 → 48 px so the art reads; far zoom keeps the dots), troop boats and trade
+ships are sprites on an oval in the owner's colour (era of the Port they sailed from,
+fixed at first sight), flights are planes over a shadow in the owner's colour (era of their
+Airport — `FlightSnapshot.source`, new; test flights level I); vehicles are mirrored by
+heading. HUD: build bar tiles (30 px, greyed when unaffordable) and building cards (44 px)
+show the sprite; walls keep their drawings. Checked in the browser (own tab, 800×600,
+magnified): Housing/Factory/Port at levels I–II, trade ships, a WW1 troop boat, two test
+flights crossing (one mirrored), the Port card, far zoom (ships shrink to 12–16 px so the
+sea isn't crowded), clean console; perf overlay 0.5 ms CPU per frame with 20 trade ships on
+screen; build OK (JS bundle unchanged, sprites are separate cached files). Tests: 369 (4 new).
+The user also asked me to **make art in the same style** for what the pack lacks (SAM,
+Missile Silo, walls, warships, missiles) — placed with each thing's own milestone (SAM +
+walls in 2B.2, Silo + missiles in 2B.5, warships in 2B.6); how to make it is the open
+question (D-028).
 
 **Dependency map** (what must exist first):
 

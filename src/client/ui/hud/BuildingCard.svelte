@@ -81,15 +81,20 @@
   >
     <div class="head">
       <span class="type"
-        ><span class="glyph"
-          ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={18} /></span
-        >{TYPE_LABEL[card.type]}</span
+        >{#if card.type === "wall"}<span class="glyph"
+            ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={18} /></span
+          >{/if}{TYPE_LABEL[card.type]}</span
       >
       <span class="pips" aria-label="Level {card.level} of 3">
         {#each [1, 2, 3] as k (k)}<span class="pip" class:on={k <= card.level}></span>{/each}
       </span>
     </div>
     <div class="title">
+      {#if card.type !== "wall"}
+        <span class="art"
+          ><BuildingIcon type={card.type} level={Math.max(1, card.level)} size={44} /></span
+        >
+      {/if}
       <span class="name">{card.name}</span>
       {#if card.level > 0}<span class="muted">Level {card.level}</span>{/if}
     </div>
@@ -210,6 +215,11 @@
     align-items: baseline;
     gap: var(--space-2);
     margin-top: 2px;
+  }
+
+  .art {
+    align-self: center;
+    margin: -2px 2px -4px -2px;
   }
 
   .name {

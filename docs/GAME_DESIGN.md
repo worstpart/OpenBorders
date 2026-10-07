@@ -872,7 +872,11 @@ playtest revamp):* the drawings are SVG paths in `client/icons.ts` shared by the
 the HUD — Housing: a house → a street of two → a skyline with a tower; Factory: a
 saw-tooth workshop with one chimney → two chimneys and smoke → a wider plant with three.
 On the map they sit in a round dark badge ringed in the owner's colour, gold dots for the
-level, a gold outer ring at level III; 18–40 px depending on zoom. Construction:
+level, a gold outer ring at level III; 18–40 px depending on zoom. *Since 2B.0b (D-028):*
+the drawings are replaced by the user's painted isometric icon pack — eras WW1 → WW2 →
+Modern for levels I → III (`client/sprites.ts`), 18–48 px; troop boats, trade ships and
+planes use the pack too, on an owner-coloured oval or shadow, mirrored by heading; walls
+keep their drawings until art in the same style exists. Construction:
 the icon fills in from the bottom with a thin progress ring; upgrade: a brief scaffold
 outline, then a soft pulse as the new icon and (if any) the larger range ring appear.
 Zoomed far out, other players' level I–II buildings shrink to small dots ringed in their

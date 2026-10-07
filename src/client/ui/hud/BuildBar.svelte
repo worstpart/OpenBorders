@@ -57,7 +57,7 @@
           title="{item.name} — {item.role}{item.affordable ? '' : ' (not enough gold)'}"
           onclick={() => onPick(item.type)}
         >
-          <BuildingIcon type={item.type} size={22} />
+          <BuildingIcon type={item.type} size={item.type === "wall" ? 22 : 30} />
           <span class="text">
             <span class="name">{item.name}</span>
             <span class="price">{formatTroops(item.price)}{item.unit}</span>
@@ -126,6 +126,11 @@
   .item:disabled {
     cursor: default;
     color: var(--text-muted);
+  }
+
+  .item:disabled :global(img) {
+    filter: grayscale(0.8);
+    opacity: 0.55;
   }
 
   .text {
