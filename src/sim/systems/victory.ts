@@ -14,6 +14,7 @@ import type { GameRules } from "../rules.ts";
 import { isTribe, type Player, type World } from "../world.ts";
 import { endAllAttacks } from "./attacks.ts";
 import { unloadAllBoats } from "./naval.ts";
+import { landAllFlights } from "./flights.ts";
 
 type Reason = "landShare" | "lastStanding" | "noneLeft";
 
@@ -72,5 +73,6 @@ function endGame(world: World, winner: number | null, team: number, reason: Reas
   world.phase = "ended";
   endAllAttacks(world);
   unloadAllBoats(world);
+  landAllFlights(world);
   world.events.push({ type: "gameOver", winner, team, reason });
 }

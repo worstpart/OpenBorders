@@ -66,6 +66,8 @@ function building(overrides: Partial<BuildingSnapshot> = {}): BuildingSnapshot {
     targetLevel: 1,
     startTick: -1,
     readyTick: -1,
+    reloads: [],
+    cooldowns: [],
     ...overrides,
   };
 }

@@ -30,3 +30,27 @@ export function withinRange(map: GameMap, a: number, b: number, range: number): 
 export function travelTicks(tiles: number, tilesPerTick: number): number {
   return Math.max(1, Math.ceil(tiles / tilesPerTick));
 }
+
+/**
+ * The point a share `t` (0..1) of the way along the straight line from tile `a` to tile `b`,
+ * in tile coordinates (x, y; whole numbers at tile corners — add 0.5 for a tile's centre).
+ * Flights use it for their position at any tick. Only + − × ÷, so it is deterministic.
+ */
+export function pointAlong(
+  map: GameMap,
+  a: number,
+  b: number,
+  t: number,
+): { readonly x: number; readonly y: number } {
+  const ax = a % map.width;
+  const ay = Math.floor(a / map.width);
+  const bx = b % map.width;
+  const by = Math.floor(b / map.width);
+  return { x: ax + (bx - ax) * t, y: ay + (by - ay) * t };
+}
+
+/** The tile nearest the point a share `t` of the way from `a` to `b` (see pointAlong). */
+export function tileAlong(map: GameMap, a: number, b: number, t: number): number {
+  const p = pointAlong(map, a, b, t);
+  return Math.round(p.y) * map.width + Math.round(p.x);
+}

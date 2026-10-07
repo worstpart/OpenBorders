@@ -8,6 +8,8 @@
  *    for you.
  *  - **boat** (the horn — the user asked to keep it) — an enemy boat sets sail for your
  *    coast: once per boat (the incoming-threat list). Its landing makes no second sound.
+ *    Hostile flights (2B.0) sound the same horn, once per sender per `ATTACKER_QUIET_TICKS`:
+ *    a player with several airports can't turn it into a siren.
  *  - **alliance** — someone asks you for an alliance, or one of yours asks to be renewed.
  *  - **betrayal** — any alliance in the game is broken (everyone hears it).
  *
@@ -26,6 +28,8 @@ export class AlertPlanner {
   /** Tick each attacker was last announced. */
   private announced = new Map<PlayerId, number>();
   private seenThreats = new Set<string>();
+  /** Tick each sender's flights last sounded the horn. */
+  private flightSenders = new Map<PlayerId, number>();
   private seenRenewals = new Set<number>();
 
   /**
@@ -51,7 +55,15 @@ export class AlertPlanner {
         cues.add("betrayal");
       }
     }
-    for (const t of threats) if (!this.seenThreats.has(t.key)) cues.add("boat");
+    for (const t of threats) {
+      if (this.seenThreats.has(t.key)) continue;
+      if (t.kind === "flight") {
+        const last = this.flightSenders.get(t.from);
+        if (last !== undefined && tick - last < ATTACKER_QUIET_TICKS) continue;
+        this.flightSenders.set(t.from, tick);
+      }
+      cues.add("boat");
+    }
     this.seenThreats = new Set(threats.map((t) => t.key));
     for (const attacker of attackers) {
       const last = this.announced.get(attacker);

@@ -8,6 +8,7 @@ import type {
   AllianceSnapshot,
   AttackSnapshot,
   BoatSnapshot,
+  FlightSnapshot,
   TradeShipSnapshot,
   BuildingSnapshot,
   WallSnapshot,
@@ -106,6 +107,8 @@ class UiState {
   boats = $state.raw<readonly BoatSnapshot[]>([]);
   /** Trade ships at sea (GAME_DESIGN.md §3.19). */
   tradeShips = $state.raw<readonly TradeShipSnapshot[]>([]);
+  /** Flights in the air (GAME_DESIGN.md §3.17.7). */
+  flights = $state.raw<readonly FlightSnapshot[]>([]);
   /** Map pings the local player sees: theirs and their friends' (GAME_DESIGN.md §3.20). */
   pings = $state.raw<readonly PingSnapshot[]>([]);
   /** Tick of the local player's last emoji and ping (-1 = none), for the menu's cooldowns. */
@@ -166,6 +169,7 @@ class UiState {
     this.walls = [];
     this.boats = [];
     this.tradeShips = [];
+    this.flights = [];
     this.pings = [];
     this.myLastEmoteTick = -1;
     this.myLastPingTick = -1;
@@ -261,6 +265,8 @@ class UiState {
       rules: DEFAULT_RULES,
       owner: this.owner,
       boats: this.boats,
+      flights: this.flights,
+      friends: this.friends,
       me: this.me?.alive ? this.localPlayerId : 0,
       tick: this.tick,
     };

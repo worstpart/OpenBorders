@@ -133,6 +133,17 @@ export interface Building {
   readyTick: number;
   /** Gold paid for the current construction or upgrade (cancelling refunds part of it). */
   paid: number;
+  /**
+   * Charges (Phase 2B: SAM interceptors, silo slots): the ticks at which spent charges are
+   * back, ascending — they reload one at a time. Empty = every charge ready. See
+   * systems/buildings.ts `readyCharges` / `spendCharge`.
+   */
+  reloads: number[];
+  /**
+   * Mission cooldowns (Phase 2B: an Airport's lift, its strike; a silo's warhead): the tick
+   * each one ends, by mission slot. Missing or past = ready.
+   */
+  cooldowns: number[];
 }
 
 /**
@@ -213,6 +224,37 @@ export interface TradeShip {
 }
 
 /**
+ * What a flight is (GAME_DESIGN.md §3.17.7). 2B.0 has only "test" (a debug flight of empty
+ * transports, until Airports exist); 2B.1 adds airlifts, 2B.3 assaults, 2B.4 strikes, 2B.5
+ * missiles.
+ */
+export type FlightKind = "test";
+
+/**
+ * A flight (GAME_DESIGN.md §3.17.7, ARCHITECTURE.md §5.7): a group of planes flying in a
+ * straight line from `fromTile` to `toTile`. Its position is a pure function of the tick
+ * (geometry.ts `pointAlong`), so nothing moves it tick by tick.
+ */
+export interface Flight {
+  readonly id: number;
+  readonly owner: PlayerId;
+  readonly kind: FlightKind;
+  /** The building it took off from, or -1 (test flights). */
+  readonly source: number;
+  readonly fromTile: number;
+  readonly toTile: number;
+  /** Who owned the target tile at launch (0 = neutral land or sea). */
+  readonly target: PlayerId;
+  /** Planes still flying (interceptions shoot them down one by one). */
+  planes: number;
+  /** Troops aboard, all planes together (airlifts and assaults; 0 otherwise). */
+  troops: number;
+  readonly launchTick: number;
+  /** It arrives over its target at this tick. */
+  readonly arriveTick: number;
+}
+
+/**
  * A map ping (GAME_DESIGN.md §3.20): a marker a player drops for their allies and teammates
  * ("attack here", "defend here", "watch out"). Nations act on their friends' pings.
  */
@@ -277,6 +319,9 @@ export interface World {
   /** Trade ships at sea, by ascending id (GAME_DESIGN.md §3.19). */
   tradeShips: TradeShip[];
   nextTradeShipId: number;
+  /** Flights in the air, by ascending id (GAME_DESIGN.md §3.17.7). */
+  flights: Flight[];
+  nextFlightId: number;
   /** Map pings still showing, oldest first (GAME_DESIGN.md §3.20). */
   pings: Ping[];
   nextPingId: number;
@@ -454,6 +499,8 @@ export function createWorld(setup: GameSetup): World {
     nextBoatId: 1,
     tradeShips: [],
     nextTradeShipId: 1,
+    flights: [],
+    nextFlightId: 1,
     pings: [],
     nextPingId: 1,
     alliances: new Map(),

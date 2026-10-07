@@ -229,6 +229,7 @@ interface World {
                      (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
 6b. earnGold         gold income (milestone 2.4); advanceTrade: trade ships dock and sail (2.8)
+                     (2b advanceBoats and 2c advanceFlights run between steps 2 and 3 — §5.7)
 7. thinkAI           bots emit commands for the NEXT tick (world.pendingCommands,
                      applied first in step 1 — same validation path as people)
 8. checkVictory
@@ -393,7 +394,7 @@ runner keep using LocalHost with a manual clock.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *2.5 built; the rest PLANNED*
+### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights built; the rest PLANNED*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
@@ -489,21 +490,50 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, airAssault, airStrike, launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
+2c. advanceFlights     (2B.0 ✅ arrivals) flights over their target arrive; SAM/flak interceptions
+                       (2B.2/2B.3) and arrival effects: airlift → friend's home troops (2B.1);
+                       assault → beachhead attack (2.7, 2B.3) — before step 3, like boats, so a
+                       landing's first tile falls the same tick; strike/missile → damageBuilding
+                       + suppression zones (2B.4/2B.5)
 3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
-3b. advanceFlights     (2B) move flights, SAM/flak interceptions, arrivals:
-                       airlift → friend's home troops; assault → beachhead attack (2.7);
-                       strike/missile → damageBuilding + suppression zones
     (setOwner)         captured tiles transfer or destroy their building; wall tiles break
 6.  growTroops / 6b earnGold   read the cached per-player building effects
 7.  thinkAI            + ai/build.ts (what/where/when to build and upgrade) — a separate module
 ```
 
-**Flights (2B.0).** `world.flights`: origin, target, owner, kind, planes, payload,
-launchTick, arriveTick. Positions are a pure function of the tick (straight line), so a
-flight stores no per-tick movement state and the client animates it from the launch event
-alone. Interception: each tick, a flight's current cell in the spatial grid is checked for
-hostile SAMs with a ready interceptor whose radius contains it; a plane is targeted by one
-interceptor only, in id order (deterministic).
+**Flights (2B.0 — as built).** `systems/flights.ts`. `world.flights` (ascending ids;
+owner, kind, source building, fromTile, toTile, target = the target tile's owner at launch,
+planes, troops, launchTick, arriveTick) + `world.nextFlightId`. Positions are a pure
+function of the tick: `flightProgress` = elapsed / (arrive − launch), `flightPoint` →
+`geometry.pointAlong` (+ − × ÷ only), `flightTile` (rounded, for SAM checks); the
+arrival tick is `launch + travelTicks(distance, speed)` (`rules.flights`: transports 2,
+fighters 3, missiles 3 tiles/tick), so the square root is taken once, at launch.
+`launchFlight` (callers validate the mission), `advanceFlights` (step 2c: arrivals —
+2B.0's test flights do nothing; each later kind adds its effect there), `shootDown` (the one
+place planes are lost: a plane takes its share of the troops; 0 planes = gone),
+`loseFlightsOf` (elimination), `landAllFlights` (game over: troops in the air go home).
+Troops aboard count as field troops (`updateFieldTroops`). Events `flightLaunched`,
+`flightArrived`, `flightIntercepted`, `flightLost`; frames carry `flights` snapshots (made
+once per flight, remade when planes are lost — no positions, the client computes them).
+**Hash:** flights are hashed only once a game has had one (`nextFlightId > 1`), and a
+building's charges/cooldowns only once it has used any — so games without them keep their
+pre-2B hashes, which is what the seed-by-seed regression check compares. **Charges and
+cooldowns** on `Building`: `reloads` (ticks when spent charges are back, ascending; they
+reload one at a time; finished ones are pruned in step 5b) and `cooldowns` (end tick per
+mission slot), with `readyCharges` / `spendCharge` / `cooldownLeft` / `startCooldown` in
+`buildings.ts`; building snapshots carry both. **Debug:** the `testFlight {from, to}`
+command (empty transports from your land to any tile) is accepted only with
+`rules.flights.testFlights` — off by default, on in dev builds of the client (`client.ts`
+passes `makeRules` when `import.meta.env.DEV`). *Planned (2B.2):* each tick a flight's tile
+is checked against hostile SAMs with a ready interceptor whose radius contains it (spatial
+grid); a plane is targeted by one interceptor only, in id order (deterministic).
+**Client (2B.0):** `app/flights.ts` (`FLIGHT_INFO` per kind: icon, name, hostile;
+`flightPosition`, `flightSecondsLeft`), `render/flights.ts` (`FlightLayer` on the label
+canvas after boats: aircraft glyph in the owner's colour pointing along its line, "×planes",
+dotted line to the target — yours light with a ring and ETA, hostile ones at your land red,
+everyone else's faint), hostile flights in `threats.ts` (kind "flight": chips, threat
+ring + countdown, edge arrows), a toast at launch, and the boat horn once per sender per 30 s
+(`alerts.ts`). Range rings in action mode come with the first action (Airport card, 2B.1).
 
 **Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
 (one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army

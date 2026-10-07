@@ -33,6 +33,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-025 | Islands on every generated map; boats from any coast land as beachhead attacks; Ports make them better | **Accepted** 2026-10-02 (user: islands always) |
 | D-026 | Trade ships between players' Ports (OpenFront-style) in 2.8; warships capture non-allied ones in 2B.6; real-world maps parked | **Accepted** 2026-10-06 (user) |
 | D-027 | Sound = alert sounds only, synthesized in the browser; talking = emojis + map pings (no quick chat, no free text) | **Accepted** 2026-10-06 (user) |
+| D-028 | Art: the user's icon pack (WW1 → WW2 → Modern eras = levels I → III) becomes the building and vehicle art, in milestone 2B.0b | **Accepted** 2026-10-06 (user's request; placement mine) |
 
 ---
 
@@ -524,3 +525,42 @@ design (effects, music) stays in Phase 4 polish. 344 tests.
 **Alternatives.** Effects for every action (rejected by the user for now); recorded sound
 files (licensing and size; synthesis is enough for alerts); pings visible to everyone
 (gives enemies the plan); quick-chat phrases (more UI, and bots would need to answer them).
+
+---
+
+## D-028 — The user's icon pack is the building and vehicle art · Accepted 2026-10-06
+
+**Context.** During milestone 2B.0 the user added `openborder_icon_pack_final/` to the
+project and asked that these icons be the game's icons for buildings and vehicles. The pack:
+24 painted isometric PNGs (the SVGs only wrap the same PNGs) — buildings Housing, Factory,
+Port, Airport and vehicles airplanes, helicopters, troop boats ("attack boats with troops"),
+trade ships — each in three eras: **level 1 WW1, level 2 WW2, level 3 Modern**. Today's
+icons are our own SVG drawings (`client/icons.ts`, 2.5 playtest revamp).
+
+**Decision.** The eras become our levels I–III, and the pack replaces our drawings
+wherever it has art. **Placement (mine; the user asked me to choose):** a milestone of its
+own, **2B.0b**, right after 2B.0 flights and before 2B.1 Airport I — the Airport and the
+planes then arrive with their real art, and every existing building and ship switches over in
+one focused pass instead of being mixed into a gameplay milestone. Details:
+
+- **Clean-up:** several PNGs still have the "LEVEL n / ERA" caption baked in (seen: Housing I,
+  Factory III, Airport III, troop boat I — the README says they were removed); crop them,
+  trim padding, and downscale to the sizes we draw (the folder is 2.9 MB).
+- **Map:** the sprite sits on a ring in the owner's colour with the gold level pips (owner
+  and level must stay readable — the art itself has no player colour); far zoom keeps the
+  small dots (2.6 fix). **HUD:** build bar tiles and building cards show the sprite.
+- **Vehicles:** troop boats and trade ships by the level of the Port they sail from (no
+  Port: level 1); flights by the level of their Airport (test flights: level 1);
+  helicopters for airborne assaults (2B.3). Sprites are isometric, so they are mirrored
+  left/right by heading instead of rotated.
+- **No art yet** for SAM, Missile Silo, walls, warships and missiles: our drawings stay
+  until the user provides more icons in the same style (ask when each arrives).
+
+**To confirm with the user before the art is committed/pushed:** where the sprite sheet
+came from (D-001: nothing from OpenFront — the README calls the pack "OpenFront-style"); and
+whether the planes' real national markings (a French roundel, US stars) are wanted.
+
+**Alternatives.** Phase 4 polish (the art would wait months, and 2B would build Airport
+and plane drawings only to replace them); inside 2B.1 (mixes an art pass into a gameplay
+milestone, harder to judge either).
+

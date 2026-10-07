@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(PLANNED; placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021) | ⬜ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -488,7 +488,7 @@ Range re-check: building spacing (8) and Port range (30) are about local density
 stay; boat speed stays (crossings on Huge take longer — that is the map's size); the trade
 cap (6,000 at 560 tiles) keeps Huge routes from overpaying; nations' sea reach now scales.
 
-## Phase 2B — Air & strategic warfare *(PLANNED)*
+## Phase 2B — Air & strategic warfare 🟡
 
 Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before
 multiplayer** — the solo game gets its full depth first; Phase 3 then carries these
@@ -506,13 +506,37 @@ bot games before anyone has to play them.
 
 | # | Milestone | Needs | Done when |
 |---|---|---|---|
-| 2B.0 | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
+| 2B.0 ✅ | **Flight foundation** — `world.flights` (straight-line flights with analytic positions, deterministic), launch/arrival/interception events in frames, flight rendering (glyph, dotted route, ETA), range rings in action mode, incoming-flight chips + warning (2.9), cooldown/charge bookkeeping on buildings | 2.5 range module + building model | A test flight launches, flies, arrives and renders; same seed ⇒ same hash |
+| 2B.0b | **Icon pack art** (D-028, the user's request during 2B.0) — the user's `openborder_icon_pack_final` becomes the art: buildings Housing / Factory / Port / Airport and vehicles (troop boats, trade ships, airplanes, helicopters), eras WW1 → WW2 → Modern = levels I → III. Crop the baked-in level captions, trim and downscale into `src/client/assets`; sprite on an owner-colour ring + level pips on the map (far zoom keeps dots), sprites in the build bar and building cards; boats/trade ships by Port level, flights by Airport level, helicopters for airborne assaults (2B.3); mirror by heading. SAM, Silo, walls, warships, missiles keep our drawings until more art arrives. First confirm the art's provenance (D-001) | 2B.0, 2.5 icons | Every Housing, Factory, Port, boat, trade ship and flight shows the pack in the browser at every zoom, owner and level readable; bundle size and fps checked; user approves the look |
 | 2B.1 | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
 | 2B.2 | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
 | 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
 | 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
+
+**Milestone 2B.0 result (2026-10-06)** — the flight foundation (ARCHITECTURE §5.7 "as built").
+Built: `world.flights` with positions as a pure function of the tick (straight line, speed
+by kind of plane: transports 2, fighters 3, missiles 3 tiles/tick), launch / arrival /
+interception / loss events, frames carry flights, troops aboard count as field troops,
+`shootDown` (planes take their share of the troops), charges (reload one at a time) and
+mission cooldowns on buildings; client: aircraft glyph, dotted line and ETA, hostile flights
+in the incoming-threat list (chip "X's test flight arrives in 7 s", red ring and countdown,
+edge arrows, a toast) with the horn once per sender per 30 s. **Bots first:** nothing for
+nations to fly until Airports exist (2B.1), so flights are launched with a **debug
+`testFlight` command** (empty transports, no effect on arrival), accepted only in dev
+builds (`rules.flights.testFlights`). **Regression:** 18 bots-only games (6 Continent, 4
+tribe lobbies, 4 Islands, 4 Two lands with teams) compared seed by seed against a worktree
+of `phase-2`: **every tick's state hash identical** (flights and charges enter the hash
+only once used). Headless 14 Continent games: median 8.9 min, no errors. Tests: 365 (19
+new: position math, events, rejections, interception, elimination/game over, charges,
+same seed ⇒ same hash with flights). Browser (own tab, port 5176): my flight to a nation
+and a nation's flight at me (sent with `sendAs`) — planes in the owner's colour along
+dotted lines, my ETA ring, the red incoming line, ring and "✈ 7 s", the chip and the
+toast, one horn; both landed, chips cleared, clean console. The glyph was enlarged after the
+first look (it was a speck at normal zoom). Not done here: range rings in action mode (no
+action exists before the Airport card, 2B.1). During 2B.0 the user asked for their icon pack
+as the game's art → milestone 2B.0b (D-028).
 
 **Dependency map** (what must exist first):
 
@@ -551,7 +575,8 @@ keyboard), settings & keybinds, performance on low-end devices, loading and erro
 handling, game statistics and post-game results, replays.
 
 **Building & warfare UI polish pass** *(PLANNED, added 2026-10-02)*: final building art for
-all 21 tiers, construction and upgrade animations, aircraft and missile animations, SAM
+all 21 tiers (the user's icon pack covers Housing, Factory, Port, Airport and the ships and
+planes from 2B.0b, D-028; the rest in the same style), construction and upgrade animations, aircraft and missile animations, SAM
 coverage and Airport/Silo range views, Border Defense wall art per level, incoming-attack
 warnings (sound + visual), upgrade previews and ability descriptions, mobile versions of
 the building card and target selection. Same rule as everywhere: the map stays the

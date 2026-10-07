@@ -82,7 +82,13 @@ export type Command =
    */
   | { readonly type: "emote"; readonly to: PlayerId; readonly emoji: number }
   /** Drop a map ping on `tile` for your allies and teammates. */
-  | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind };
+  | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
+  /**
+   * DEBUG ONLY (milestone 2B.0, rejected unless rules.flights.testFlights): fly a few empty
+   * transports from `from` (a tile of yours) to `to`. They do nothing when they arrive —
+   * a way to see flights before Airports exist (2B.1).
+   */
+  | { readonly type: "testFlight"; readonly from: number; readonly to: number };
 
 /** A command together with the player who issued it (stamped by the host, never by the client). */
 export interface StampedCommand {

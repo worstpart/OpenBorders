@@ -401,6 +401,27 @@ export interface ChatRules {
   readonly nationEmoteChance: number;
 }
 
+/**
+ * Flights (GAME_DESIGN.md §3.17.7, milestone 2B.0): planes fly in a straight line from where
+ * they took off to their target at a fixed speed, visible to everyone, with an ETA.
+ * Airlifts, assaults, strikes and missiles (2B.1–2B.5) are all flights.
+ */
+export interface FlightRules {
+  /** Tiles per tick of each kind of plane: transports (airlift, assault)… */
+  readonly transportTilesPerTick: number;
+  /** …fighters (air strikes, escorts)… */
+  readonly fighterTilesPerTick: number;
+  /** …and missiles. */
+  readonly missileTilesPerTick: number;
+  /**
+   * DEBUG ONLY (2B.0, until Airports exist): accept the `testFlight` command, which flies
+   * `testFlightPlanes` empty transports from your land to any tile and does nothing on
+   * arrival. Off in real games; dev builds of the client turn it on for browser checks.
+   */
+  readonly testFlights: boolean;
+  readonly testFlightPlanes: number;
+}
+
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
 export interface BuildAiRules {
   /**
@@ -642,6 +663,7 @@ export interface GameRules {
   readonly naval: NavalRules;
   readonly trade: TradeRules;
   readonly chat: ChatRules;
+  readonly flights: FlightRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -1101,6 +1123,16 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     nationHelpThreshold: 0.6,
     nationEmoteChance: 0.6,
   },
+  // Flights (§3.17.7): transports 20 km/s, so an airlift across an Airport I range (250 km)
+  // takes ~13 s and a missile across the whole reference map (~1,100 km) ~37 s — always
+  // time to see it coming, never a teleport. Boats sail 10 km/s.
+  flights: {
+    transportTilesPerTick: 2,
+    fighterTilesPerTick: 3,
+    missileTilesPerTick: 3,
+    testFlights: false,
+    testFlightPlanes: 4,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -1122,6 +1154,7 @@ export function makeRules(overrides: {
   naval?: Partial<NavalRules>;
   trade?: Partial<TradeRules>;
   chat?: Partial<ChatRules>;
+  flights?: Partial<FlightRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -1142,6 +1175,7 @@ export function makeRules(overrides: {
     naval: { ...DEFAULT_RULES.naval, ...overrides.naval },
     trade: { ...DEFAULT_RULES.trade, ...overrides.trade },
     chat: { ...DEFAULT_RULES.chat, ...overrides.chat },
+    flights: { ...DEFAULT_RULES.flights, ...overrides.flights },
   });
 }
 

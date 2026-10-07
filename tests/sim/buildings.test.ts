@@ -188,6 +188,8 @@ describe("effects", () => {
           startTick: -1,
           readyTick: -1,
           paid: 0,
+          reloads: [],
+          cooldowns: [],
         });
         w.nextBuildingId++;
       }

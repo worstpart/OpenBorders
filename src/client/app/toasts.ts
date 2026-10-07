@@ -10,6 +10,7 @@ import { levelRules } from "../../sim/systems/buildings.ts";
 import { formatTroops } from "../format.ts";
 import { effectLines } from "./buildings.ts";
 import { PING_INFO } from "./chat.ts";
+import { FLIGHT_INFO } from "./flights.ts";
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -83,6 +84,23 @@ export function toastsForEvents(
           });
         }
         break;
+      case "flightLaunched": {
+        // Hostile flights join the incoming-threat warning (GAME_DESIGN.md §3.17.7).
+        const info = FLIGHT_INFO[event.kind];
+        if (
+          event.target === me &&
+          event.owner !== me &&
+          info.hostile &&
+          !friends.has(event.owner)
+        ) {
+          toasts.push({
+            text: `${info.icon} ${nameOf(event.owner)}'s ${info.name} is heading for your land`,
+            tone: "danger",
+            player: event.owner,
+          });
+        }
+        break;
+      }
       case "boatLanded":
         if (event.owner === me && event.attackId < 0) {
           toasts.push({

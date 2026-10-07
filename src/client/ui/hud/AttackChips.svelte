@@ -3,7 +3,7 @@
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { troopsToSend } from "../../app/attackPercent.ts";
   import { boatChips } from "../../app/boats.ts";
-  import { incomingThreats, THREAT_ICON } from "../../app/threats.ts";
+  import { incomingThreats, THREAT_ICON, THREAT_VERB } from "../../app/threats.ts";
   import { lossFactorOf, ODDS_LABEL, outcomeText, THREAT_LABEL } from "../../app/preview.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
@@ -47,7 +47,7 @@
   const counterTroops = $derived(me ? troopsToSend(me.homeTroops, ui.attackPercent) : 0);
   // Boats (GAME_DESIGN.md §3.18): ours at sea, and the ones sailing for our coast.
   const boats = $derived(ui.tick >= 0 ? boatChips(ui.boatContext) : []);
-  // The incoming-threat warning (GAME_DESIGN.md §3.20): boats now, flights in 2B.
+  // The incoming-threat warning (GAME_DESIGN.md §3.20): boats and hostile flights.
   const threats = $derived(ui.tick >= 0 ? incomingThreats(ui.threatContext) : []);
 </script>
 
@@ -58,9 +58,14 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="label"
           >{THREAT_ICON[threat.kind]}
-          {ui.playerName(threat.from)}'s boat lands in {Math.ceil(threat.secondsLeft)} s</span
+          {ui.playerName(threat.from)}'s {threat.name}
+          {THREAT_VERB[threat.kind]} in {Math.ceil(threat.secondsLeft)} s</span
         >
-        <span class="troops">{formatTroops(threat.troops)}</span>
+        <span class="troops"
+          >{threat.troops > 0 || threat.planes === 0
+            ? formatTroops(threat.troops)
+            : `${threat.planes} ${THREAT_ICON[threat.kind]}`}</span
+        >
       </li>
     {/each}
     {#each incoming as attack (attack.id)}

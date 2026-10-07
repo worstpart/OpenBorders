@@ -19,7 +19,7 @@ import { incomingThreats, type Threat } from "../../src/client/app/threats.ts";
 import { AlertPlanner, ATTACKER_QUIET_TICKS } from "../../src/client/app/alerts.ts";
 import { toastsForEvents } from "../../src/client/app/toasts.ts";
 import type { SimEvent } from "../../src/sim/events.ts";
-import type { BoatSnapshot, PingSnapshot } from "../../src/sim/frame.ts";
+import type { BoatSnapshot, FlightSnapshot, PingSnapshot } from "../../src/sim/frame.ts";
 import { DEFAULT_RULES } from "../../src/sim/rules.ts";
 
 const R = DEFAULT_RULES;
@@ -120,6 +120,8 @@ describe("the incoming-threat warning", () => {
       rules: R,
       owner,
       boats: [boat(3, 2, 0), boat(1, 2, 1), boat(2, 1, 3), boat(4, 2, 1, 20), boat(5, 2, 2)],
+      flights: [],
+      friends: new Set(),
       me: 1,
       tick: 40,
     });
@@ -128,9 +130,51 @@ describe("the incoming-threat warning", () => {
   });
 
   it("is empty for a spectator", () => {
-    expect(incomingThreats({ rules: R, owner, boats: [boat(1, 2, 1)], me: 0, tick: 0 })).toEqual(
-      [],
-    );
+    expect(
+      incomingThreats({
+        rules: R,
+        owner,
+        boats: [boat(1, 2, 1)],
+        flights: [flight(1, 2, 0)],
+        friends: new Set(),
+        me: 0,
+        tick: 0,
+      }),
+    ).toEqual([]);
+  });
+
+  const flight = (id: number, o: number, toTile: number): FlightSnapshot => ({
+    id,
+    owner: o,
+    kind: "test",
+    target: 1,
+    fromTile: 4,
+    toTile,
+    planes: 4,
+    troops: 0,
+    launchTick: 0,
+    arriveTick: 60 + id,
+  });
+
+  it("lists hostile flights over our land — not ours, not a friend's — with boats by time", () => {
+    const threats = incomingThreats({
+      rules: R,
+      owner,
+      boats: [boat(1, 2, 1)],
+      flights: [flight(7, 2, 0), flight(8, 1, 0), flight(9, 3, 1), flight(10, 2, 2)],
+      friends: new Set([3]),
+      me: 1,
+      tick: 40,
+    });
+    expect(threats.map((t) => t.key)).toEqual(["boat:1", "flight:7"]);
+    expect(threats[1]).toMatchObject({
+      kind: "flight",
+      name: "test flight",
+      from: 2,
+      planes: 4,
+      tile: 0,
+      secondsLeft: 2.7,
+    });
   });
 });
 
@@ -142,11 +186,13 @@ describe("alert sounds", () => {
     target,
     landingTile,
   });
-  const threat = (id: number, from: number): Threat => ({
-    key: `boat:${id}`,
-    kind: "boat",
+  const threat = (id: number, from: number, kind: Threat["kind"] = "boat"): Threat => ({
+    key: `${kind}:${id}`,
+    kind,
+    name: kind === "boat" ? "boat" : "test flight",
     from,
     troops: 100,
+    planes: kind === "boat" ? 0 : 4,
     tile: 0,
     secondsLeft: 10,
   });
@@ -176,6 +222,17 @@ describe("alert sounds", () => {
     expect(alerts.cues([], 1, 2, [threat(1, 2)], [])).toEqual([]);
     expect(alerts.cues([], 1, 3, [threat(1, 2), threat(2, 2)], [])).toEqual(["boat"]);
     expect(alerts.cues([attack(2, 1, 7)], 1, 4, [], [])).toEqual([]);
+  });
+
+  it("hostile flights sound the horn once per sender per 30 s, however many they send", () => {
+    const alerts = new AlertPlanner();
+    expect(alerts.cues([], 1, 1, [threat(1, 2, "flight")], [])).toEqual(["boat"]);
+    const wave = [threat(1, 2, "flight"), threat(2, 2, "flight"), threat(3, 2, "flight")];
+    expect(alerts.cues([], 1, 2, wave, [])).toEqual([]);
+    expect(alerts.cues([], 1, 3, [...wave, threat(4, 3, "flight")], [])).toEqual(["boat"]);
+    expect(alerts.cues([], 1, 1 + ATTACKER_QUIET_TICKS, [threat(5, 2, "flight")], [])).toEqual([
+      "boat",
+    ]);
   });
 
   it("alliance requests to us and new renewal prompts ring; every betrayal sounds", () => {

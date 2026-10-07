@@ -10,6 +10,8 @@ import type { BuildingType, Difficulty } from "./rules.ts";
 import type {
   Boat,
   BotTier,
+  Flight,
+  FlightKind,
   Phase,
   Ping,
   PlayerId,
@@ -128,6 +130,28 @@ export interface BuildingSnapshot {
   /** Current construction/upgrade: start and finish ticks (-1 when idle). */
   readonly startTick: number;
   readonly readyTick: number;
+  /** Phase 2B: when spent charges are back (ascending), and each mission's cooldown end. */
+  readonly reloads: readonly number[];
+  readonly cooldowns: readonly number[];
+}
+
+/**
+ * A flight in the air (GAME_DESIGN.md §3.17.7). Its position follows from the tick
+ * (systems/flights.ts flightPoint). Made once per flight and shared between frames until
+ * planes are shot down.
+ */
+export interface FlightSnapshot {
+  readonly id: number;
+  readonly owner: PlayerId;
+  readonly kind: FlightKind;
+  /** Who owned the target tile at launch (0 = neutral land or sea). */
+  readonly target: PlayerId;
+  readonly fromTile: number;
+  readonly toTile: number;
+  readonly planes: number;
+  readonly troops: number;
+  readonly launchTick: number;
+  readonly arriveTick: number;
 }
 
 /** A wall (GAME_DESIGN.md §3.17.6). Snapshots are shared between frames until it changes. */
@@ -188,6 +212,8 @@ export interface TickFrame {
   readonly boats: readonly BoatSnapshot[];
   /** Every trade ship at sea, by ascending id. */
   readonly tradeShips: readonly TradeShipSnapshot[];
+  /** Every flight in the air, by ascending id. */
+  readonly flights: readonly FlightSnapshot[];
   /** Map pings still showing, oldest first. */
   readonly pings: readonly PingSnapshot[];
   readonly events: readonly SimEvent[];
@@ -293,6 +319,29 @@ function snapshotTradeShip(ship: TradeShip): TradeShipSnapshot {
   return snapshot;
 }
 
+const flightCache = new WeakMap<Flight, FlightSnapshot>();
+
+function snapshotFlight(flight: Flight): FlightSnapshot {
+  const cached = flightCache.get(flight);
+  if (cached && cached.planes === flight.planes) return cached;
+  const snapshot: FlightSnapshot = {
+    id: flight.id,
+    owner: flight.owner,
+    kind: flight.kind,
+    target: flight.target,
+    fromTile: flight.fromTile,
+    toTile: flight.toTile,
+    planes: flight.planes,
+    troops: flight.troops,
+    launchTick: flight.launchTick,
+    arriveTick: flight.arriveTick,
+  };
+  flightCache.set(flight, snapshot);
+  return snapshot;
+}
+
+const NONE: readonly number[] = Object.freeze([]);
+
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
   const changedOwners = new Uint16Array(changedTiles.length);
@@ -336,10 +385,13 @@ export function buildFrame(world: World): TickFrame {
       targetLevel: b.targetLevel,
       startTick: b.startTick,
       readyTick: b.readyTick,
+      reloads: b.reloads.length > 0 ? b.reloads.slice() : NONE,
+      cooldowns: b.cooldowns.length > 0 ? b.cooldowns.slice() : NONE,
     })),
     walls: snapshotWalls(world),
     boats: world.boats.map(snapshotBoat),
     tradeShips: world.tradeShips.map(snapshotTradeShip),
+    flights: world.flights.map(snapshotFlight),
     pings: world.pings.map((p) => ({ ...p })),
     events: world.events.slice(),
     winner: world.winner,

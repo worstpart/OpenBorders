@@ -18,3 +18,7 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# The user's icon pack (D-028): not committed until its provenance is confirmed (D-001);
+# milestone 2B.0b moves the cleaned sprites into src/client/assets.
+openborder_icon_pack_final/

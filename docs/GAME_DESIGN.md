@@ -607,10 +607,11 @@ up) 11.6–12.1 min.
 - **Headless:** `--no-economy`; per game gold earned, mobilized, donated and looted, and
   the median gold income at minutes 1, 3 and 6.
 
-### 3.17 Buildings & strategic warfare — design (PLANNED · 2026-10-02)
+### 3.17 Buildings & strategic warfare — design (2026-10-02; partly built)
 
-> **Status: PLANNED.** Nothing in this section exists in the game yet. It is the design
-> the user asked for on 2026-10-02 (seven buildings with three levels each, Border
+> **Status (2026-10-06):** built so far — Housing, Factory (2.5), walls (2.6), Port I–II
+> (2.7), trade (2.8), flights (2B.0); rows marked ✅ in §3.17.10. The rest is still the plan.
+> It is the design the user asked for on 2026-10-02 (seven buildings with three levels each, Border
 > Defense, SAMs, Missile Silos and Airports) — written *before* any code. The user's
 > answers of 2026-10-02: air & strategic warfare comes **before multiplayer** (Phase 2B,
 > built bots-first); **troop gifts only over a shared border or by airlift**; **longer games
@@ -771,9 +772,15 @@ estimates and aim at an open stretch of it.
 an airport can still be reinforced; a target can't refuse). Receiving airports add
 nothing — one less rule to learn.
 
-**Flights.** Every air action is a *flight*: a group of planes flying in a straight line
-from the airport to the target at a fixed speed, visible to everyone on the map, with an
-ETA. Nothing is instant.
+**Flights** (✅ foundation built in 2B.0). Every air action is a *flight*: a group of planes
+flying in a straight line from the airport to the target at a fixed speed, visible to
+everyone on the map, with an ETA. Nothing is instant. *As built:* each flight is drawn as an
+aircraft in its owner's colour with "×planes", on a dotted line to its target (yours light
+with the ETA, hostile ones aimed at your land red, others faint); a hostile flight at your
+land joins the incoming-threat warning (§3.20: chip, red ring and countdown, edge arrow, a
+toast, the horn once per sender per 30 s). Until Airports exist (2B.1) flights can only be
+launched with a debug test command in development builds. Art: the user's icon pack
+(airplanes by Airport level, helicopters for airborne assault) arrives in 2B.0b (D-028).
 
 | Flight | Planes | Speed | Carries |
 |---|---|---|---|

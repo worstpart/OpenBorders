@@ -11,6 +11,7 @@ import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
 import { coastTiles, landmassesOf, seasOf } from "../../sim/systems/naval.ts";
 import { BoatLayer } from "../render/boats.ts";
+import { FlightLayer } from "../render/flights.ts";
 import { MarkerLayer, type EmoteBubble, type PingMarker } from "../render/markers.ts";
 import { SoundBoard, type SettingsStore } from "../audio/sound.ts";
 import { AlertPlanner } from "./alerts.ts";
@@ -55,7 +56,7 @@ import {
 } from "../render/labels.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
-import { DEFAULT_RULES, type Difficulty } from "../../sim/rules.ts";
+import { DEFAULT_RULES, makeRules, type Difficulty } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { allianceStatus, diplomacyCards } from "./diplomacy.ts";
 import { donationKeyOf, MOBILIZE_PERCENT, mobilizePreview } from "./economy.ts";
@@ -115,6 +116,7 @@ export class GameClient {
   private readonly labels: LabelLayer;
   private readonly buildingLayer: BuildingLayer;
   private readonly boatLayer: BoatLayer;
+  private readonly flightLayer: FlightLayer;
   private readonly markerLayer: MarkerLayer;
   /** Alert sounds (GAME_DESIGN.md §3.20). */
   private readonly sound = new SoundBoard(browserStorage());
@@ -160,6 +162,7 @@ export class GameClient {
     this.labels = new LabelLayer(elements.labelCanvas, elements.fontFamily);
     this.buildingLayer = new BuildingLayer(elements.labelCanvas);
     this.boatLayer = new BoatLayer(elements.labelCanvas, elements.fontFamily);
+    this.flightLayer = new FlightLayer(elements.labelCanvas, elements.fontFamily);
     this.markerLayer = new MarkerLayer(elements.labelCanvas, elements.fontFamily);
     ui.sound = this.sound.settings;
     // Browsers start audio only after a gesture: every click or key press may unlock it.
@@ -257,7 +260,14 @@ export class GameClient {
         : new WorkerHost({ localPlayerId: LOCAL_PLAYER_ID, onError: (m) => this.onSimError(m) });
     this.host = host;
     host.onFrame((frame, timing) => this.onFrame(frame, timing));
-    const initial = await host.start({ seed: Math.floor(random() * 2 ** 32), map, players });
+    const initial = await host.start({
+      seed: Math.floor(random() * 2 ** 32),
+      map,
+      players,
+      // Dev builds accept the debug `testFlight` command (2B.0, until Airports exist); the
+      // rules are otherwise the defaults.
+      rules: import.meta.env.DEV ? makeRules({ flights: { testFlights: true } }) : undefined,
+    });
 
     this.owner = initial.owner.slice();
     ui.map = initial.map;
@@ -293,6 +303,8 @@ export class GameClient {
       send: (command: Command) => this.host?.send(command),
       /** Sends a command as another player (e.g. a bot asking us for an alliance). */
       sendAs: (playerId: number, command: Command) => this.host?.sendAs(playerId, command),
+      /** Who owns each tile now (a copy), e.g. to pick tiles for a `testFlight`. */
+      owner: () => this.owner.slice(),
       /** Alert sounds: audio state and the cues played so far. */
       sound: () => ({ state: this.sound.state, played: [...this.sound.played] }),
       /** Where a tile's centre is on screen (CSS pixels), for scripted clicks. */
@@ -772,6 +784,7 @@ export class GameClient {
     ui.walls = frame.walls;
     ui.boats = frame.boats;
     ui.tradeShips = frame.tradeShips;
+    ui.flights = frame.flights;
     ui.pings = visiblePings(frame.pings, ui.localPlayerId, ui.friends);
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
@@ -1057,6 +1070,16 @@ export class GameClient {
         colorOf: (id) => ui.colorOf(id),
         owner: this.owner,
         preview: ui.boatPreview,
+      });
+      this.flightLayer.draw(view, {
+        map: this.map,
+        flights: ui.flights,
+        tick,
+        tickMs: DEFAULT_RULES.tickMs,
+        localPlayerId: ui.localPlayerId,
+        friends,
+        colorOf: (id) => ui.colorOf(id),
+        owner: this.owner,
       });
     }
     this.labels.draw(

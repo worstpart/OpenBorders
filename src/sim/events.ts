@@ -4,7 +4,7 @@
  */
 import type { Command } from "./commands.ts";
 import type { BuildingType, PingKind } from "./rules.ts";
-import type { DonationResource, Phase, PlayerId } from "./world.ts";
+import type { DonationResource, FlightKind, Phase, PlayerId } from "./world.ts";
 
 export type SimEvent =
   | { readonly type: "phaseChanged"; readonly phase: Phase }
@@ -236,6 +236,52 @@ export type SimEvent =
       /** The destination Port's tile. */
       readonly tile: number;
       readonly gold: number;
+    }
+  | {
+      /** A flight took off (GAME_DESIGN.md §3.17.7); it is over its target at `arriveTick`. */
+      readonly type: "flightLaunched";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      readonly kind: FlightKind;
+      /** Who owned the target tile at launch (0 = neutral land or sea). */
+      readonly target: PlayerId;
+      readonly fromTile: number;
+      readonly toTile: number;
+      readonly planes: number;
+      readonly troops: number;
+      readonly arriveTick: number;
+    }
+  | {
+      /** A flight reached its target with `planes` planes and `troops` aboard. */
+      readonly type: "flightArrived";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      readonly kind: FlightKind;
+      readonly tile: number;
+      /** Who owns the target tile now. */
+      readonly target: PlayerId;
+      readonly planes: number;
+      readonly troops: number;
+    }
+  | {
+      /**
+       * `by` shot down `planes` of a flight over `tile` (with `troopsLost` aboard); it flies on
+       * with `planesLeft` (0 = the flight is gone).
+       */
+      readonly type: "flightIntercepted";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      readonly by: PlayerId;
+      readonly tile: number;
+      readonly planes: number;
+      readonly planesLeft: number;
+      readonly troopsLost: number;
+    }
+  | {
+      /** The flight's owner was eliminated: it is lost with everything aboard. */
+      readonly type: "flightLost";
+      readonly flightId: number;
+      readonly owner: PlayerId;
     }
   | {
       /** An emoji (GAME_DESIGN.md §3.20): to one player, or to everyone (`to` 0). */

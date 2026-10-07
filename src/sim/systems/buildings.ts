@@ -161,6 +161,8 @@ export function applyBuild(
     startTick: world.tick,
     readyTick: world.tick + levelRules(rules, type, 1).buildTicks,
     paid: price,
+    reloads: [],
+    cooldowns: [],
   };
   world.buildings.push(building);
   world.buildingAt[tile] = building.id;
@@ -239,6 +241,10 @@ export function updateBuildings(world: World): void {
     world.buildingTileChanges.length = 0;
   }
   for (const building of world.buildings) {
+    // Charges that are back are forgotten (Phase 2B), so the state holds only pending ones.
+    if (building.reloads.length > 0 && building.reloads[0]! <= world.tick) {
+      building.reloads = building.reloads.filter((t) => t > world.tick);
+    }
     if (busy(building) && world.tick >= building.readyTick) {
       building.level = building.targetLevel;
       idle(building);
@@ -253,6 +259,37 @@ export function updateBuildings(world: World): void {
     }
   }
   sumBonuses(world);
+}
+
+/**
+ * Charges (Phase 2B — SAM interceptors, silo slots): how many of a building's `max` charges
+ * are ready at `tick`.
+ */
+export function readyCharges(building: Building, max: number, tick: number): number {
+  let away = 0;
+  for (const back of building.reloads) if (back > tick) away++;
+  return Math.max(0, max - away);
+}
+
+/**
+ * Spends one charge at `tick`. Charges reload one at a time: this one is back `reloadTicks`
+ * after the one before it (or after now, if none is reloading).
+ */
+export function spendCharge(building: Building, tick: number, reloadTicks: number): void {
+  const pending = building.reloads.filter((t) => t > tick);
+  pending.push(Math.max(pending.at(-1) ?? tick, tick) + reloadTicks);
+  building.reloads = pending;
+}
+
+/** Ticks until mission `slot` of a building is ready again (0 = ready; Phase 2B). */
+export function cooldownLeft(building: Building, slot: number, tick: number): number {
+  return Math.max(0, (building.cooldowns[slot] ?? -1) - tick);
+}
+
+/** Starts mission `slot`'s cooldown: ready again `ticks` after `tick`. */
+export function startCooldown(building: Building, slot: number, tick: number, ticks: number): void {
+  while (building.cooldowns.length <= slot) building.cooldowns.push(-1);
+  building.cooldowns[slot] = tick + ticks;
 }
 
 export function findBuilding(world: World, id: number): Building | undefined {

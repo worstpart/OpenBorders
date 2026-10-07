@@ -557,6 +557,7 @@ export function updateFieldTroops(world: World): void {
   for (const attack of world.attacks)
     getPlayer(world, attack.attacker)!.fieldTroops += attack.troops;
   for (const boat of world.boats) getPlayer(world, boat.owner)!.fieldTroops += boat.troops;
+  for (const flight of world.flights) getPlayer(world, flight.owner)!.fieldTroops += flight.troops;
 }
 
 function distance(world: World, a: number, b: number): number {

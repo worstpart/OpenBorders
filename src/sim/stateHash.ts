@@ -119,6 +119,24 @@ export function hashWorld(world: World): number {
       .addInt(s.arriveTick)
       .addInt(s.gold);
   }
+  // Flights (2B.0), hashed once the game has had one (so games without flights keep the
+  // hashes they had before 2B.0 — the regression check compares them).
+  if (world.nextFlightId > 1) {
+    h.addInt(world.nextFlightId).addInt(world.flights.length);
+    for (const f of world.flights) {
+      h.addInt(f.id)
+        .addInt(f.owner)
+        .addString(f.kind)
+        .addInt(f.source)
+        .addInt(f.fromTile)
+        .addInt(f.toTile)
+        .addInt(f.target)
+        .addInt(f.planes)
+        .addNumber(f.troops)
+        .addInt(f.launchTick)
+        .addInt(f.arriveTick);
+    }
+  }
   h.addInt(world.nextPingId).addInt(world.pings.length);
   for (const p of world.pings) {
     h.addInt(p.id)
@@ -140,6 +158,13 @@ export function hashWorld(world: World): number {
       .addInt(b.startTick)
       .addInt(b.readyTick)
       .addInt(b.paid);
+    // Phase 2B charges and cooldowns, hashed once a building has used any (so games without
+    // them keep the hashes they had before 2B.0).
+    if (b.reloads.length > 0 || b.cooldowns.length > 0) {
+      h.addInt(0x2b0).addInt(b.reloads.length).addInt(b.cooldowns.length);
+      for (const t of b.reloads) h.addInt(t);
+      for (const t of b.cooldowns) h.addInt(t);
+    }
   }
   h.addInt(world.nextWallId).addInt(world.walls.length).addInt(world.wallHash);
   for (const w of world.walls) {
