@@ -22,8 +22,18 @@
  *    multipliers; more planes than interceptors get through.
  *  - Arrivals act by kind: airlift → the friend's home troops, what doesn't fit under their
  *    capacity flies back ("return" → the owner's home troops) — 2B.1; assault → a beachhead
- *    attack (2B.3), strike/missile → buildings lose levels (2B.4–2B.5). Test flights (debug,
+ *    attack (2B.3); strike → a building loses a level and stops working for a while, or a
+ *    point is suppressed (2B.4); missiles in 2B.5. Test flights (debug,
  *    rules.flights.testFlights) do nothing when they arrive.
+ *  - Air strike (Air Base, Airport III, 2B.4): a wing of fighters from the Air Base to an
+ *    enemy's tile in range, on its own cooldown (slot 1). Over the target: if an enemy
+ *    building stands on the tile, it loses a level when at least `strikeDamagePlanes`
+ *    fighters arrive (a level-I building is destroyed) and is disabled for
+ *    `strikeDisableTicks` either way; otherwise the enemy's land around the tile is suppressed
+ *    (suppression.ts). An Air Base's lifts and assaults also fly with escort fighters, which
+ *    the SAMs and flak shoot down first.
+ *  - A disabled building (buildings.ts `working`) does nothing: a struck SAM doesn't fire, a
+ *    struck Airport flies no mission.
  *  - Airlift (Airport I, D-023): the only way to send troops to a friend you don't border —
  *    the send share of your home troops, capped by the Airport's lift capacity (a share of
  *    your troop capacity), to any land of an ally or teammate within its range; then the
@@ -64,10 +74,13 @@ import {
   readyCharges,
   spendCharge,
   startCooldown,
+  strikeBuilding,
+  working,
 } from "./buildings.ts";
 import { areFriendly } from "./diplomacy.ts";
 import { troopRoom } from "./economy.ts";
 import { hostileTarget } from "./naval.ts";
+import { isSuppressed, suppress } from "./suppression.ts";
 
 /** The kinds of plane, which set a flight's speed (GAME_DESIGN.md §3.17.7). */
 export type PlaneType = "transport" | "fighter" | "missile";
@@ -135,6 +148,8 @@ export interface FlightLaunch {
   readonly toTile: number;
   readonly plane: PlaneType;
   readonly planes: number;
+  /** Escort fighters flying with it (an Air Base's lifts, 2B.4); none if left out. */
+  readonly escorts?: number;
   /** Troops aboard (taken from the owner's home troops by the caller). */
   readonly troops: number;
 }
@@ -150,6 +165,7 @@ export function launchFlight(world: World, launch: FlightLaunch): Flight {
     toTile: launch.toTile,
     target: world.owner[launch.toTile]!,
     planes: launch.planes,
+    escorts: launch.escorts ?? 0,
     troops: launch.troops,
     launchTick: world.tick,
     arriveTick:
@@ -167,6 +183,7 @@ export function launchFlight(world: World, launch: FlightLaunch): Flight {
     fromTile: flight.fromTile,
     toTile: flight.toTile,
     planes: flight.planes,
+    escorts: flight.escorts,
     troops: flight.troops,
     arriveTick: flight.arriveTick,
   });
@@ -210,16 +227,19 @@ export interface AirportLike {
   readonly level: number;
   readonly tile: number;
   readonly cooldowns: readonly number[];
+  /** Struck by an air strike: no missions until this tick (2B.4). */
+  readonly disabledUntil: number;
 }
 
-/** The airlift mission's cooldown slot on an Airport. */
+/** The airlift mission's cooldown slot on an Airport (airborne assaults share it). */
 export const AIRLIFT_SLOT = 0;
 
 /** Why an airlift can't go to `tile` now, or null. Shared with the HUD and the nations. */
-export type AirliftProblem = "notReady" | "cooldown" | "notFriend" | "outOfRange";
+export type AirliftProblem = "notReady" | "disabled" | "cooldown" | "notFriend" | "outOfRange";
 
 export const AIRLIFT_PROBLEM_TEXT: Record<AirliftProblem, string> = {
   notReady: "the Airport isn't ready yet",
+  disabled: "the Airport was hit by an air strike",
   cooldown: "the Airport is still on cooldown",
   notFriend: "airlifts go to an ally's or teammate's land",
   outOfRange: "out of the Airport's range",
@@ -248,6 +268,7 @@ export function airliftProblem(
   friendly: boolean,
 ): AirliftProblem | null {
   if (airport.type !== "airport" || airport.level < 1) return "notReady";
+  if (!working(airport, tick)) return "disabled";
   if (airliftCooldownLeft(airport, tick) > 0) return "cooldown";
   if (!friendly) return "notFriend";
   if (!withinRange(map, airport.tile, tile, airportRange(rules, airport))) return "outOfRange";
@@ -315,6 +336,7 @@ export function applyAirlift(
     toTile: tile,
     plane: "transport",
     planes: rules.flights.airliftPlanes,
+    escorts: escortsOf(rules, airport.level),
     troops,
   });
   startCooldown(
@@ -330,10 +352,11 @@ export function applyAirlift(
 export const ASSAULT_LEVEL = 2;
 
 /** Why an assault can't go to `tile` now, or null. Shared with the HUD and the nations. */
-export type AssaultProblem = "notReady" | "cooldown" | "notHostile" | "outOfRange";
+export type AssaultProblem = "notReady" | "disabled" | "cooldown" | "notHostile" | "outOfRange";
 
 export const ASSAULT_PROBLEM_TEXT: Record<AssaultProblem, string> = {
   notReady: "an airborne assault needs a Military Airport (level II)",
+  disabled: "the Airport was hit by an air strike",
   cooldown: "the Airport is still on cooldown",
   notHostile: "assaults land on an enemy's land",
   outOfRange: "out of the Airport's range",
@@ -352,6 +375,7 @@ export function assaultProblem(
   hostile: boolean,
 ): AssaultProblem | null {
   if (airport.type !== "airport" || airport.level < ASSAULT_LEVEL) return "notReady";
+  if (!working(airport, tick)) return "disabled";
   if (airliftCooldownLeft(airport, tick) > 0) return "cooldown";
   if (!hostile) return "notHostile";
   if (!withinRange(map, airport.tile, tile, airportRange(rules, airport))) return "outOfRange";
@@ -400,6 +424,7 @@ export function applyAssault(
     toTile: tile,
     plane: "transport",
     planes: rules.flights.assaultPlanes,
+    escorts: escortsOf(rules, airport.level),
     troops,
   });
   startCooldown(
@@ -442,6 +467,7 @@ function landAssault(world: World, flight: Flight): void {
       toTile: flight.fromTile,
       plane: "transport",
       planes: flight.planes,
+      escorts: flight.escorts,
       troops: flight.troops,
     });
   }
@@ -454,6 +480,119 @@ function landAssault(world: World, flight: Flight): void {
     troops: flight.troops,
     attackId,
   });
+}
+
+/** Escort fighters an Airport of `level` sends with every lift and assault (Air Base: 2). */
+export function escortsOf(rules: GameRules, level: number): number {
+  return level >= 1 ? (levelRules(rules, "airport", level).escorts ?? 0) : 0;
+}
+
+/** The Airport level that flies air strikes (Air Base). */
+export const STRIKE_LEVEL = 3;
+
+/** The air strike's own cooldown slot on an Airport (2B.4). */
+export const STRIKE_SLOT = 1;
+
+/** Ticks until an Air Base can strike again (0 = ready). */
+export function strikeCooldownLeft(airport: AirportLike, tick: number): number {
+  return Math.max(0, (airport.cooldowns[STRIKE_SLOT] ?? -1) - tick);
+}
+
+/** Why an air strike can't go to `tile` now, or null. Shared with the HUD and the nations. */
+export type StrikeProblem = "notReady" | "disabled" | "cooldown" | "notHostile" | "outOfRange";
+
+export const STRIKE_PROBLEM_TEXT: Record<StrikeProblem, string> = {
+  notReady: "an air strike needs an Air Base (level III)",
+  disabled: "the Airport was hit by an air strike",
+  cooldown: "the fighters are still on cooldown",
+  notHostile: "air strikes hit an enemy's land or buildings",
+  outOfRange: "out of the Air Base's range",
+};
+
+/**
+ * Whether an air strike may fly from `airport` to `tile` at `tick`; `hostile` says whether
+ * the tile belongs to a living player who isn't the owner or a friend of theirs.
+ */
+export function strikeProblem(
+  rules: GameRules,
+  map: GameMap,
+  airport: AirportLike,
+  tick: number,
+  tile: number,
+  hostile: boolean,
+): StrikeProblem | null {
+  if (airport.type !== "airport" || airport.level < STRIKE_LEVEL) return "notReady";
+  if (!working(airport, tick)) return "disabled";
+  if (strikeCooldownLeft(airport, tick) > 0) return "cooldown";
+  if (!hostile) return "notHostile";
+  if (!withinRange(map, airport.tile, tile, airportRange(rules, airport))) return "outOfRange";
+  return null;
+}
+
+/**
+ * Handles `airStrike` (GAME_DESIGN.md §3.17.7, 2B.4): the Air Base's fighter wing flies to an
+ * enemy's tile — the building standing there, or the point (see the header).
+ */
+export function applyAirStrike(
+  world: World,
+  player: Player,
+  buildingId: number,
+  tile: number,
+): string | null {
+  const rules = world.rules;
+  if (!rules.flights.enabled || !buildingsEnabled(rules)) {
+    return "there are no flights in this game";
+  }
+  if (world.phase !== "playing") return "the match hasn't started";
+  const airport = findBuilding(world, buildingId);
+  if (!airport || airport.owner !== player.id || airport.type !== "airport") {
+    return "not your Airport";
+  }
+  if (!Number.isInteger(tile) || tile < 0 || tile >= world.owner.length) return "invalid tile";
+  const holder = world.owner[tile]!;
+  const why = holder === NEUTRAL ? null : hostileTarget(world, player, holder);
+  if (why) return why;
+  const problem = strikeProblem(rules, world.map, airport, world.tick, tile, holder !== NEUTRAL);
+  if (problem) return STRIKE_PROBLEM_TEXT[problem];
+  launchFlight(world, {
+    owner: player.id,
+    kind: "strike",
+    source: airport.id,
+    fromTile: airport.tile,
+    toTile: tile,
+    plane: "fighter",
+    planes: rules.flights.strikePlanes,
+    troops: 0,
+  });
+  startCooldown(
+    airport,
+    STRIKE_SLOT,
+    world.tick,
+    levelRules(rules, "airport", airport.level).strikeCooldownTicks ?? 0,
+  );
+  return null;
+}
+
+/**
+ * A strike over its target: an enemy building on the tile is hit (−1 level with enough
+ * fighters, disabled either way); otherwise the enemy land around it is suppressed. Land or a
+ * building that became the striker's own or a friend's meanwhile is spared.
+ */
+function landStrike(world: World, flight: Flight): void {
+  const f = world.rules.flights;
+  const enemy = (id: PlayerId) =>
+    id !== NEUTRAL &&
+    id !== flight.owner &&
+    getPlayer(world, id)?.alive === true &&
+    !areFriendly(world, flight.owner, id);
+  const building = findBuilding(world, world.buildingAt[flight.toTile]!);
+  if (building && enemy(building.owner)) {
+    const levels = flight.planes >= f.strikeDamagePlanes ? 1 : 0;
+    strikeBuilding(world, building, levels, f.strikeDisableTicks, flight.owner);
+    return;
+  }
+  const holder = world.owner[flight.toTile]!;
+  if (enemy(holder)) suppress(world, flight.id, flight.owner, holder, flight.toTile);
 }
 
 /** True when `other` is a living ally or teammate of `id`. */
@@ -515,6 +654,7 @@ export function assaultSite(
  * (tried first; -1 = none) and up to SITE_CANDIDATES of `tiles` within the Airport's range,
  * spread from the nearest to the farthest — nearest first among equals; with no hostile SAM
  * anywhere, `preferred` or the nearest. Tile -1 when every route would lose every plane.
+ * An Air Base's escorts (2B.4) take the first interceptors, so `lost` counts only the planes.
  */
 function quietSite(
   world: World,
@@ -542,17 +682,21 @@ function quietSite(
     }
     return { tile: best, lost: 0 };
   }
+  const escorts = escortsOf(rules, airport.level);
   const met = (tile: number) =>
-    interceptorsOnRoute(
-      rules,
-      world.map,
-      sams,
-      hostile,
-      airport.tile,
-      tile,
-      "transport",
-      world.tick,
-    ).interceptors;
+    Math.max(
+      0,
+      interceptorsOnRoute(
+        rules,
+        world.map,
+        sams,
+        hostile,
+        airport.tile,
+        tile,
+        "transport",
+        world.tick,
+      ).interceptors - escorts,
+    );
   let best = -1;
   let fewest = planes; // as many as the planes: all of them lost
   if (preferred >= 0) {
@@ -606,6 +750,7 @@ function deliverAirlift(world: World, flight: Flight): void {
       toTile: flight.fromTile,
       plane: "transport",
       planes: flight.planes,
+      escorts: flight.escorts,
       troops: returning,
     });
   }
@@ -619,6 +764,8 @@ export interface SamLike {
   readonly level: number;
   readonly tile: number;
   readonly reloads: readonly number[];
+  /** Struck by an air strike: it doesn't fire until this tick (2B.4). */
+  readonly disabledUntil: number;
 }
 
 /** A SAM's radius in tiles at its working level (0 while first being built). */
@@ -633,8 +780,9 @@ export function samInterceptors(rules: GameRules, level: number): number {
   return level >= 1 ? (levelRules(rules, "sam", level).interceptors ?? 0) : 0;
 }
 
-/** Interceptors a SAM has ready at `tick`. */
+/** Interceptors a SAM has ready at `tick` (none while an air strike has disabled it). */
 export function samReady(rules: GameRules, sam: SamLike, tick: number): number {
+  if (!working(sam, tick)) return 0;
   return readyCharges(sam, samInterceptors(rules, sam.level), tick);
 }
 
@@ -694,7 +842,7 @@ function interceptFlights(world: World): void {
     for (const sam of sams) {
       if (flight.planes === 0) break;
       if (fired.has(sam.id) || sam.owner === flight.owner) continue;
-      if (areFriendly(world, sam.owner, flight.owner)) continue;
+      if (!working(sam, world.tick) || areFriendly(world, sam.owner, flight.owner)) continue;
       const level = levelRules(rules, "sam", sam.level);
       if (readyCharges(sam, level.interceptors ?? 0, world.tick) < 1) continue;
       if (!withinRange(world.map, sam.tile, tile, level.range ?? 0)) continue;
@@ -742,6 +890,8 @@ function flakWallsNear(
       if (world.fortLevel[t]! < flak.level) continue;
       const holder = world.owner[t]!;
       if (holder === owner || areFriendly(world, holder, owner)) continue;
+      // A suppressed wall (2B.4) is silent.
+      if (isSuppressed(world, t)) continue;
       const id = world.wallAt[t]!;
       const best = nearest.get(id);
       if (best === undefined || d < best || (d === best && t < found.get(id)!)) {
@@ -800,9 +950,10 @@ export function advanceFlights(world: World): void {
       planes: flight.planes,
       troops: flight.troops,
     });
-    // Test flights do nothing on arrival; strikes and missiles will act here (2B.4–2B.5).
+    // Test flights do nothing on arrival; missiles will act here (2B.5).
     if (flight.kind === "airlift") deliverAirlift(world, flight);
     else if (flight.kind === "assault") landAssault(world, flight);
+    else if (flight.kind === "strike") landStrike(world, flight);
     else if (flight.kind === "return") getPlayer(world, flight.owner)!.homeTroops += flight.troops;
   }
   if (!arrived) return;
@@ -811,8 +962,9 @@ export function advanceFlights(world: World): void {
 }
 
 /**
- * Shoots down `planes` of a flight (SAMs 2B.2, flak 2B.3): each takes its share of the troops
- * aboard. A flight with no planes left is gone. The one place planes are lost.
+ * Shoots down `planes` of a flight (SAMs 2B.2, flak 2B.3): its escort fighters first (2B.4),
+ * then its planes, each taking its share of the troops aboard. A flight with no planes left is
+ * gone (its escorts turn back with it). The one place planes are lost.
  */
 export function shootDown(
   world: World,
@@ -822,10 +974,12 @@ export function shootDown(
   fromTile = -1,
   weapon: "sam" | "flak" = "sam",
 ): void {
-  const downed = Math.min(planes, flight.planes);
-  if (downed <= 0) return;
-  const troopsLost = (flight.troops * downed) / flight.planes;
+  const escorts = Math.min(planes, flight.escorts);
+  const downed = Math.min(planes - escorts, flight.planes);
+  if (downed + escorts <= 0) return;
+  const troopsLost = downed > 0 ? (flight.troops * downed) / flight.planes : 0;
   const tile = flightTile(world.map, flight, world.tick);
+  flight.escorts -= escorts;
   flight.planes -= downed;
   flight.troops = flight.planes === 0 ? 0 : flight.troops - troopsLost;
   world.events.push({
@@ -837,6 +991,7 @@ export function shootDown(
     fromTile,
     weapon,
     planes: downed,
+    escorts,
     planesLeft: flight.planes,
     troopsLost,
   });

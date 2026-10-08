@@ -16,7 +16,7 @@
 import type { GameMap } from "../map/gameMap.ts";
 import type { GameRules } from "../rules.ts";
 import { getPlayer, type Building, type Player, type TradeShip, type World } from "../world.ts";
-import { findBuilding, levelRules } from "./buildings.ts";
+import { findBuilding, levelRules, working } from "./buildings.ts";
 import { seaRoute, seasAt, seasOf } from "./naval.ts";
 
 /** Trade needs gold, buildings (Ports) and boats. */
@@ -100,7 +100,8 @@ export function advanceTrade(world: World): void {
 
   const alive = (id: number) => getPlayer(world, id)?.alive === true;
   for (const port of world.buildings) {
-    if (port.type !== "port" || port.level < 1) continue;
+    // A Port struck from the air (2B.4) sends nothing until it works again.
+    if (port.type !== "port" || !working(port, world.tick)) continue;
     const every = tradeEveryTicks(rules, port.level);
     if (every <= 0 || !sendsNow(world.tick, port, every)) continue;
     if (world.tradeShips.length >= rules.trade.maxShips) break;

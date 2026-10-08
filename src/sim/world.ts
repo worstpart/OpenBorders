@@ -144,6 +144,25 @@ export interface Building {
    * each one ends, by mission slot. Missing or past = ready.
    */
   cooldowns: number[];
+  /**
+   * Struck by an air strike (2B.4): the building does nothing until this tick (no bonuses,
+   * no shots, no missions). -1 = never struck.
+   */
+  disabledUntil: number;
+}
+
+/**
+ * A suppression zone (GAME_DESIGN.md §3.17.7, 2B.4): an air strike on a point. Until
+ * `untilTick`, `victim`'s land within `radius` tiles of `tile` has no working fortification
+ * (walls hold nothing, flak is silent) and attacks taking it pay `attackLoss`× the losses.
+ */
+export interface Suppression {
+  readonly tile: number;
+  readonly radius: number;
+  readonly victim: PlayerId;
+  /** Who struck. */
+  readonly by: PlayerId;
+  readonly untilTick: number;
 }
 
 /**
@@ -226,10 +245,10 @@ export interface TradeShip {
 /**
  * What a flight is (GAME_DESIGN.md §3.17.7): "test" (a debug flight of empty transports,
  * 2B.0), "airlift" (troops to a friend, 2B.1), "return" (an airlift's troops that didn't
- * fit, flying home) and "assault" (an airborne assault onto an enemy's land, 2B.3); 2B.4 adds
- * strikes, 2B.5 missiles.
+ * fit, flying home), "assault" (an airborne assault onto an enemy's land, 2B.3) and "strike"
+ * (a fighter wing hitting a building or suppressing a point, 2B.4); 2B.5 adds missiles.
  */
-export type FlightKind = "test" | "airlift" | "return" | "assault";
+export type FlightKind = "test" | "airlift" | "return" | "assault" | "strike";
 
 /**
  * A flight (GAME_DESIGN.md §3.17.7, ARCHITECTURE.md §5.7): a group of planes flying in a
@@ -248,6 +267,11 @@ export interface Flight {
   readonly target: PlayerId;
   /** Planes still flying (interceptions shoot them down one by one). */
   planes: number;
+  /**
+   * Escort fighters flying with it (an Air Base's lifts, 2B.4): interceptors and flak take
+   * them first, so they shield the planes — they carry nothing and do nothing on arrival.
+   */
+  escorts: number;
   /** Troops aboard, all planes together (airlifts and assaults; 0 otherwise). */
   troops: number;
   readonly launchTick: number;
@@ -323,6 +347,8 @@ export interface World {
   /** Flights in the air, by ascending id (GAME_DESIGN.md §3.17.7). */
   flights: Flight[];
   nextFlightId: number;
+  /** Suppression zones still in force, oldest first (air strikes on a point, 2B.4). */
+  suppressions: Suppression[];
   /** Map pings still showing, oldest first (GAME_DESIGN.md §3.20). */
   pings: Ping[];
   nextPingId: number;
@@ -504,6 +530,7 @@ export function createWorld(setup: GameSetup): World {
     nextTradeShipId: 1,
     flights: [],
     nextFlightId: 1,
+    suppressions: [],
     pings: [],
     nextPingId: 1,
     alliances: new Map(),

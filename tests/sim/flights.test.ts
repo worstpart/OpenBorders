@@ -114,6 +114,7 @@ describe("test flights (debug, rules.flights.testFlights)", () => {
       fromTile: from,
       toTile: to,
       planes: RULES.flights.testFlightPlanes,
+      escorts: 0,
       troops: 0,
       arriveTick: w.tick + 16,
     });
@@ -189,6 +190,7 @@ describe("losing planes", () => {
       toTile: at(35, 3),
       plane: "transport",
       planes: 4,
+      escorts: 0,
       troops: 8_000,
     });
     w.players[0]!.homeTroops -= 8_000;
@@ -208,6 +210,7 @@ describe("losing planes", () => {
         fromTile: -1,
         weapon: "sam",
         planes: 1,
+        escorts: 0,
         planesLeft: 3,
         troopsLost: 2_000,
       },
@@ -253,6 +256,7 @@ describe("building charges and cooldowns (Phase 2B bookkeeping)", () => {
     paid: 0,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   });
 
   it("charges reload one at a time", () => {

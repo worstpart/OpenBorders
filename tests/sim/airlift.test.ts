@@ -48,6 +48,7 @@ function world(rules: GameRules = RULES, homeTroops = [20_000, 1_000, 5_000]): W
     paid: 0,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   };
   w.buildings.push(airport);
   w.buildingAt[AIRPORT_TILE] = 1;
@@ -215,6 +216,7 @@ describe("nations and Airports", () => {
       paid: 0,
       reloads: [],
       cooldowns: [],
+      disabledUntil: -1,
     });
     w.buildingAt[AIRPORT_TILE] = 1;
     w.nextBuildingId = 2;

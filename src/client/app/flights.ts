@@ -13,12 +13,18 @@ import {
   assaultProblem,
   airliftTroops,
   airportRange,
+  escortsOf,
   flightPoint,
   flightTicks,
   interceptorsOnRoute,
+  STRIKE_PROBLEM_TEXT,
+  strikeProblem,
   type AirliftProblem,
   type AssaultProblem,
+  type StrikeProblem,
 } from "../../sim/systems/flights.ts";
+import { levelRules } from "../../sim/systems/buildings.ts";
+import type { BuildingType } from "../../sim/rules.ts";
 import { NEUTRAL, type FlightKind, type PlayerId } from "../../sim/world.ts";
 
 export interface FlightInfo {
@@ -38,21 +44,44 @@ export const FLIGHT_INFO: Readonly<Record<FlightKind, FlightInfo>> = {
   airlift: { icon: "✈", name: "airlift", hostile: false },
   return: { icon: "✈", name: "return flight", hostile: false },
   assault: { icon: "🪂", name: "airborne assault", hostile: true },
+  strike: { icon: "💥", name: "air strike", hostile: true },
 };
 
-/** An Airport's two lift missions (GAME_DESIGN.md §3.17.7): to a friend, or onto an enemy. */
-export type LiftMode = "airlift" | "assault";
+/**
+ * An Airport's missions (GAME_DESIGN.md §3.17.7): lifts to a friend or onto an enemy, and an
+ * Air Base's air strike (2B.4) — all aimed the same way.
+ */
+export type LiftMode = "airlift" | "assault" | "strike";
 
-/** The map sprite of a flight: helicopters carry airborne assaults (D-028). */
+/**
+ * The map sprite of a flight: helicopters carry airborne assaults (D-028). The pack's "plane"
+ * art is a fighter of each era (biplane, WW2 fighter, jet), so transports and strikes share it.
+ */
 export function flightSprite(kind: FlightKind): "plane" | "helicopter" {
   return kind === "assault" ? "helicopter" : "plane";
 }
 
 /**
- * The airlift (or airborne assault, 2B.3) a click would send (GAME_DESIGN.md §3.17.7): from
- * the chosen Airport to the tile under the mouse, with the troops it would carry and its
- * flight time — or why it can't go there. The rules are the simulation's own
- * (airliftProblem / assaultProblem / airliftTroops).
+ * What an air strike aimed at a tile would do (2B.4): hit the enemy building standing there
+ * (−1 level when enough fighters get through — a level-I building is destroyed — and out of
+ * action either way), or suppress the enemy's land around the point.
+ */
+export type StrikeEffect =
+  | {
+      readonly kind: "building";
+      readonly buildingType: BuildingType;
+      readonly level: number;
+      /** Its level afterwards (0 = destroyed), and how long it is out of action (s). */
+      readonly levelAfter: number;
+      readonly disabledSeconds: number;
+    }
+  | { readonly kind: "point"; readonly radius: number; readonly seconds: number };
+
+/**
+ * The airlift (or airborne assault, 2B.3, or air strike, 2B.4) a click would send
+ * (GAME_DESIGN.md §3.17.7): from the chosen Airport to the tile under the mouse, with the
+ * troops it would carry and its flight time — or why it can't go there. The rules are the
+ * simulation's own (airliftProblem / assaultProblem / strikeProblem / airliftTroops).
  */
 export interface AirliftPreview {
   readonly mode: LiftMode;
@@ -63,24 +92,30 @@ export interface AirliftPreview {
   readonly tile: number | null;
   readonly troops: number;
   readonly seconds: number;
-  readonly problem: AirliftProblem | AssaultProblem | "noTroops" | null;
+  readonly problem: AirliftProblem | AssaultProblem | StrikeProblem | "noTroops" | null;
   /**
    * Planes the hostile SAMs on the route would shoot down with the interceptors they have
-   * ready now (GAME_DESIGN.md §3.17.7), at most all of them, and how many planes fly.
+   * ready now (GAME_DESIGN.md §3.17.7), at most all of them, and how many planes fly — the
+   * escort fighters (an Air Base's, 2B.4) are shot first and count apart.
    */
   readonly planesLost: number;
   readonly planes: number;
+  readonly escorts: number;
+  /** A strike: what it would do there (null: no target yet, or it can't go there). */
+  readonly strike: StrikeEffect | null;
 }
 
 /** Why a lift can't go there, in words (the two modes share some problems, not the words). */
 export function liftProblemText(
   mode: LiftMode,
-  problem: AirliftProblem | AssaultProblem | "noTroops",
+  problem: AirliftProblem | AssaultProblem | StrikeProblem | "noTroops",
 ): string {
   if (problem === "noTroops") return "no troops to send";
   return mode === "assault"
     ? ASSAULT_PROBLEM_TEXT[problem as AssaultProblem]
-    : AIRLIFT_PROBLEM_TEXT[problem as AirliftProblem];
+    : mode === "strike"
+      ? STRIKE_PROBLEM_TEXT[problem as StrikeProblem]
+      : AIRLIFT_PROBLEM_TEXT[problem as AirliftProblem];
 }
 
 export function airliftPreview(
@@ -97,25 +132,29 @@ export function airliftPreview(
   mode: LiftMode = "airlift",
 ): AirliftPreview {
   const range = airportRange(rules, airport);
-  const troops = airliftTroops(rules, airport.level, me, Math.round(percent * 100));
-  const planes = mode === "assault" ? rules.flights.assaultPlanes : rules.flights.airliftPlanes;
-  if (tile === null) {
-    return { mode, airport, range, tile, troops, seconds: 0, problem: null, planesLost: 0, planes };
-  }
+  const striking = mode === "strike";
+  const troops = striking ? 0 : airliftTroops(rules, airport.level, me, Math.round(percent * 100));
+  const f = rules.flights;
+  const planes = striking ? f.strikePlanes : mode === "assault" ? f.assaultPlanes : f.airliftPlanes;
+  const escorts = striking ? 0 : escortsOf(rules, airport.level);
+  const none = { mode, airport, range, tile, troops, planes, escorts, strike: null };
+  if (tile === null) return { ...none, seconds: 0, problem: null, planesLost: 0 };
   const holder = owner[tile]!;
-  const problem =
-    (mode === "assault"
-      ? assaultProblem(
-          rules,
-          map,
-          airport,
-          tick,
-          tile,
-          holder !== NEUTRAL && isHostile(holder, me.id, friends),
-        )
-      : airliftProblem(rules, map, airport, tick, tile, holder !== me.id && friends.has(holder))) ??
-    (troops < 1 ? "noTroops" : null);
-  const seconds = (flightTicks(rules, map, airport.tile, tile, "transport") * rules.tickMs) / 1000;
+  const hostile = holder !== NEUTRAL && isHostile(holder, me.id, friends);
+  const problem = striking
+    ? strikeProblem(rules, map, airport, tick, tile, hostile)
+    : ((mode === "assault"
+        ? assaultProblem(rules, map, airport, tick, tile, hostile)
+        : airliftProblem(
+            rules,
+            map,
+            airport,
+            tick,
+            tile,
+            holder !== me.id && friends.has(holder),
+          )) ?? (troops < 1 ? "noTroops" : null));
+  const plane = striking ? "fighter" : "transport";
+  const seconds = (flightTicks(rules, map, airport.tile, tile, plane) * rules.tickMs) / 1000;
   const shots = problem
     ? 0
     : interceptorsOnRoute(
@@ -125,20 +164,58 @@ export function airliftPreview(
         (samOwner) => isHostile(samOwner, me.id, friends),
         airport.tile,
         tile,
-        "transport",
+        plane,
         tick,
       ).interceptors;
+  const planesLost = Math.min(planes, Math.max(0, shots - escorts));
   return {
-    mode,
-    airport,
-    range,
-    tile,
-    troops,
+    ...none,
     seconds,
     problem,
-    planesLost: Math.min(planes, shots),
-    planes,
+    planesLost,
+    strike:
+      striking && !problem
+        ? strikeEffect(rules, buildings, tile, holder, planes - planesLost)
+        : null,
   };
+}
+
+/** What a strike with `through` fighters arriving over `tile` would do (see StrikeEffect). */
+function strikeEffect(
+  rules: GameRules,
+  buildings: readonly BuildingSnapshot[],
+  tile: number,
+  holder: PlayerId,
+  through: number,
+): StrikeEffect {
+  const f = rules.flights;
+  const target = buildings.find((b) => b.tile === tile && b.owner === holder);
+  if (!target) {
+    return {
+      kind: "point",
+      radius: f.suppressionRadius,
+      seconds: (f.suppressionTicks * rules.tickMs) / 1000,
+    };
+  }
+  const hit = through >= f.strikeDamagePlanes ? 1 : 0;
+  return {
+    kind: "building",
+    buildingType: target.type,
+    level: target.level,
+    levelAfter: Math.max(0, target.level - hit),
+    disabledSeconds: (f.strikeDisableTicks * rules.tickMs) / 1000,
+  };
+}
+
+const ROMAN = ["", "I", "II", "III"];
+
+/** A strike's effect in a few words, for the aiming label ("Factory → level II"). */
+export function strikeEffectText(rules: GameRules, effect: StrikeEffect): string {
+  if (effect.kind === "point") return `suppress ${effect.radius} km for ${effect.seconds} s`;
+  const name = levelRules(rules, effect.buildingType, Math.max(1, effect.level)).name;
+  if (effect.levelAfter === 0) return `destroy ${name}`;
+  if (effect.levelAfter < effect.level) return `${name} → level ${ROMAN[effect.levelAfter]}`;
+  return `${name} out of action ${effect.disabledSeconds} s`;
 }
 
 /** Whose SAMs shoot at our planes: everyone but us and our friends (GAME_DESIGN.md §3.17.7). */

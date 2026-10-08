@@ -10,6 +10,7 @@ import {
   buildingAvailable,
   buildingPrice,
   buildingsEnabled,
+  disabledLeft,
   levelRules,
   levelsOwned,
   maxLevel,
@@ -30,6 +31,8 @@ import {
   airliftCapacity,
   airliftCooldownLeft,
   ASSAULT_LEVEL,
+  STRIKE_LEVEL,
+  strikeCooldownLeft,
   samInterceptors,
   samRadius,
   samReady,
@@ -55,7 +58,7 @@ export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
   port: "Trade & faster boats",
-  airport: "Airlift troops; airborne assault",
+  airport: "Airlift, airborne assault, air strikes",
   sam: "Shoots down enemy planes",
   wall: "Draw a defence line",
 };
@@ -98,6 +101,12 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   if (effect.missionCooldownTicks) {
     lines.push(
       `Ready again ${(effect.missionCooldownTicks * rules.tickMs) / 1000} s after each flight`,
+    );
+  }
+  if (effect.escorts) lines.push(`${effect.escorts} escort fighters guard every lift`);
+  if (effect.strikeCooldownTicks) {
+    lines.push(
+      `Air strikes: ${rules.flights.strikePlanes} fighters hit a building or suppress a point, every ${(effect.strikeCooldownTicks * rules.tickMs) / 1000} s`,
     );
   }
   if (effect.interceptors) {
@@ -170,6 +179,13 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     if (type === "airport" && level + 1 === ASSAULT_LEVEL) {
       lines.push("New: airborne assault — land troops on an enemy's land");
     }
+    if (next.strikeCooldownTicks) {
+      lines.push(
+        `New: air strikes — ${rules.flights.strikePlanes} fighters every ${(next.strikeCooldownTicks * rules.tickMs) / 1000} s: a building loses a level, or a point's defences are suppressed`,
+      );
+    }
+    if (next.escorts)
+      lines.push(`New: ${next.escorts} escort fighters shield every lift from SAMs`);
   }
   if (next.interceptors) {
     lines.push(`Radius ${next.range ?? 0} km`);
@@ -392,7 +408,11 @@ export interface BuildingCard {
     /** Seconds until it can fly again (0 = ready). */
     readonly secondsLeft: number;
     readonly assault: boolean;
+    /** An Air Base (2B.4): seconds until its fighters can strike again; null below level III. */
+    readonly strikeSecondsLeft: number | null;
   } | null;
+  /** Seconds the building is still out of action after an air strike (2B.4), 0 if working. */
+  readonly disabledSeconds: number;
   /** A working SAM (GAME_DESIGN.md §3.17.7): its interceptors now. */
   readonly sam: {
     readonly ready: number;
@@ -456,8 +476,13 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
             capacity: airliftCapacity(rules, building.level, ctx.me.capacity),
             secondsLeft: (airliftCooldownLeft(building, ctx.tick) * rules.tickMs) / 1000,
             assault: building.level >= ASSAULT_LEVEL,
+            strikeSecondsLeft:
+              building.level >= STRIKE_LEVEL
+                ? (strikeCooldownLeft(building, ctx.tick) * rules.tickMs) / 1000
+                : null,
           }
         : null,
+    disabledSeconds: (disabledLeft(building, ctx.tick) * rules.tickMs) / 1000,
     sam: samStatus(ctx, building),
     laterLevel:
       mine && !working && building.level === maxLevel(rules, building.type)
@@ -482,7 +507,6 @@ function samStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard[
 /** Levels that come in later updates (Phase 2B), by type, after the top level built so far. */
 const LATER_LEVELS: Partial<Record<BuildingType, string>> = {
   port: "Level III (Naval Base) comes in a later update",
-  airport: "Level III (Air Base: air strikes) comes in a later update",
 };
 
 /** A working Port's trade (GAME_DESIGN.md §3.19): its partners, and your trade so far. */
@@ -538,6 +562,7 @@ export function wallCard(ctx: BuildContext, wall: WallSnapshot): BuildingCard {
     airlift: null,
     sam: null,
     laterLevel: null,
+    disabledSeconds: 0,
   };
 }
 

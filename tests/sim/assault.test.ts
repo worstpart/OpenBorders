@@ -48,6 +48,7 @@ function building(w: World, type: Building["type"], owner: number, tile: number,
     paid: 0,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   };
   w.buildings.push(b);
   w.buildingAt[tile] = b.id;

@@ -39,7 +39,9 @@
  * built, airlifts flown and the troops they carried (delivered / flown back), SAMs built and
  * upgraded, and the planes they shot down with the troops aboard (2B.2); Military Airports,
  * airborne assaults flown and landed, the troops they carried, the tiles the landed armies
- * took, and the planes Fortress Wall flak shot down (2B.3).
+ * took, and the planes Fortress Wall flak shot down (2B.3); Air Bases, air strikes flown, the
+ * levels they cost buildings, the buildings they destroyed, and the points they suppressed
+ * (2B.4).
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -195,6 +197,11 @@ export interface GameReport {
     assaultsLanded: number;
     assaultTiles: number;
     flakShots: number;
+    airBases: number;
+    strikes: number;
+    strikeLevels: number;
+    strikeKills: number;
+    suppressions: number;
   };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -435,6 +442,11 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     assaultsLanded: 0,
     assaultTiles: 0,
     flakShots: 0,
+    airBases: 0,
+    strikes: 0,
+    strikeLevels: 0,
+    strikeKills: 0,
+    suppressions: 0,
   };
   // The armies airborne assaults landed: their tiles are summed at the end.
   const airborneArmies: { tilesTaken: number }[] = [];
@@ -501,6 +513,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         if (event.type === "buildingStarted" && event.buildingType === "airport") {
           if (event.level === 1) air.airports++;
           else air.airportUpgrades++;
+          if (event.level === 3) air.airBases++;
         } else if (event.type === "buildingStarted" && event.buildingType === "sam") {
           if (event.level === 1) air.sams++;
           else air.samUpgrades++;
@@ -516,7 +529,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
           air.assaultsLanded++;
           const army = world.attacks.find((a) => a.id === event.attackId);
           if (army) airborneArmies.push(army);
-        } else if (event.type === "airliftDelivered") {
+        } else if (event.type === "flightLaunched" && event.kind === "strike") air.strikes++;
+        else if (event.type === "buildingStruck") {
+          air.strikeLevels += event.levelBefore - event.level;
+          if (event.level === 0) air.strikeKills++;
+        } else if (event.type === "suppressed") air.suppressions++;
+        else if (event.type === "airliftDelivered") {
           air.troopsDelivered += event.troops;
           air.troopsReturned += event.returning;
         }

@@ -43,6 +43,7 @@ function airport(level: number, overrides: Partial<BuildingSnapshot> = {}): Buil
     readyTick: -1,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
     ...overrides,
   };
 }
@@ -65,9 +66,10 @@ describe("Military Airport card", () => {
       capacity: 15_000,
       secondsLeft: 0,
       assault: true,
+      strikeSecondsLeft: null,
     });
     expect(buildingCard(ctx, airport(2, { cooldowns: [150] })).airlift?.secondsLeft).toBe(5);
-    expect(buildingCard(ctx, airport(2)).laterLevel).toMatch(/Level III/);
+    expect(buildingCard(ctx, airport(2)).laterLevel).toBeNull();
   });
 
   it("says what level II adds", () => {
@@ -192,6 +194,7 @@ describe("assault and flak toasts", () => {
       fromTile: at(41, 10),
       weapon: "flak",
       planes: 1,
+      escorts: 0,
       planesLeft: 3,
       troopsLost: 3_750,
     });

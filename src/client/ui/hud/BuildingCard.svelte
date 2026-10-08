@@ -3,7 +3,8 @@
    * A building's card (GAME_DESIGN.md §3.17.13): opened by clicking its icon. Name, level
    * pips, what it gives; for your own: construction progress (with Cancel) and the next
    * level's price and gains (Upgrade); your Airport's Airlift button (GAME_DESIGN.md
-   * §3.17.7) with its capacity and cooldown; a SAM's interceptors (ready ones filled) and
+   * §3.17.7) with its capacity and cooldown — an Air Base's Air strike button too (2B.4); a
+   * warning while an air strike keeps it out of action; a SAM's interceptors (ready ones filled) and
    * when the next one is back (its radius is drawn on the map while the card is open). Small, next to the building, closes with Esc or
    * a click elsewhere.
    */
@@ -18,7 +19,7 @@
     /** `wall`: the card is a wall's (GAME_DESIGN.md §3.17.6). */
     onUpgrade: (id: number, wall: boolean) => void;
     onCancel: (id: number, wall: boolean) => void;
-    /** Start choosing where this Airport airlifts to (or lands an airborne assault). */
+    /** Start choosing where this Airport airlifts to (or lands an assault, or strikes). */
     onAirlift: (id: number, mode: LiftMode) => void;
     onClose: () => void;
   }
@@ -28,6 +29,8 @@
   const WIDTH = 270;
   const REFUND = Math.round(DEFAULT_RULES.buildings.cancelRefund * 100);
   const AIRBORNE_LOSS = DEFAULT_RULES.flights.airborneLoss;
+  const STRIKE_PLANES = DEFAULT_RULES.flights.strikePlanes;
+  const SUPPRESS_KM = DEFAULT_RULES.flights.suppressionRadius;
   const TYPE_LABEL = {
     housing: "Housing",
     factory: "Factory",
@@ -102,6 +105,11 @@
     </div>
     {#if !card.mine}
       <div class="owner"><span class="dot"></span>{ui.playerName(card.owner)}</div>
+    {/if}
+    {#if card.disabledSeconds > 0}
+      <div class="struck">
+        💥 Out of action after an air strike — {Math.ceil(card.disabledSeconds)} s
+      </div>
     {/if}
     {#if card.effects.length > 0}
       <ul class="effects">
@@ -181,6 +189,25 @@
         <div class="muted hint">
           Lands on an enemy's land and attacks from there; airborne troops lose ×{AIRBORNE_LOSS}
           per tile
+        </div>
+      {/if}
+      {#if card.airlift.strikeSecondsLeft !== null}
+        <button
+          type="button"
+          class="upgrade"
+          disabled={card.airlift.strikeSecondsLeft > 0}
+          onclick={() => onAirlift(card.id, "strike")}
+        >
+          <span>💥 Air strike</span>
+          <span class="muted"
+            >{card.airlift.strikeSecondsLeft > 0
+              ? `ready in ${Math.ceil(card.airlift.strikeSecondsLeft)} s`
+              : `${STRIKE_PLANES} fighters`}</span
+          >
+        </button>
+        <div class="muted hint">
+          On an enemy building: −1 level and out of action. Anywhere else on their land: their walls
+          and flak within {SUPPRESS_KM} km stop working for a while
         </div>
       {/if}
     {/if}
@@ -275,6 +302,13 @@
   .hint {
     margin-top: 4px;
     font-size: 11px;
+  }
+
+  .struck {
+    margin-top: var(--space-2);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-danger);
   }
 
   .art {

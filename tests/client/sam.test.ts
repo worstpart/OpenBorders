@@ -37,6 +37,7 @@ function building(overrides: Partial<BuildingSnapshot>): BuildingSnapshot {
     readyTick: -1,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
     ...overrides,
   };
 }
@@ -121,6 +122,7 @@ describe("SAM toasts", () => {
     fromTile: at(40, 12),
     weapon: "sam",
     planes: 1,
+    escorts: 0,
     planesLeft,
     troopsLost: 2_500,
   });

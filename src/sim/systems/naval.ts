@@ -35,6 +35,7 @@ import {
   type World,
 } from "../world.ts";
 import { launchBeachhead, updateFieldTroops } from "./attacks.ts";
+import { working } from "./buildings.ts";
 import { isAllied } from "./diplomacy.ts";
 import { isSpawnProtected } from "./spawn.ts";
 import { TileQueue } from "./tileQueue.ts";
@@ -588,19 +589,12 @@ export function applyBoatCommand(
   const hostile = hostileTarget(world, player, target);
   if (hostile) return hostile;
   const atSea = world.boats.reduce((n, b) => n + (b.owner === player.id ? 1 : 0), 0);
-  if (atSea >= boatSlots(rules, world.buildings, player.id)) return "all your boats are at sea";
+  // A Port struck from the air (2B.4) adds nothing until it works again.
+  const ports = world.buildings.filter((b) => b.type === "port" && working(b, world.tick));
+  if (atSea >= boatSlots(rules, ports, player.id)) return "all your boats are at sea";
   const troops = Math.floor((player.homeTroops * percentBp) / 10_000);
   if (troops < 1) return "not enough troops";
-  const plan = planBoat(
-    rules,
-    map,
-    world.owner,
-    world.buildings,
-    player.id,
-    player.border,
-    target,
-    tile,
-  );
+  const plan = planBoat(rules, map, world.owner, ports, player.id, player.border, target, tile);
   if (typeof plan === "string") return BOAT_PROBLEM_TEXT[plan];
 
   player.homeTroops -= troops;

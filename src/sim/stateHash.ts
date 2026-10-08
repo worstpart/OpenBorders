@@ -137,6 +137,15 @@ export function hashWorld(world: World): number {
         .addNumber(f.troops)
         .addInt(f.launchTick)
         .addInt(f.arriveTick);
+      // Escorts (2B.4) only when there are some, so earlier games keep their hashes.
+      if (f.escorts > 0) h.addInt(0x2b4).addInt(f.escorts);
+    }
+  }
+  // Suppression zones (2B.4), only while some are in force.
+  if (world.suppressions.length > 0) {
+    h.addInt(0x5b4).addInt(world.suppressions.length);
+    for (const z of world.suppressions) {
+      h.addInt(z.tile).addInt(z.radius).addInt(z.victim).addInt(z.by).addInt(z.untilTick);
     }
   }
   h.addInt(world.nextPingId).addInt(world.pings.length);
@@ -167,6 +176,8 @@ export function hashWorld(world: World): number {
       for (const t of b.reloads) h.addInt(t);
       for (const t of b.cooldowns) h.addInt(t);
     }
+    // Struck by an air strike (2B.4), only once it has been.
+    if (b.disabledUntil >= 0) h.addInt(0x2b4).addInt(b.disabledUntil);
   }
   h.addInt(world.nextWallId).addInt(world.walls.length).addInt(world.wallHash);
   for (const w of world.walls) {

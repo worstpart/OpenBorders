@@ -5,7 +5,8 @@
  *    construction); `upgrade` raises it to the next level (the current level keeps working
  *    meanwhile); `cancelBuild` stops either and refunds part of the price.
  *  - Prices grow with the levels of that type you already own (escalation).
- *  - The level is the building's health (strikes and missiles will cost levels, Phase 2B).
+ *  - The level is the building's health: air strikes (2B.4) and missiles (2B.5) cost levels
+ *    (`strikeBuilding`), and a struck building does nothing for a while (`working`).
  *    When its tile is captured, the taker adopts it at its level (user, 2.5 playtest) — or
  *    it is destroyed, depending on the type and on who took it (tribes never keep
  *    buildings). An unfinished building is lost; an upgrade in progress is cancelled.
@@ -174,6 +175,7 @@ export function applyBuild(
     paid: price,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   };
   world.buildings.push(building);
   world.buildingAt[tile] = building.id;
@@ -307,6 +309,74 @@ export function startCooldown(building: Building, slot: number, tick: number, ti
   building.cooldowns[slot] = tick + ticks;
 }
 
+/**
+ * True when a building works at `tick`: finished (level I or more) and not disabled by an air
+ * strike (2B.4). A disabled building gives no bonus, fires nothing and flies no missions.
+ */
+export function working(
+  building: { readonly level: number; readonly disabledUntil: number },
+  tick: number,
+): boolean {
+  return building.level >= 1 && building.disabledUntil <= tick;
+}
+
+/** Ticks until a struck building works again (0 = not disabled). */
+export function disabledLeft(building: { readonly disabledUntil: number }, tick: number): number {
+  return Math.max(0, building.disabledUntil - tick);
+}
+
+/**
+ * An air strike hits a building (GAME_DESIGN.md §3.17.7, 2B.4; missiles in 2B.5): it loses
+ * `levels` levels — below level I it is destroyed, and an upgrade in progress is lost — and
+ * does nothing for `disableTicks`. Returns its level afterwards (0 = destroyed).
+ */
+export function strikeBuilding(
+  world: World,
+  building: Building,
+  levels: number,
+  disableTicks: number,
+  by: PlayerId,
+): number {
+  const before = building.level;
+  const level = before - levels;
+  if (level < 1) {
+    world.events.push({
+      type: "buildingStruck",
+      buildingId: building.id,
+      playerId: building.owner,
+      by,
+      buildingType: building.type,
+      tile: building.tile,
+      levelBefore: before,
+      level: 0,
+      disabledUntil: -1,
+    });
+    removeBuilding(world, building, by, "struck");
+    return 0;
+  }
+  if (levels > 0) {
+    building.level = level;
+    if (building.targetLevel !== level) {
+      // The upgrade under way is lost with the level it was built on.
+      building.targetLevel = level;
+      idle(building);
+    }
+  }
+  building.disabledUntil = Math.max(building.disabledUntil, world.tick + disableTicks);
+  world.events.push({
+    type: "buildingStruck",
+    buildingId: building.id,
+    playerId: building.owner,
+    by,
+    buildingType: building.type,
+    tile: building.tile,
+    levelBefore: before,
+    level,
+    disabledUntil: building.disabledUntil,
+  });
+  return level;
+}
+
 export function findBuilding(world: World, id: number): Building | undefined {
   if (!Number.isInteger(id)) return undefined;
   // Ids ascend, so a binary search finds it without an index.
@@ -367,7 +437,7 @@ function removeBuilding(
   world: World,
   building: Building,
   by: PlayerId | null,
-  reason: "captured" | "cancelled",
+  reason: "captured" | "cancelled" | "struck",
 ): void {
   world.buildings = world.buildings.filter((b) => b !== building);
   world.buildingAt[building.tile] = -1;
@@ -392,7 +462,7 @@ function sumBonuses(world: World): void {
   }
   const rules = world.rules;
   for (const building of world.buildings) {
-    if (building.level < 1) continue;
+    if (!working(building, world.tick)) continue;
     const effect = levelRules(rules, building.type, building.level);
     const bonus = world.players[building.owner - 1]!.bonus;
     bonus.capacity += effect.capacity ?? 0;

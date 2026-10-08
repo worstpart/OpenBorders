@@ -102,6 +102,12 @@ export type Command =
       readonly tile: number;
       readonly percentBp: number;
     }
+  /**
+   * Air strike (GAME_DESIGN.md §3.17.7, 2B.4): your Air Base `buildingId` sends its fighter
+   * wing to an enemy's `tile` within range — the building standing there loses a level and is
+   * disabled, or, with none there, the enemy's land around it is suppressed.
+   */
+  | { readonly type: "airStrike"; readonly buildingId: number; readonly tile: number }
   /** Drop a map ping on `tile` for your allies and teammates. */
   | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
   /**

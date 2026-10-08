@@ -35,6 +35,7 @@ function port(id: number, owner: number, tile: number, level: number): BuildingS
     readyTick: -1,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   };
 }
 

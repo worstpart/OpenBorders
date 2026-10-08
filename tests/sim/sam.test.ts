@@ -51,6 +51,7 @@ function building(w: World, type: Building["type"], owner: number, tile: number,
     paid: 0,
     reloads: [],
     cooldowns: [],
+    disabledUntil: -1,
   };
   w.buildings.push(b);
   w.buildingAt[tile] = b.id;
@@ -100,6 +101,7 @@ describe("SAMs shoot down hostile planes", () => {
       by: 3,
       fromTile: sam.tile,
       planes: 1,
+      escorts: 0,
       planesLeft: 3,
     });
     expect(shots[0]!.troopsLost).toBeCloseTo(lift / 4);

@@ -112,6 +112,23 @@ export function toastsForEvents(
       case "flightIntercepted": {
         // SAMs (GAME_DESIGN.md §3.17.7) and Fortress Wall flak (2B.3): our planes lost, or our hit.
         const weapon = event.weapon === "flak" ? "Fortress Wall flak" : "SAM";
+        if (event.planes === 0) {
+          // Only an escort fighter (2B.4): it took the shot meant for a plane.
+          if (event.owner === me) {
+            toasts.push({
+              text: `🛡 ${nameOf(event.by)}'s ${weapon} shot down an escort fighter — your planes fly on`,
+              tone: "info",
+              player: event.by,
+            });
+          } else if (event.by === me) {
+            toasts.push({
+              text: `🎯 Your ${weapon} shot down one of ${nameOf(event.owner)}'s escort fighters`,
+              tone: "success",
+              player: event.owner,
+            });
+          }
+          break;
+        }
         if (event.owner === me) {
           const troops =
             event.troopsLost >= 1 ? ` (−${formatTroops(event.troopsLost)} troops)` : "";
@@ -128,6 +145,52 @@ export function toastsForEvents(
             text: `🎯 Your ${weapon} shot down one of ${nameOf(event.owner)}'s planes`,
             tone: "success",
             player: event.owner,
+          });
+        }
+        break;
+      }
+      case "buildingStruck": {
+        // Air strikes (GAME_DESIGN.md §3.17.7, 2B.4): the victim and the striker hear of it.
+        const name = levelRules(
+          DEFAULT_RULES,
+          event.buildingType,
+          Math.max(1, event.levelBefore),
+        ).name;
+        const seconds = (DEFAULT_RULES.flights.strikeDisableTicks * DEFAULT_RULES.tickMs) / 1000;
+        const what =
+          event.level === 0
+            ? "destroyed"
+            : event.level < event.levelBefore
+              ? `down to level ${event.level}, out of action ${seconds} s`
+              : `out of action ${seconds} s`;
+        if (event.playerId === me) {
+          toasts.push({
+            text: `💥 ${nameOf(event.by)}'s air strike hit your ${name}: ${what}`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `💥 Air strike hit ${nameOf(event.playerId)}'s ${name}: ${what}`,
+            tone: "success",
+            player: event.playerId,
+          });
+        }
+        break;
+      }
+      case "suppressed": {
+        const seconds = (DEFAULT_RULES.flights.suppressionTicks * DEFAULT_RULES.tickMs) / 1000;
+        if (event.victim === me) {
+          toasts.push({
+            text: `💥 ${nameOf(event.by)}'s air strike knocked out your defences within ${event.radius} km for ${seconds} s`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `💥 Air strike: ${nameOf(event.victim)}'s walls there are down for ${seconds} s — attack now`,
+            tone: "success",
+            player: event.victim,
           });
         }
         break;

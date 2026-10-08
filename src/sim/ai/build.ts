@@ -67,11 +67,12 @@ import {
 } from "../systems/buildings.ts";
 import { distanceSq, withinRange } from "../geometry.ts";
 import { bordersTarget } from "../systems/attacks.ts";
-import { airportRange, ASSAULT_LEVEL, samInterceptors } from "../systems/flights.ts";
+import { airportRange, ASSAULT_LEVEL, samInterceptors, STRIKE_LEVEL } from "../systems/flights.ts";
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
 import {
+  getPlayer,
   isTribe,
   sameTeam,
   NEUTRAL,
@@ -143,6 +144,13 @@ function buildingGoal(world: World, bot: Player): Goal | null {
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
     if (b.type === "airport") {
+      // The Air Base (2B.4): strikes, worth it while enemy buildings stand within its reach.
+      if (level >= STRIKE_LEVEL) {
+        if (price <= reach && strikeProspect(world, bot, b)) {
+          consider(price, ai.strikeWorth * bot.capacity, { ...none, upgrade: b.id });
+        }
+        continue;
+      }
       if (price <= reach && assaults()) {
         const value = assaultValue(world, bot, level) - assaultValue(world, bot, b.level);
         consider(price, value, { ...none, upgrade: b.id });
@@ -515,6 +523,22 @@ function assaultValue(world: World, bot: Player, level: number): number {
     if (l <= level) paid += levels[l - 1]!.cost;
   }
   return world.rules.ai.build.assaultWorth * bot.capacity * (paid / total);
+}
+
+/**
+ * True when a building of an enemy nation or human (not a friend, not a tribe) stands within
+ * the Air Base range of `airport` (2B.4): something for its strikes to hit.
+ */
+function strikeProspect(world: World, bot: Player, airport: Building): boolean {
+  const levels = world.rules.buildings.types.airport.levels;
+  if (levels.length < STRIKE_LEVEL) return false;
+  const reach = levels[STRIKE_LEVEL - 1]!.range ?? 0;
+  return world.buildings.some((b) => {
+    if (b.owner === bot.id || areFriendly(world, bot.id, b.owner)) return false;
+    const owner = getPlayer(world, b.owner);
+    if (!owner?.alive || isTribe(owner)) return false;
+    return withinRange(world.map, airport.tile, b.tile, reach);
+  });
 }
 
 /** What SAMs guard (GAME_DESIGN.md §3.17.7): the bot's economy and its Airports. */

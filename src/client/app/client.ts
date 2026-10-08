@@ -468,18 +468,28 @@ export class GameClient {
       return;
     }
     if (preview.problem) {
+      const what =
+        preview.mode === "assault"
+          ? "land an assault"
+          : preview.mode === "strike"
+            ? "strike"
+            : "airlift";
       this.toast({
-        text: `Can't ${preview.mode === "assault" ? "land an assault" : "airlift"} there: ${liftProblemText(preview.mode, preview.problem)}`,
+        text: `Can't ${what} there: ${liftProblemText(preview.mode, preview.problem)}`,
         tone: "info",
       });
       return;
     }
-    this.host.send({
-      type: preview.mode,
-      buildingId: preview.airport.id,
-      tile,
-      percentBp: Math.round(ui.attackPercent * 100),
-    });
+    this.host.send(
+      preview.mode === "strike"
+        ? { type: "airStrike", buildingId: preview.airport.id, tile }
+        : {
+            type: preview.mode,
+            buildingId: preview.airport.id,
+            tile,
+            percentBp: Math.round(ui.attackPercent * 100),
+          },
+    );
     ui.airliftFrom = null;
   }
 
@@ -552,10 +562,24 @@ export class GameClient {
 
   /** While aiming an airlift: the one the tile under the mouse would get. */
   private airliftDraft(): AirliftPreview | null {
+    if (ui.airliftFrom === null || !this.map) return null;
+    return this.airliftAt(this.hoverPoint ? this.aimTile(this.hoverPoint) : null);
+  }
+
+  /**
+   * The tile a mission aimed at `at` goes to: the tile under it — or, for an air strike
+   * (2B.4), the building whose icon is under it (icons are bigger than their tile).
+   */
+  private aimTile(at: ScreenPoint): number | null {
     const map = this.map;
-    if (ui.airliftFrom === null || !map) return null;
-    const cell = this.hoverPoint ? this.camera.tileAt(this.hoverPoint) : null;
-    return this.airliftAt(cell ? tileAt(map, cell.x, cell.y) : null);
+    const cell = this.camera.tileAt(at);
+    if (!map || !cell) return null;
+    if (ui.liftMode === "strike") {
+      const id = this.buildingUnder(at);
+      const hit = id === null ? undefined : ui.buildings.find((b) => b.id === id);
+      if (hit && hit.owner !== ui.localPlayerId) return hit.tile;
+    }
+    return tileAt(map, cell.x, cell.y);
   }
 
   upgrade(buildingId: number): void {
@@ -1039,7 +1063,7 @@ export class GameClient {
       return;
     }
     if (ui.airliftFrom !== null) {
-      this.sendAirlift(index);
+      this.sendAirlift(this.aimTile(at) ?? index);
       return;
     }
     if (ui.placing === "wall") {
@@ -1217,6 +1241,7 @@ export class GameClient {
         walls: ui.walls,
         selectedWall: ui.menu?.kind === "wall" ? ui.menu.id : null,
         wallPreview: this.wallDraft(),
+        rules: DEFAULT_RULES,
       });
       this.boatLayer.draw(view, {
         boats: ui.boats,
@@ -1243,6 +1268,8 @@ export class GameClient {
         airlift: this.airliftDraft(),
         shots: this.shotsNow(startedAt),
         now: startedAt,
+        suppressions: this.latestFrame?.suppressions ?? [],
+        rules: DEFAULT_RULES,
       });
     }
     this.labels.draw(

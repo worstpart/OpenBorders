@@ -26,7 +26,7 @@
  * can replace this if lobbies ever show thousands of buildings).
  */
 import type { BuildingSnapshot, WallSnapshot } from "../../sim/frame.ts";
-import type { BuildingType } from "../../sim/rules.ts";
+import type { BuildingType, GameRules } from "../../sim/rules.ts";
 import type { WallPreview } from "../app/buildings.ts";
 import { formatTroops } from "../format.ts";
 import { iconPath } from "../icons.ts";
@@ -78,6 +78,8 @@ export interface BuildingDrawInput {
   readonly ghost: BuildGhost | null;
   /** Range rings to show now (see the header). */
   readonly rings: readonly RangeRing[];
+  /** How long a struck building is out of action (its countdown ring, 2B.4). */
+  readonly rules: GameRules;
 }
 
 /** Icon size in CSS px per unit of zoom (pixels per tile), and its bounds. */
@@ -159,6 +161,15 @@ export class BuildingLayer {
         mine,
         progress,
         selected: b.id === input.selectedId,
+        // Struck by an air strike (2B.4): dimmed with a 💥 and an orange ring running down.
+        struck:
+          b.disabledUntil > input.tick
+            ? Math.min(
+                1,
+                (b.disabledUntil - input.tick) /
+                  Math.max(1, input.rules.flights.strikeDisableTicks),
+              )
+            : null,
       });
     }
 
@@ -450,6 +461,8 @@ export class BuildingLayer {
       progress: number | null;
       selected: boolean;
       pips?: boolean;
+      /** Out of action after an air strike: the share of that time still left, else null. */
+      struck?: number | null;
     },
   ): void {
     const ctx = this.context;
@@ -491,6 +504,26 @@ export class BuildingLayer {
       ctx.fill(this.path(type, level), "evenodd");
     }
     ctx.restore();
+
+    const struck = style.struck ?? null;
+    if (struck !== null) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(10, 12, 18, 0.5)";
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(255, 150, 70, 0.95)";
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4.5, -Math.PI / 2, -Math.PI / 2 + struck * Math.PI * 2);
+      ctx.stroke();
+      ctx.font = `${Math.round(Math.max(10, size * 0.42))}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("💥", x + r * 0.7, y - r * 0.7);
+      ctx.restore();
+    }
 
     if (style.pips !== false && level > 0) {
       const pip = Math.max(2.2, size * 0.085);

@@ -144,7 +144,8 @@ export type SimEvent =
       readonly buildingType: BuildingType;
       readonly tile: number;
       readonly by: PlayerId | null;
-      readonly reason: "captured" | "cancelled";
+      /** Captured, cancelled while first built, or struck from the air at level I (2B.4). */
+      readonly reason: "captured" | "cancelled" | "struck";
     }
   | {
       /** A wall's construction (level 1) or upgrade began (GAME_DESIGN.md §3.17.6). */
@@ -250,6 +251,8 @@ export type SimEvent =
       readonly fromTile: number;
       readonly toTile: number;
       readonly planes: number;
+      /** Escort fighters flying with it (2B.4). */
+      readonly escorts: number;
       readonly troops: number;
       readonly arriveTick: number;
     }
@@ -280,6 +283,8 @@ export type SimEvent =
       /** A SAM's interceptor, or a Fortress Wall's flak (2B.3). */
       readonly weapon: "sam" | "flak";
       readonly planes: number;
+      /** Escort fighters shot down (2B.4: they are shot first, and carry nothing). */
+      readonly escorts: number;
       readonly planesLeft: number;
       readonly troopsLost: number;
     }
@@ -309,6 +314,35 @@ export type SimEvent =
       readonly tile: number;
       readonly troops: number;
       readonly attackId: number;
+    }
+  | {
+      /**
+       * An air strike (2B.4; missiles 2B.5) hit `playerId`'s building: it went from
+       * `levelBefore` to `level` (0 = destroyed) and does nothing until `disabledUntil`.
+       */
+      readonly type: "buildingStruck";
+      readonly buildingId: number;
+      readonly playerId: PlayerId;
+      readonly by: PlayerId;
+      readonly buildingType: BuildingType;
+      readonly tile: number;
+      readonly levelBefore: number;
+      readonly level: number;
+      readonly disabledUntil: number;
+    }
+  | {
+      /**
+       * An air strike on a point (GAME_DESIGN.md §3.17.7, 2B.4): `victim`'s land within
+       * `radius` tiles of `tile` is suppressed until `untilTick` (no working fortification,
+       * attacks there cheaper).
+       */
+      readonly type: "suppressed";
+      readonly flightId: number;
+      readonly by: PlayerId;
+      readonly victim: PlayerId;
+      readonly tile: number;
+      readonly radius: number;
+      readonly untilTick: number;
     }
   | {
       /** The flight's owner was eliminated: it is lost with everything aboard. */

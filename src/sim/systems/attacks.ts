@@ -32,6 +32,7 @@ import {
 import { isAllied, isTraitor } from "./diplomacy.ts";
 import { wallBreakTroops, wallHoldTicks, wallLossFactor } from "./walls.ts";
 import { isSpawnProtected } from "./spawn.ts";
+import { isSuppressed } from "./suppression.ts";
 import { gradientNoise } from "../map/noise.ts";
 import { TileQueue } from "./tileQueue.ts";
 
@@ -397,9 +398,12 @@ export function tileCost(world: World, attack: Attack, tile: number): number {
     isTraitor(world, defender),
     wallLossFactor(world, tile),
   );
+  // Land under an air strike's suppression (2B.4) is cheaper to take.
+  const suppressed = isSuppressed(world, tile) ? world.rules.flights.suppressedLoss : 1;
   return (
     attack.lossFactor *
       discount *
+      suppressed *
       terrainValue(combat.terrainLoss, terrain) *
       ratio *
       (combat.lossBase + combat.lossDensity * defenderDensity(defender)) +

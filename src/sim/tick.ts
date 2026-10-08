@@ -28,7 +28,14 @@ import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { advanceTrade } from "./systems/trade.ts";
-import { advanceFlights, applyAirlift, applyAssault, applyTestFlight } from "./systems/flights.ts";
+import {
+  advanceFlights,
+  applyAirlift,
+  applyAirStrike,
+  applyAssault,
+  applyTestFlight,
+} from "./systems/flights.ts";
+import { expireSuppressions } from "./systems/suppression.ts";
 import { applyEmote, applyPing, updateChat } from "./systems/chat.ts";
 import { eliminate } from "./systems/elimination.ts";
 import { encircle } from "./systems/encirclement.ts";
@@ -91,7 +98,8 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 2b. Boats land (as beachhead attacks) or get home (GAME_DESIGN.md §3.18).
     advanceBoats(world);
     probe?.("boats");
-    // 2c. Flights that reach their target arrive (GAME_DESIGN.md §3.17.7).
+    // 2c. Suppression zones run out; flights that reach their target arrive (§3.17.7).
+    expireSuppressions(world);
     advanceFlights(world);
     probe?.("flights");
     // 3. Fronts advance; retreating armies come home.
@@ -193,6 +201,8 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyAirlift(world, player, command.buildingId, command.tile, command.percentBp);
     case "assault":
       return applyAssault(world, player, command.buildingId, command.tile, command.percentBp);
+    case "airStrike":
+      return applyAirStrike(world, player, command.buildingId, command.tile);
     case "testFlight":
       return applyTestFlight(world, player, command.from, command.to);
     default:

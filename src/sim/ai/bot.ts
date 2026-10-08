@@ -80,6 +80,8 @@ import {
 } from "../systems/flights.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
+import { decideStrike } from "./strike.ts";
+import { working } from "../systems/buildings.ts";
 import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
 import { isSpawnProtected } from "../systems/spawn.ts";
 import {
@@ -154,6 +156,9 @@ export function thinkBots(world: World): void {
       const build = decideBuild(world, bot, incomingTroops(world, bot.id));
       if (build) world.pendingCommands.push({ playerId: bot.id, command: build });
     }
+    // Air strikes (2B.4): free but for their cooldown, so a ready Air Base always flies one.
+    const strike = tribe ? null : decideStrike(world, bot, actions);
+    if (strike) world.pendingCommands.push({ playerId: bot.id, command: strike });
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
     brain.idleThinks = actions.length === 0 && wasting ? brain.idleThinks + 1 : 0;
   }
@@ -279,7 +284,7 @@ function economy(
 function readyAirport(world: World, bot: Player): Building | null {
   if (!world.rules.flights.enabled) return null;
   for (const b of world.buildings) {
-    if (b.owner === bot.id && b.type === "airport" && b.level >= 1) {
+    if (b.owner === bot.id && b.type === "airport" && working(b, world.tick)) {
       if (airliftCooldownLeft(b, world.tick) === 0) return b;
     }
   }
@@ -501,7 +506,7 @@ function readyMilitaryAirport(world: World, bot: Player): Building | null {
   if (!world.rules.flights.enabled) return null;
   for (const b of world.buildings) {
     if (b.owner === bot.id && b.type === "airport" && b.level >= ASSAULT_LEVEL) {
-      if (airliftCooldownLeft(b, world.tick) === 0) return b;
+      if (working(b, world.tick) && airliftCooldownLeft(b, world.tick) === 0) return b;
     }
   }
   return null;

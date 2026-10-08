@@ -152,6 +152,7 @@ describe("the incoming-threat warning", () => {
     fromTile: 4,
     toTile,
     planes: 4,
+    escorts: 0,
     troops: 0,
     launchTick: 0,
     arriveTick: 60 + id,

@@ -190,6 +190,7 @@ describe("effects", () => {
           paid: 0,
           reloads: [],
           cooldowns: [],
+          disabledUntil: -1,
         });
         w.nextBuildingId++;
       }

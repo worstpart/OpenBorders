@@ -16,6 +16,7 @@ import {
   type BoatPlan,
   type BoatProblem,
 } from "../../sim/systems/naval.ts";
+import { working } from "../../sim/systems/buildings.ts";
 
 export interface BoatContext {
   readonly rules: GameRules;
@@ -189,18 +190,20 @@ export function boatPreview(ctx: BoatContext, tile: number): BoatPreview | null 
   const me = ctx.me!;
   const target = ctx.owner[tile]!;
   const atSea = ctx.boats.filter((b) => b.owner === me.id).length;
+  // Ports struck from the air (2B.4) add nothing until they work again, as in the sim.
+  const ports = ctx.buildings.filter((b) => b.type === "port" && working(b, ctx.tick));
   const plan = planBoat(
     ctx.rules,
     ctx.map!,
     ctx.owner,
-    ctx.buildings,
+    ports,
     me.id,
     ownCoast(ctx, me.id),
     target,
     tile,
   );
   if (typeof plan === "string") return { target, tile, plan: null, problem: plan, seconds: 0 };
-  const full = atSea >= boatSlots(ctx.rules, ctx.buildings, me.id);
+  const full = atSea >= boatSlots(ctx.rules, ports, me.id);
   return {
     target,
     tile,

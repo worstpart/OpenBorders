@@ -16,6 +16,7 @@ import type {
   Ping,
   PlayerId,
   PlayerKind,
+  Suppression,
   TradeShip,
   World,
 } from "./world.ts";
@@ -135,6 +136,8 @@ export interface BuildingSnapshot {
   /** Phase 2B: when spent charges are back (ascending), and each mission's cooldown end. */
   readonly reloads: readonly number[];
   readonly cooldowns: readonly number[];
+  /** Struck by an air strike: it does nothing until this tick (2B.4; -1 = never struck). */
+  readonly disabledUntil: number;
 }
 
 /**
@@ -153,6 +156,8 @@ export interface FlightSnapshot {
   readonly fromTile: number;
   readonly toTile: number;
   readonly planes: number;
+  /** Escort fighters flying with it (an Air Base's lifts, 2B.4). */
+  readonly escorts: number;
   readonly troops: number;
   readonly launchTick: number;
   readonly arriveTick: number;
@@ -218,6 +223,8 @@ export interface TickFrame {
   readonly tradeShips: readonly TradeShipSnapshot[];
   /** Every flight in the air, by ascending id. */
   readonly flights: readonly FlightSnapshot[];
+  /** Suppression zones in force (air strikes on a point, 2B.4), oldest first. */
+  readonly suppressions: readonly Suppression[];
   /** Map pings still showing, oldest first. */
   readonly pings: readonly PingSnapshot[];
   readonly events: readonly SimEvent[];
@@ -327,7 +334,7 @@ const flightCache = new WeakMap<Flight, FlightSnapshot>();
 
 function snapshotFlight(flight: Flight): FlightSnapshot {
   const cached = flightCache.get(flight);
-  if (cached && cached.planes === flight.planes) return cached;
+  if (cached && cached.planes === flight.planes && cached.escorts === flight.escorts) return cached;
   const snapshot: FlightSnapshot = {
     id: flight.id,
     owner: flight.owner,
@@ -337,6 +344,7 @@ function snapshotFlight(flight: Flight): FlightSnapshot {
     fromTile: flight.fromTile,
     toTile: flight.toTile,
     planes: flight.planes,
+    escorts: flight.escorts,
     troops: flight.troops,
     launchTick: flight.launchTick,
     arriveTick: flight.arriveTick,
@@ -346,6 +354,7 @@ function snapshotFlight(flight: Flight): FlightSnapshot {
 }
 
 const NONE: readonly number[] = Object.freeze([]);
+const NO_ZONES: readonly Suppression[] = Object.freeze([]);
 
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
@@ -393,11 +402,14 @@ export function buildFrame(world: World): TickFrame {
       readyTick: b.readyTick,
       reloads: b.reloads.length > 0 ? b.reloads.slice() : NONE,
       cooldowns: b.cooldowns.length > 0 ? b.cooldowns.slice() : NONE,
+      disabledUntil: b.disabledUntil,
     })),
     walls: snapshotWalls(world),
     boats: world.boats.map(snapshotBoat),
     tradeShips: world.tradeShips.map(snapshotTradeShip),
     flights: world.flights.map(snapshotFlight),
+    suppressions:
+      world.suppressions.length > 0 ? world.suppressions.map((z) => ({ ...z })) : NO_ZONES,
     pings: world.pings.map((p) => ({ ...p })),
     events: world.events.slice(),
     winner: world.winner,

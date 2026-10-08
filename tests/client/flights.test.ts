@@ -18,6 +18,7 @@ const flight: FlightSnapshot = {
   fromTile: at(2, 2),
   toTile: at(22, 12),
   planes: 4,
+  escorts: 0,
   troops: 0,
   launchTick: 100,
   arriveTick: 112,
@@ -47,6 +48,7 @@ describe("flights on the map", () => {
       fromTile: 0,
       toTile: 1,
       planes: 4,
+      escorts: 0,
       troops: 0,
       arriveTick: 50,
     });

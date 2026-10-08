@@ -56,6 +56,9 @@
             build
           {/if}
           <span class="muted">· Esc to cancel</span>
+        {:else if airlift?.mode === "strike"}
+          Click an enemy building, or their land (walls), within range for an air strike
+          <span class="muted">· Esc or right-click to cancel</span>
         {:else if airlift?.mode === "assault"}
           Click an enemy's land within range to land {formatTroops(airlift.troops)} troops by air
           <span class="muted">· Esc or right-click to cancel</span>

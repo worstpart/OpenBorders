@@ -20,6 +20,7 @@ import { isLand, isValidTile, type GameMap } from "../map/gameMap.ts";
 import type { GameRules, WallLevelRules } from "../rules.ts";
 import { ownerTileHash } from "../stateHash.ts";
 import type { Player, PlayerId, Wall, World } from "../world.ts";
+import { isSuppressed } from "./suppression.ts";
 
 /** A wall holds even a crushing army at least this share of its hold time. */
 const MIN_HOLD_SHARE = 0.5;
@@ -276,15 +277,24 @@ export function breakWallTile(world: World, tile: number, by: PlayerId): void {
   if (wall.intact === 0) removeWall(world, wall, by === 0 ? null : by, "breached");
 }
 
+/**
+ * The wall level that works on `tile` now: 0 with no wall, or while an air strike suppresses
+ * it (2B.4) — the hooks below all read it.
+ */
+function workingFort(world: World, tile: number): number {
+  const level = world.fortLevel[tile]!;
+  return level === 0 || isSuppressed(world, tile) ? 0 : level;
+}
+
 /** Multiplier on an attacker's losses for taking `tile` (1 = no wall). */
 export function wallLossFactor(world: World, tile: number): number {
-  const level = world.fortLevel[tile]!;
+  const level = workingFort(world, tile);
   return level === 0 ? 1 : wallLevel(world.rules, level).loss;
 }
 
 /** Troops an attack pays on top of the tile's cost to break the wall on it (0 = none). */
 export function wallBreakTroops(world: World, tile: number): number {
-  const level = world.fortLevel[tile]!;
+  const level = workingFort(world, tile);
   return level === 0 ? 0 : wallLevel(world.rules, level).breakTroops;
 }
 
@@ -294,7 +304,7 @@ export function wallBreakTroops(world: World, tile: number): number {
  * square root of its speed-up), but a wall always holds at least MIN_HOLD_SHARE of its time.
  */
 export function wallHoldTicks(world: World, tile: number, speed: number): number {
-  const level = world.fortLevel[tile]!;
+  const level = workingFort(world, tile);
   if (level === 0) return 0;
   return wallLevel(world.rules, level).holdTicks * Math.max(MIN_HOLD_SHARE, Math.sqrt(speed));
 }

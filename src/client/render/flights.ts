@@ -10,11 +10,17 @@
  * SAM shots (GAME_DESIGN.md §3.17.13): a short bright streak from the SAM to the plane, then
  * a puff of flame and smoke where it was hit; Fortress Wall flak (2B.3) the same from the wall.
  *
+ * Air strikes (2B.4): a wing of fighters (the same art), escorts as two small fighters beside a
+ * lift's planes, and each suppression zone as an orange hatched circle with its countdown
+ * (zones are public, like flights).
+ *
  * Drawn with Canvas2D on the label overlay, like boats. Positions come from the tick alone
  * (app/flights.ts → the simulation's flightPoint), so flights glide smoothly between ticks.
  * Until the image has loaded, a plain aircraft glyph stands in.
  */
 import type { BuildingSnapshot, FlightSnapshot } from "../../sim/frame.ts";
+import type { GameRules } from "../../sim/rules.ts";
+import type { Suppression } from "../../sim/world.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import {
   FLIGHT_INFO,
@@ -24,6 +30,7 @@ import {
   liftProblemText,
   PUFF_MS,
   SHOT_MS,
+  strikeEffectText,
   type AirliftPreview,
   type ShotEffect,
 } from "../app/flights.ts";
@@ -50,6 +57,9 @@ export interface FlightDrawInput {
   /** SAM shots still showing, and the time now (performance.now()). */
   readonly shots: readonly ShotEffect[];
   readonly now: number;
+  /** Suppression zones in force (air strikes on a point, 2B.4). */
+  readonly suppressions: readonly Suppression[];
+  readonly rules: GameRules;
 }
 
 const MINE = "rgba(246, 241, 228, 0.8)";
@@ -72,7 +82,13 @@ export class FlightLayer {
   }
 
   draw(view: MapView, input: FlightDrawInput): void {
-    if (input.flights.length === 0 && !input.airlift && input.shots.length === 0) return;
+    if (
+      input.flights.length === 0 &&
+      !input.airlift &&
+      input.shots.length === 0 &&
+      input.suppressions.length === 0
+    )
+      return;
     const ctx = this.context;
     const ratio = window.devicePixelRatio || 1;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -88,7 +104,10 @@ export class FlightLayer {
     const me = input.localPlayerId;
     const size = Math.max(26, Math.min(44, view.zoom * 5));
 
-    if (input.airlift) this.aim(input.airlift, tileScreen, view.zoom);
+    for (const zone of input.suppressions) {
+      this.zone(zone, tileScreen, view.zoom, input.tick, input.tickMs, w, h);
+    }
+    if (input.airlift) this.aim(input.airlift, tileScreen, view.zoom, input.rules);
 
     // Routes first, so every aircraft sits on top of every line.
     const labels: { x: number; y: number; text: string }[] = [];
@@ -133,6 +152,16 @@ export class FlightLayer {
       const height = spriteHeight(sprite, level, size);
       this.shadow(p.x, p.y + height * 0.55, size, color);
       const flip = FACES_LEFT[sprite] ? at.dx > 0 : at.dx < 0;
+      // Escort fighters (an Air Base's lifts, 2B.4): small fighters behind, one on each side.
+      for (let k = 0; k < Math.min(2, flight.escorts); k++) {
+        const side = k === 0 ? -1 : 1;
+        const back = flip ? 1 : -1;
+        const ex = p.x + back * size * 0.45;
+        const ey = p.y + side * size * 0.35;
+        if (!drawSprite(ctx, "plane", level, ex, ey, size * 0.5, flip)) {
+          this.aircraft(ex, ey, at.dx, at.dy, size * 0.35, color);
+        }
+      }
       if (!drawSprite(ctx, sprite, level, p.x, p.y, size, flip)) {
         this.aircraft(p.x, p.y, at.dx, at.dy, size * 0.7, color);
       }
@@ -232,10 +261,54 @@ export class FlightLayer {
    * line, a landing ring and the troops and flight time — green where it may go, red with the
    * reason where it may not.
    */
+  /** A suppression zone: an orange hatched circle over the struck land, with its countdown. */
+  private zone(
+    zone: Suppression,
+    tileScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+    tick: number,
+    tickMs: number,
+    w: number,
+    h: number,
+  ): void {
+    const c = tileScreen(zone.tile);
+    const r = zone.radius * zoom;
+    if (c.x + r < 0 || c.y + r < 0 || c.x - r > w || c.y - r > h) return;
+    const ctx = this.context;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 140, 60, 0.12)";
+    ctx.fill();
+    ctx.clip();
+    // Diagonal hatching: "out of order" without hiding the land under it.
+    ctx.strokeStyle = "rgba(255, 150, 70, 0.35)";
+    ctx.lineWidth = 1;
+    const step = Math.max(6, zoom * 1.5);
+    ctx.beginPath();
+    for (let d = -2 * r; d <= 2 * r; d += step) {
+      ctx.moveTo(c.x + d - r, c.y + r);
+      ctx.lineTo(c.x + d + r, c.y - r);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(255, 150, 70, 0.9)";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    const seconds = Math.max(0, Math.ceil(((zone.untilTick - tick) * tickMs) / 1000));
+    this.label(c.x, c.y - r - 8, `💥 suppressed · ${seconds} s`, "#ffb36b");
+  }
+
   private aim(
     aim: AirliftPreview,
     tileScreen: (tile: number) => { x: number; y: number },
     zoom: number,
+    rules: GameRules,
   ): void {
     const ctx = this.context;
     const from = tileScreen(aim.airport.tile);
@@ -254,9 +327,24 @@ export class FlightLayer {
     const color = aim.problem ? BAD : OK;
     this.route(from, to, color, 2);
     this.ring(to.x, to.y, Math.max(6, zoom * 1.5), color);
+    if (aim.strike?.kind === "point") {
+      // The zone the strike would suppress.
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255, 150, 70, 0.8)";
+      ctx.fillStyle = "rgba(255, 140, 60, 0.08)";
+      ctx.beginPath();
+      ctx.arc(to.x, to.y, aim.strike.radius * zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     const text = aim.problem
       ? liftProblemText(aim.mode, aim.problem)
-      : `${aim.mode === "assault" ? "🪂" : "✈"} ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
+      : aim.strike
+        ? `💥 ${strikeEffectText(rules, aim.strike)} · ${Math.ceil(aim.seconds)} s`
+        : `${aim.mode === "assault" ? "🪂" : "✈"} ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
     this.label(to.x, to.y - Math.max(10, zoom * 1.5) - 8, text);
     if (!aim.problem && aim.planesLost > 0) {
       // Hostile SAMs on the route (their rings are drawn under it, render/buildings.ts).
@@ -264,8 +352,8 @@ export class FlightLayer {
         to.x,
         to.y - Math.max(10, zoom * 1.5) - 24,
         aim.planesLost >= aim.planes
-          ? `⚠ SAMs: all ${aim.planes} planes would be shot down`
-          : `⚠ SAMs: ${aim.planesLost} of ${aim.planes} planes shot down`,
+          ? `⚠ SAMs: all ${aim.planes} ${aim.mode === "strike" ? "fighters" : "planes"} would be shot down`
+          : `⚠ SAMs: ${aim.planesLost} of ${aim.planes} ${aim.mode === "strike" ? "fighters" : "planes"} shot down`,
         "#ffb36b",
       );
     }

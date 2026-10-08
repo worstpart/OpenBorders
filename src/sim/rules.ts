@@ -268,6 +268,13 @@ export interface BuildingLevelRules {
   /** …and the Airport's missions are ready again this many ticks after a launch. */
   readonly missionCooldownTicks?: number;
   /**
+   * Air Base (Airport III, 2B.4): air strikes, ready again this many ticks after one (their
+   * own cooldown, mission slot 1), within `range`…
+   */
+  readonly strikeCooldownTicks?: number;
+  /** …and this many escort fighters fly with every lift and assault. */
+  readonly escorts?: number;
+  /**
    * SAMs (GAME_DESIGN.md §3.17.7): it holds this many interceptors, each of which destroys
    * one hostile plane within `range` tiles…
    */
@@ -277,7 +284,7 @@ export interface BuildingLevelRules {
 }
 
 export interface BuildingTypeRules {
-  /** Levels I, II, III (Port: I–II so far; Airport: I–II so far — the rest in Phase 2B). */
+  /** Levels I, II, III (Port: I–II so far — Naval Base in a later milestone). */
   readonly levels: readonly BuildingLevelRules[];
   /**
    * Where it can stand: any land of yours, a coast tile (next to the sea), or flat land
@@ -452,6 +459,22 @@ export interface FlightRules {
    */
   readonly assaultPlanes: number;
   readonly airborneLoss: number;
+  /**
+   * Air strikes (Air Base, GAME_DESIGN.md §3.17.7, 2B.4): fighters per strike. On a
+   * building: at least `strikeDamagePlanes` arriving cost it a level (a level-I building is
+   * destroyed); any arriving disable it for `strikeDisableTicks`…
+   */
+  readonly strikePlanes: number;
+  readonly strikeDamagePlanes: number;
+  readonly strikeDisableTicks: number;
+  /**
+   * …on a point: the target's land within `suppressionRadius` tiles is suppressed for
+   * `suppressionTicks` — no working fortification, and attacks there pay `suppressedLoss`×
+   * the losses.
+   */
+  readonly suppressionRadius: number;
+  readonly suppressionTicks: number;
+  readonly suppressedLoss: number;
 }
 
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
@@ -516,6 +539,11 @@ export interface BuildAiRules {
    * their share of the price, so both steps are worth the same per gold).
    */
   readonly assaultWorth: number;
+  /**
+   * Air strikes (2B.4): the Air Base upgrade is worth this share of capacity while an enemy
+   * nation or human has buildings within its reach.
+   */
+  readonly strikeWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -630,6 +658,17 @@ export interface AiRules {
    * can be encircled once it stalls).
    */
   readonly airPreference: number;
+  /**
+   * Air strikes (GAME_DESIGN.md §3.17.7, 2B.4): a nation with a ready Air Base strikes the
+   * enemy building worth the most gold at its level — SAMs count `strikeSamWeight`× (they
+   * close the sky to assaults), Airports `strikeAirportWeight`× (they fly at us) — or, when
+   * its army is breaking a walled front, suppresses the walls there, worth `suppressionWorth`×
+   * the gold of the wall tiles it covers. Nothing worth less than `strikeMinValue` gold.
+   */
+  readonly strikeSamWeight: number;
+  readonly strikeAirportWeight: number;
+  readonly suppressionWorth: number;
+  readonly strikeMinValue: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -872,6 +911,12 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     seaPreference: 0.7,
     // Air (§3.17.7): a landing behind the lines is worth a bit less than a sea landing.
     airPreference: 0.6,
+    // Strikes are free (only the cooldown limits them), so a nation always uses a ready one
+    // on its best target; SAMs first — they are what stands between it and an assault.
+    strikeSamWeight: 2,
+    strikeAirportWeight: 1.5,
+    suppressionWorth: 1,
+    strikeMinValue: 30_000,
     counterAbove: 1.1,
     counterSize: 1.3,
     retreatBelow: 0.3,
@@ -981,6 +1026,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // A late investment: worth less per gold than any economy building, so only nations
       // that have built up (or face walls) fly assaults.
       assaultWorth: 0.15,
+      // A strike every 30 s is worth more than one-off assaults, but the step is so dear
+      // (~1M gold with escalation) that only late leaders reach it: 0.2–0.3 Air Bases a game
+      // on Islands whether this is 0.5 or 1.0 (2B.4 headless).
+      strikeWorth: 0.5,
     },
   },
   tribe: {
@@ -1119,8 +1168,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
       // Air (§3.17.7): airlifts to friends anywhere within 250 km — the only way to send
       // troops to a friend you don't border (D-023). Level II adds the airborne assault
-      // (2B.3): bigger, longer lifts that may land on an enemy's land. Level III (air
-      // strikes) comes in 2B.4. On plains: a runway needs flat land.
+      // (2B.3): bigger, longer lifts that may land on an enemy's land. Level III (2B.4) adds
+      // air strikes (their own cooldown) and escort fighters. On plains: a runway needs flat land.
       airport: {
         onCapture: "adopt",
         placement: "plains",
@@ -1140,6 +1189,16 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 300,
             liftShare: 0.15,
             missionCooldownTicks: 250,
+          },
+          {
+            name: "Air Base",
+            cost: 700_000,
+            buildTicks: 250,
+            range: 350,
+            liftShare: 0.2,
+            missionCooldownTicks: 200,
+            strikeCooldownTicks: 300,
+            escorts: 2,
           },
         ],
       },
@@ -1272,6 +1331,14 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // An airdrop must stay a surprise or a second front, never a better ground attack.
     assaultPlanes: 4,
     airborneLoss: 1.25,
+    // Four fighters: a lone SAM I can't stop a strike, a SAM III (3 interceptors) can only
+    // blunt it to "disabled". Suppression opens a wall line for long enough to break it.
+    strikePlanes: 4,
+    strikeDamagePlanes: 2,
+    strikeDisableTicks: 200,
+    suppressionRadius: 10,
+    suppressionTicks: 300,
+    suppressedLoss: 0.8,
   },
 });
 
