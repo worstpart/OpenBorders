@@ -212,7 +212,7 @@ sending twice the defender's pool halves the cost per tile.
 | Wide shared border | More frontier → faster attacks (for both sides) |
 | Mountains | ~1.5× losses and ~2.5× slower than plains: natural defensive lines |
 | Much bigger army | **Crush curve**: speed grows faster than the edge — grass: even 2 tiles/s, 2× ≈ 6, 4× ≈ 14, 10×+ ≈ 20 (the cap) |
-| Two players attack each other | The two armies collide and cancel out first |
+| Two players attack each other | Their land armies collide and cancel out first; a landed army (boat or airborne) never does — it fights on its own front (D-029, 2B.4) |
 
 - **Retreat:** cancel an attack from its chip (×). It stops advancing immediately;
   troops return after 2 s minus **20%** (no penalty when retreating from neutral land).
@@ -314,7 +314,8 @@ simulation; their commands are queued and applied (and validated) at the start o
 next tick, exactly like a person's. On each think, in order:
 
 1. **Counter** the biggest incoming army they can match (home ≥ 1.1× it), sending 1.3× its
-   size: opposing armies cancel out, so this is cheap defence.
+   size: opposing armies cancel out, so this is cheap defence. A landed army doesn't cancel
+   (D-029): the counter is aimed at its landing pocket and must take it tile by tile.
 2. **Reinforce or retreat** an attack whose army fell below 30% of the defender's home
    troops (it would take only ~3% more of their land): top it up if the bot can afford
    to, otherwise retreat (saves 80% of what's left).
@@ -884,6 +885,34 @@ the Continent, where nations reach an Airport only in the last minute of a game;
 games are unchanged (Two lands 6.4 min median). No "teleport army": a lift of 15% of
 capacity at ×1.25 losses only beats a busy or depleted enemy.
 
+*As built (2B.4):* **Air Base** (Airport III: +700k, 25 s): lifts 20% of your troop capacity,
+range 350 km, lifts ready every 20 s, and every lift and assault flies with **2 escort
+fighters** — SAMs and flak shoot the escorts first, so they shield the planes and their troops
+(two small fighters beside the lift on the map; "an escort fighter" in the toasts). Its card
+gains **"💥 Air strike"** on its own 30 s cooldown: four fighters (3 tiles/tick; the icon
+pack's plane art, which is a fighter of each era) to an enemy's tile in range — the aim snaps
+onto a building icon under the mouse. **On a building:** if at least 2 fighters get through it
+loses a level (a level-I building, or one still being built, is destroyed; an upgrade under way
+is lost) and either way it is **out of action for 20 s** — no bonuses, a SAM doesn't fire, an
+Airport flies nothing, a Port adds no boat speed or slots and sends no trade ship (dimmed badge
+with 💥 and an orange ring running down; "Out of action after an air strike — N s" on its
+card). **On open land:** that player's land within 10 km is **suppressed for 30 s** — walls
+hold nothing and cost nothing extra to break, flak is silent, and attacks there pay ×0.8 the
+losses (an orange hatched circle with its countdown, visible to everyone). Only the struck
+player's land counts, only while they hold it. The aiming label says what will happen
+("💥 Industrial Complex → level I · 10 s", "destroy Housing", "out of action 20 s" when SAMs
+leave only one fighter, "suppress 10 km for 30 s") with the usual SAM warning. Strikes cost
+nothing but their cooldown. Toasts tell the striker and the victim. **Nations** with a ready
+Air Base always strike their best target: SAMs (×2) and Airports (×1.5) of any non-friend in
+reach (half value when not at war), any building of an enemy they are at war with (the gold of
+the level it would lose), or the walls in front of their army (suppression, worth the walls'
+gold) — never a route where the SAMs would down every fighter; at least 30k gold of value. The
+Air Base is valued at 0.5 × capacity while enemy buildings stand in reach, but costs a nation
+~1.05M with escalation, so only late leaders reach it: 0.2 Air Bases and ~1 strike per Islands
+game (headless), game lengths unchanged. Combined arms (a sim test): strike the SAM, suppress
+the Fortress Wall, and the assault lands whole and takes the land. **Since the 2B.4 playtest
+(D-029):** a landed army no longer cancels against a counter-attack (see §3.18).
+
 #### 3.17.8 Missile Silo
 
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
@@ -930,7 +959,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
 | Airport ✅ | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
 | Airport ✅ | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
-| Airport | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
+| Airport ✅ | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |
 
 **Visual progression.** Every building is one original icon with three drawings of growing
 detail and **1–3 level pips** under it; the tier reads without clicking. *As built (2.5
@@ -1067,6 +1096,7 @@ you border by land. The boat carries the current send % of your home troops.
 | Troops aboard | count toward your capacity (like an army in the field) | D-011: no stockpiling at sea |
 | Landing | a **beachhead attack**: it takes the landing tile (paying the normal cost) and spreads from it toward the click; it never merges with your land army against the same player | OpenFront's boat attacks don't merge either; airborne assaults (2B) reuse it |
 | Landing pocket | can't be encircled while its attack advances; once it stops (spent, retreated, done) it can | A landing isn't wiped out by the encirclement rule the moment it lands |
+| Counter-attacks | a landed army never collides with the defender's attack (land armies do): the defender has to take the pocket tile by tile while the landed army keeps advancing (D-029, the user after the 2B.4 playtest) | A counter anywhere used to cancel the landed army at once, and its pocket was then annexed |
 | Landed on friendly land | if the landing tile became yours or a friend's meanwhile, the troops go home | Never attack a friend by accident (an OpenFront bug) |
 | Recall | the boat turns around; troops come home when it is back (no loss) | A changed mind costs time, not troops |
 | Owner eliminated | their boats sink | — |

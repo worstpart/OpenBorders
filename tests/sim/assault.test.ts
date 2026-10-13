@@ -219,6 +219,26 @@ describe("airborne assault (Airport II)", () => {
     expect(w.owner[TARGET]).toBe(2);
   });
 
+  it("a counter-attack doesn't cancel the landed army: it must take the pocket tile by tile", () => {
+    const w = world(2, RULES, 30_000);
+    step(w, [{ playerId: 1, command: assault() }]);
+    run(w, arrival(w) + 1);
+    const landed = w.attacks.find((a) => a.airborne)!;
+    const troops = landed.troops;
+    // Player 2 strikes back at player 1 with far more troops than landed.
+    const events = step(w, [
+      {
+        playerId: 2,
+        command: { type: "attack", target: 1, focusTile: TARGET, percentBp: 9_000 },
+      },
+    ]);
+    expect(events.some((e) => e.type === "attackEnded" && e.attackId === landed.id)).toBe(false);
+    expect(landed.ended).toBe(false);
+    // Only its own fighting costs it troops, never a collision with the counter.
+    expect(landed.troops).toBeGreaterThan(troops * 0.9);
+    expect(events.some((e) => e.type === "encircled")).toBe(false);
+  });
+
   it("is shot down by SAMs like any flight", () => {
     const w = world();
     building(w, "sam", 2, at(25, 4));

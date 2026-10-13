@@ -346,7 +346,13 @@ function decide(
     .filter((a) => bot.homeTroops >= ai.counterAbove * a.troops)
     .sort((a, b) => b.troops - a.troops || a.id - b.id);
   for (const threat of counterable) {
-    const focus = around.neighborFront.get(threat.attacker);
+    // A landed army (boat or airborne) doesn't cancel against a counter (attacks.ts
+    // resolveCollisions): strike back at its pocket, tile by tile, instead.
+    const pocket =
+      threat.landingTile >= 0 && world.owner[threat.landingTile] === threat.attacker
+        ? threat.landingTile
+        : -1;
+    const focus = pocket >= 0 ? pocket : around.neighborFront.get(threat.attacker);
     if (focus === undefined) continue;
     const share = Math.min(0.9, (ai.counterSize * threat.troops) / bot.homeTroops);
     return attackCommand(threat.attacker, focus, share);

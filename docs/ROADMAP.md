@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -511,7 +511,7 @@ bot games before anyone has to play them.
 | 2B.1 ✅ | **Airport I + airlift** — Airport building I, airlift to allies/teammates (capacity, cooldown, overflow flies back) — the only way to send troops to a friend you don't border (D-023) | 2B.0, alliances (2.2), economy gifts (2.4) | Reinforce a distant ally in the browser; nations airlift to a teammate losing a war |
 | 2B.2 ✅ | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 ✅ | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
-| 2B.4 | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
+| 2B.4 ✅ | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
 | 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
 | 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
 
@@ -680,6 +680,39 @@ had 230K at home: as designed), a Fortress Wall's flak hitting an enemy test fli
 `weapon: "flak"`, toast "Your … flak shot down one of Solmere's planes"), no console errors.
 Not seen in the browser (unit-tested): being the target of an assault. Tests: 414 (22 new:
 `tests/sim/assault.test.ts`, `tests/client/assault.test.ts`).
+
+**Milestone 2B.4 result (2026-10-12)** — Airport III air strikes, suppression and escorts
+(GAME_DESIGN §3.17.7 "as built (2B.4)", §3.18, ARCHITECTURE §5.7, D-029). **Rules:** Airport
+level III "Air Base" (+700k, 25 s; 350 km, lifts 20%, lift cooldown 20 s, `strikeCooldownTicks`
+300 in its own slot 1, `escorts` 2). Command `airStrike {buildingId, tile}`: 4 fighters
+(`strikePlanes`) to an enemy's tile in range. On arrival, an enemy building on the tile loses a
+level if ≥ `strikeDamagePlanes` 2 arrive (level I or unfinished: destroyed; an upgrade under way
+is lost) and is disabled `strikeDisableTicks` 200 either way; otherwise the enemy's land within
+`suppressionRadius` 10 is suppressed for `suppressionTicks` 300 (`suppressedLoss` 0.8). Escorts
+are shot first by SAMs and flak. **Decided here (minor):** strike on the building standing on
+the clicked tile, else on the point (the HUD snaps to a building icon); a strike is free but for
+its cooldown; "disabled" = does nothing (no bonuses, SAM silent, no missions, Port no boat
+bonus/trade); suppression covers only the struck player's land; flak is suppressed too; fighters
+use the existing plane art (it is fighters) — no new art needed. **Nations:** `ai/strike.ts`
+(see GAME_DESIGN); Air Base valued at `strikeWorth` 0.5 × capacity while enemy buildings are in
+reach — 0.2 or 1.0 made no difference (0.2 Air Bases/Islands game): the ~1.05M price with
+escalation is the barrier, as designed ("leaders only"). **Playtest fix (D-029, the user):**
+"getting swallowed … should at least let you fight" — every counter-attack cancelled a landed
+army at once (the collision rule), after which its pocket was annexed. Landed armies (airborne
+and boats) no longer collide; nations aim counters at the landing pocket. **Headless** (30
+Islands, 60 Continent, 60 Two lands teams; after D-029, before it in brackets): Islands median
+23.0 min [22.0], max 25.6, 0.7 assaults all landing, ~3,600 tiles taken by landed armies
+[~1,350], 0.2 Air Bases, 1.2 strikes; Continent 8.6 [8.8]; Two lands teams 5.4 [6.4] (landings
+stronger). **Regression:** before D-029, flights-off games replayed 2B.3 exactly; D-029 changes
+boat games on purpose. **Browser** (own tab, 4 teams on Islands, Easy, gold from every nation by
+`sendAs`): Air Base card (new lines, "💥 Air strike — 4 fighters"), aiming labels "💥 destroy
+Port · 2 s" (snapped to the icon), "💥 Industrial Complex → level I · 10 s", "suppress 10 km for
+30 s · 11 s" with the zone ring; the fighters in flight; toasts "💥 Air strike hit Sereth's
+Port: destroyed" / "… Industrial Complex: down to level 1, out of action 20 s"; the struck badge
+and "Out of action after an air strike — 10 s" on its card; a suppression zone with
+"💥 suppressed · 24 s"; no console errors. Not seen clearly in the browser (unit-tested):
+escort fighters on the map. Tests: 442 (`tests/sim/strike.test.ts`, `tests/client/strike.test.ts`,
+one D-029 test in `tests/sim/assault.test.ts`).
 
 **Dependency map** (what must exist first):
 

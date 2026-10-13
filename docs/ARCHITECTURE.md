@@ -394,7 +394,7 @@ runner keep using LocalHost with a manual clock.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs, 2B.3 Airport II + flak built; the rest PLANNED*
+### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs, 2B.3 Airport II + flak, 2B.4 Air Base strikes built; the rest PLANNED*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
@@ -487,14 +487,14 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, assault ✅; airStrike, launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, assault, airStrike ✅; launchMissile
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
 2c. advanceFlights     (2B.0 ✅ arrivals) SAM interceptions first (2B.2 ✅), Fortress Wall flak (2B.3 ✅), then
                        flights over their target arrive, with arrival effects: airlift → friend's home troops (2B.1);
                        assault → beachhead attack (2.7, 2B.3 ✅) — before step 3, like boats, so a
-                       landing's first tile falls the same tick; strike/missile → damageBuilding
-                       + suppression zones (2B.4/2B.5)
+                       landing's first tile falls the same tick; strike → strikeBuilding or a
+                       suppression zone (2B.4 ✅; expireSuppressions first); missiles (2B.5)
 3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
     (setOwner)         captured tiles transfer or destroy their building; wall tiles break
 6.  growTroops / 6b earnGold   read the cached per-player building effects
@@ -620,6 +620,39 @@ over levels I–II by price). Headless `airPerGame` adds `airportUpgrades`, `ass
 `startAirlift(id, mode)`; the card's `airlift.assault` → "🪂 Airborne assault" button;
 `flightSprite` (helicopters for assaults); toasts for `assaultLanded`, airborne
 `attackStarted` and flak hits; attack chips show 🪂 for airborne armies.
+
+**Air strikes, suppression, escorts (2B.4 — as built).** Airport level III (`Air Base`:
+`strikeCooldownTicks` 300, `escorts` 2); `rules.flights` `strikePlanes`, `strikeDamagePlanes`,
+`strikeDisableTicks`, `suppressionRadius`, `suppressionTicks`, `suppressedLoss`. **State:**
+`Building.disabledUntil` (-1 = never struck; hashed only once ≥ 0), `Flight.escorts` (hashed
+only when > 0), `world.suppressions` (`Suppression {tile, radius, victim, by, untilTick}`,
+hashed only while non-empty) — so games without strikes keep their hashes. `buildings.ts`:
+`working(b, tick)` (level ≥ 1 and not disabled — read by `sumBonuses`, SAM interception and
+`samReady`, the Airport problems, trade sending, and the Port list given to `planBoat` /
+`boatSlots` in `naval.ts` and the client's `boatPreview`), `disabledLeft`, `strikeBuilding`
+(−levels, destroy below I with reason "struck", lose an upgrade, disable; event
+`buildingStruck`). New `systems/suppression.ts`: `isSuppressed(world, tile)` (one length check
+when no zone), `suppress` (event `suppressed`), `expireSuppressions` (tick step 2c, before
+the flights). The wall hooks read `workingFort` (0 when suppressed), `tileCost` multiplies
+by `suppressedLoss`, and `flakWallsNear` skips suppressed tiles. `flights.ts`: `STRIKE_LEVEL`,
+`STRIKE_SLOT` 1, `strikeCooldownLeft`, `strikeProblem` + `STRIKE_PROBLEM_TEXT` (also
+"disabled"), `applyAirStrike` (command `airStrike {buildingId, tile}`, kind `strike`,
+plane "fighter"), `landStrike`, `escortsOf`; `shootDown` takes escorts first
+(`flightIntercepted.escorts`, `flightLaunched.escorts`); `quietSite` subtracts the escorts from
+the interceptors a route meets. Airlift/assault problems gained "disabled". **AI:**
+`ai/strike.ts` `decideStrike` (run for every nation each think, independent of its action);
+`build.ts` values the Air Base step by `strikeProspect` × `strikeWorth`; `readyAirport` /
+`readyMilitaryAirport` skip disabled Airports. Headless `airPerGame` adds `airBases`,
+`strikes`, `strikeLevels`, `strikeKills`, `suppressions`. **Client:** `LiftMode` gains
+"strike"; `airliftPreview` returns `escorts` and `strike: StrikeEffect` (`strikeEffectText`);
+`client.ts` `aimTile` snaps a strike onto a building icon and sends `airStrike`; card
+`airlift.strikeSecondsLeft` and `disabledSeconds`; `render/flights.ts` draws escorts and the
+zones (frame `suppressions`); `render/buildings.ts` the struck badge; toasts for
+`buildingStruck`, `suppressed` and escort hits.
+
+**Landed armies don't collide (D-029, after the 2B.4 playtest).** `resolveCollisions` skips any
+pair where either attack has `landingTile ≥ 0`; `bot.ts` aims a counter against a beachhead at
+its landing tile while the attacker still holds it.
 
 **Beachhead attacks (2.7).** Today a player may run armies against several enemies at once
 (one per enemy, like OpenFront); a second land click on the *same* enemy adds to that army

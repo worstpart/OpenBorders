@@ -188,7 +188,10 @@ export function retreatAttack(world: World, attack: Attack, free: boolean): void
 
 /**
  * Tick system: armies of two players attacking each other collide and cancel out first;
- * the bigger one continues with the difference.
+ * the bigger one continues with the difference. Landed armies (beachheads: boats and
+ * airborne assaults) never collide — they fight on a front of their own, far from the land
+ * armies, so a counter-attack must take their pocket tile by tile (user, after the 2B.4
+ * playtest: a counter anywhere wiped a landed army out at once and its pocket was annexed).
  */
 export function resolveCollisions(world: World): void {
   const attacks = world.attacks;
@@ -199,6 +202,7 @@ export function resolveCollisions(world: World): void {
       const b = attacks[j]!;
       if (b.attacker !== a.target || b.target !== a.attacker) continue;
       if (b.retreatTick >= 0 || b.troops <= 0) continue;
+      if (a.landingTile >= 0 || b.landingTile >= 0) continue;
       const clash = Math.min(a.troops, b.troops);
       a.troops -= clash;
       b.troops -= clash;

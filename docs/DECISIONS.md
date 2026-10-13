@@ -34,6 +34,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-026 | Trade ships between players' Ports (OpenFront-style) in 2.8; warships capture non-allied ones in 2B.6; real-world maps parked | **Accepted** 2026-10-06 (user) |
 | D-027 | Sound = alert sounds only, synthesized in the browser; talking = emojis + map pings (no quick chat, no free text) | **Accepted** 2026-10-06 (user) |
 | D-028 | Art: the user's icon pack (WW1 → WW2 → Modern eras = levels I → III) becomes the building and vehicle art, in milestone 2B.0b | **Accepted** 2026-10-06 (user's request; placement mine) |
+| D-029 | Landed armies (airborne, boats) don't collide with counter-attacks; the pocket is taken tile by tile | **Accepted** 2026-10-12 (user's playtest of 2B.4) |
 
 ---
 
@@ -578,4 +579,24 @@ when those features land (2B.2, 2B.5). Still without art: warships (2B.6) — as
 **Alternatives.** Phase 4 polish (the art would wait months, and 2B would build Airport
 and plane drawings only to replace them); inside 2B.1 (mixes an art pass into a gameplay
 milestone, harder to judge either).
+
+## D-029 — Landed armies don't collide with counter-attacks · Accepted 2026-10-12
+
+**Context.** Playtesting 2B.4, the user landed an airborne army with more troops than the
+enemy and was "swallowed": as soon as the enemy attacked them anywhere, all progress cleared at
+once. Cause: the collision rule (§3.6) cancels every pair of opposite attacks between two
+players, wherever they are; a nation's counter (1.3× the incoming army) wiped the landed army
+out in one tick, and its pocket — no longer protected — was annexed by encirclement. Boat
+landings had the same flaw. The user: "it should at least let you fight".
+
+**Decision.** Beachhead attacks (airborne assaults and boat landings) never collide. Land armies
+still cancel out as before. To remove a landing, the defender must take its pocket tile by tile
+(normal attack costs) while the landed army keeps advancing; once it stops, the pocket can be
+encircled as before. Nations aim their counter-attack at the landing pocket.
+
+**Effect** (headless): landed airborne armies take ~3,600 tiles a game on Islands instead of
+~1,350; Islands median 23.0 min (22.0), Continent 8.6 (8.8), Two lands teams 5.4 (6.4).
+
+**Alternatives.** Keep collisions but only near the pocket (attacks target players, not places —
+much more state); let the landed army's troops defend the pocket (a second defence model).
 
