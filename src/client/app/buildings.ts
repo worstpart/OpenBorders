@@ -37,6 +37,13 @@ import {
   samRadius,
   samReady,
 } from "../../sim/systems/flights.ts";
+import {
+  missileCost,
+  siloRange,
+  siloReady,
+  siloSlots,
+  warheadCooldownLeft,
+} from "../../sim/systems/missiles.ts";
 import { formatTroops } from "../format.ts";
 
 /** What the build bar can pick up: a building, or the wall tool (D-024). */
@@ -60,6 +67,7 @@ export const BUILDING_ROLE: Record<Placeable, string> = {
   port: "Trade & faster boats",
   airport: "Airlift, airborne assault, air strikes",
   sam: "Shoots down enemy planes",
+  silo: "Missiles that hit buildings far away",
   wall: "Draw a defence line",
 };
 
@@ -115,17 +123,46 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
       `${effect.interceptors} interceptor${effect.interceptors > 1 ? "s" : ""}, each reloads in ${((effect.reloadTicks ?? 0) * rules.tickMs) / 1000} s`,
     );
   }
+  if (effect.interceptsWarheads) lines.push("Also shoots down missiles — and strategic warheads");
+  else if (effect.interceptsMissiles) lines.push("Also shoots down missiles (not warheads)");
+  if (effect.earlyWarning) {
+    lines.push(
+      `Early warning: enemy launches within ${(effect.range ?? 0) * effect.earlyWarning} km`,
+    );
+  }
+  if (effect.missileSlots) lines.push(...siloLines(rules, level));
+  if (effect.warProductionFactor) {
+    lines.push(
+      `War production: your Airports and Silos within ${effect.warProductionRange ?? 0} km reload ${Math.round((1 - effect.warProductionFactor) * 100)}% faster`,
+    );
+  }
   return lines;
 }
 
-/**
- * What a SAM level will add once missiles exist (GAME_DESIGN.md §3.17.7: 2B.5) — shown on
- * the upgrade, clearly as later, so nobody pays for it thinking it works now.
- */
-const SAM_LATER: Readonly<Record<number, string>> = {
-  2: "Later: also intercepts missiles (with Missile Silos)",
-  3: "Later: stops strategic warheads; early warning",
-};
+const seconds = (rules: GameRules, ticks: number) => (ticks * rules.tickMs) / 1000;
+
+/** What a Silo level fires (GAME_DESIGN.md §3.17.8). */
+function siloLines(rules: GameRules, level: number): string[] {
+  const effect = levelRules(rules, "silo", level);
+  const f = rules.flights;
+  const slots = effect.missileSlots ?? 0;
+  const lines = [
+    `Strike missile (${formatTroops(f.missileCost)}): every enemy building within ${f.missileRadius} km loses a level`,
+    `${slots} missile${slots > 1 ? "s" : ""}, each reloads in ${seconds(rules, effect.reloadTicks ?? 0)} s`,
+    effect.wholeMap ? "Range: the whole map" : `Range ${effect.range ?? 0} km`,
+  ];
+  if (effect.bunkerBuster) {
+    lines.push(
+      `Bunker buster (${formatTroops(f.missileCost)}): one building loses ${f.busterLevels} levels`,
+    );
+  }
+  if (effect.warheadCooldownTicks) {
+    lines.push(
+      `Strategic warhead (${formatTroops(f.warheadCost)}, every ${seconds(rules, effect.warheadCooldownTicks)} s): ${f.warheadRadius} km of land scorched`,
+    );
+  }
+  return lines;
+}
 
 /** What a wall level does to attackers (GAME_DESIGN.md §3.17.6). */
 export function wallLines(rules: GameRules, level: number): string[] {
@@ -192,8 +229,37 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     lines.push(
       `${next.interceptors} interceptors, reload ${((next.reloadTicks ?? 0) * rules.tickMs) / 1000} s each`,
     );
-    const later = SAM_LATER[level + 1];
-    if (later) lines.push(later);
+    if (next.interceptsMissiles && !now.interceptsMissiles) {
+      lines.push("New: also shoots down missiles (not warheads)");
+    }
+    if (next.interceptsWarheads && !now.interceptsWarheads) {
+      lines.push("New: stops strategic warheads — the only defence against them");
+    }
+    if (next.earlyWarning) {
+      lines.push(
+        `New: early warning of enemy launches within ${(next.range ?? 0) * next.earlyWarning} km`,
+      );
+    }
+  }
+  if (next.missileSlots) {
+    const f = rules.flights;
+    lines.push(
+      `${next.missileSlots} missiles, reload ${seconds(rules, next.reloadTicks ?? 0)} s each`,
+    );
+    lines.push(next.wholeMap ? "Range: the whole map" : `Range ${next.range ?? 0} km`);
+    if (next.bunkerBuster && !now.bunkerBuster) {
+      lines.push(`New: bunker buster — one building loses ${f.busterLevels} levels`);
+    }
+    if (next.warheadCooldownTicks) {
+      lines.push(
+        `New: strategic warhead (${formatTroops(f.warheadCost)}) — ${f.warheadRadius} km of enemy land scorched, buildings destroyed, troops lost; only SAM III stops it`,
+      );
+    }
+  }
+  if (next.warProductionFactor && !now.warProductionFactor) {
+    lines.push(
+      `New: war production — Airports and Silos within ${next.warProductionRange ?? 0} km reload ${Math.round((1 - next.warProductionFactor) * 100)}% faster`,
+    );
   }
   return lines;
 }
@@ -422,6 +488,24 @@ export interface BuildingCard {
     /** Radius in km. */
     readonly radius: number;
   } | null;
+  /**
+   * Your working Missile Silo (GAME_DESIGN.md §3.17.8): its missiles now, what it fires and
+   * what that costs.
+   */
+  readonly silo: {
+    readonly ready: number;
+    readonly max: number;
+    /** Seconds until the next missile is back (0 = all ready). */
+    readonly secondsToNext: number;
+    /** Range in km (Infinity: the whole map). */
+    readonly range: number;
+    readonly buster: boolean;
+    /** A Silo III: seconds until the warhead can fly again; null below level III. */
+    readonly warheadSecondsLeft: number | null;
+    readonly missileCost: number;
+    readonly warheadCost: number;
+    readonly gold: number;
+  } | null;
   /** A level the game doesn't have yet (shown instead of an upgrade). */
   readonly laterLevel: string | null;
 }
@@ -484,6 +568,7 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
         : null,
     disabledSeconds: (disabledLeft(building, ctx.tick) * rules.tickMs) / 1000,
     sam: samStatus(ctx, building),
+    silo: mine ? siloStatus(ctx, building) : null,
     laterLevel:
       mine && !working && building.level === maxLevel(rules, building.type)
         ? (LATER_LEVELS[building.type] ?? null)
@@ -501,6 +586,26 @@ function samStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard[
     max: samInterceptors(rules, building.level),
     secondsToNext: next === undefined ? 0 : ((next - ctx.tick) * rules.tickMs) / 1000,
     radius: samRadius(rules, building),
+  };
+}
+
+/** Your working Silo's missiles (see BuildingCard.silo), or null. */
+function siloStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard["silo"] {
+  if (building.type !== "silo" || building.level < 1 || !ctx.me) return null;
+  const rules = ctx.rules;
+  const next = building.reloads.find((t) => t > ctx.tick);
+  return {
+    ready: siloReady(rules, building, ctx.tick),
+    max: siloSlots(rules, building.level),
+    secondsToNext: next === undefined ? 0 : seconds(rules, next - ctx.tick),
+    range: siloRange(rules, building),
+    buster: levelRules(rules, "silo", building.level).bunkerBuster === true,
+    warheadSecondsLeft: levelRules(rules, "silo", building.level).warheadCooldownTicks
+      ? seconds(rules, warheadCooldownLeft(building, ctx.tick))
+      : null,
+    missileCost: missileCost(rules, "missile"),
+    warheadCost: missileCost(rules, "warhead"),
+    gold: ctx.me.gold,
   };
 }
 
@@ -561,6 +666,7 @@ export function wallCard(ctx: BuildContext, wall: WallSnapshot): BuildingCard {
     upgrade,
     airlift: null,
     sam: null,
+    silo: null,
     laterLevel: null,
     disabledSeconds: 0,
   };

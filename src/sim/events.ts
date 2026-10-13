@@ -276,6 +276,8 @@ export type SimEvent =
       readonly type: "flightIntercepted";
       readonly flightId: number;
       readonly owner: PlayerId;
+      /** What was shot at (a missile, 2B.5, is one "plane"). */
+      readonly kind: FlightKind;
       readonly by: PlayerId;
       readonly tile: number;
       /** Where the shot came from (a SAM's tile, GAME_DESIGN.md §3.17.7, or a wall's), or -1. */
@@ -342,6 +344,40 @@ export type SimEvent =
       readonly victim: PlayerId;
       readonly tile: number;
       readonly radius: number;
+      readonly untilTick: number;
+    }
+  | {
+      /**
+       * A conventional missile (GAME_DESIGN.md §3.17.8, 2B.5) hit `tile`: `buildings` enemy
+       * buildings were struck (each has its own buildingStruck event); a strike missile also
+       * suppressed `victim`'s land there (a suppressed event; `victim` 0 = none).
+       */
+      readonly type: "missileHit";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      readonly missile: "missile" | "buster";
+      readonly tile: number;
+      readonly victim: PlayerId;
+      readonly buildings: number;
+    }
+  | {
+      /**
+       * A strategic warhead (Silo III, 2B.5) struck `tile`: `tiles` tiles within `radius`
+       * became neutral scorched land (until `untilTick`), each victim losing `tiles` tiles and
+       * `troops` home troops; `buildings` buildings were destroyed.
+       */
+      readonly type: "warheadDetonated";
+      readonly flightId: number;
+      readonly owner: PlayerId;
+      readonly tile: number;
+      readonly radius: number;
+      readonly tiles: number;
+      readonly buildings: number;
+      readonly victims: readonly {
+        readonly id: PlayerId;
+        readonly tiles: number;
+        readonly troops: number;
+      }[];
       readonly untilTick: number;
     }
   | {

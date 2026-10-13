@@ -35,6 +35,7 @@ import {
   applyAssault,
   applyTestFlight,
 } from "./systems/flights.ts";
+import { applyLaunchMissile, expireScorched } from "./systems/missiles.ts";
 import { expireSuppressions } from "./systems/suppression.ts";
 import { applyEmote, applyPing, updateChat } from "./systems/chat.ts";
 import { eliminate } from "./systems/elimination.ts";
@@ -98,8 +99,10 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 2b. Boats land (as beachhead attacks) or get home (GAME_DESIGN.md §3.18).
     advanceBoats(world);
     probe?.("boats");
-    // 2c. Suppression zones run out; flights that reach their target arrive (§3.17.7).
+    // 2c. Suppression zones and scorched land run out; flights that reach their target
+    //     arrive (§3.17.7–3.17.8).
     expireSuppressions(world);
+    expireScorched(world);
     advanceFlights(world);
     probe?.("flights");
     // 3. Fronts advance; retreating armies come home.
@@ -203,6 +206,8 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyAssault(world, player, command.buildingId, command.tile, command.percentBp);
     case "airStrike":
       return applyAirStrike(world, player, command.buildingId, command.tile);
+    case "launchMissile":
+      return applyLaunchMissile(world, player, command.buildingId, command.tile, command.missile);
     case "testFlight":
       return applyTestFlight(world, player, command.from, command.to);
     default:

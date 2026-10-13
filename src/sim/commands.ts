@@ -5,7 +5,7 @@
  * reported as events (they are normal in multiplayer, e.g. a stale click).
  */
 import type { BuildingType, PingKind } from "./rules.ts";
-import type { DonationResource, PlayerId } from "./world.ts";
+import type { DonationResource, MissileKind, PlayerId } from "./world.ts";
 
 export type Command =
   /** Choose (or move) your starting position. Spawn phase only. */
@@ -108,6 +108,19 @@ export type Command =
    * disabled, or, with none there, the enemy's land around it is suppressed.
    */
   | { readonly type: "airStrike"; readonly buildingId: number; readonly tile: number }
+  /**
+   * Missile (GAME_DESIGN.md §3.17.8, 2B.5): your Missile Silo `buildingId` fires one of its
+   * ready missiles at an enemy's `tile` within range — a strike missile (every enemy building
+   * within 8 km loses a level, the land there is suppressed), a bunker buster (Silo II: the
+   * enemy building on the tile loses two levels) or the strategic warhead (Silo III: 20 km of
+   * scorched land). Each launch costs gold.
+   */
+  | {
+      readonly type: "launchMissile";
+      readonly buildingId: number;
+      readonly tile: number;
+      readonly missile: MissileKind;
+    }
   /** Drop a map ping on `tile` for your allies and teammates. */
   | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
   /**

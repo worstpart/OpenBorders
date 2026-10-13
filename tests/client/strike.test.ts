@@ -238,6 +238,7 @@ describe("strike toasts", () => {
     const escort: SimEvent = {
       type: "flightIntercepted",
       flightId: 1,
+      kind: "assault",
       owner: 1,
       by: 3,
       tile: at(30, 10),

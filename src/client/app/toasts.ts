@@ -10,7 +10,11 @@ import { levelRules } from "../../sim/systems/buildings.ts";
 import { formatTroops } from "../format.ts";
 import { effectLines } from "./buildings.ts";
 import { PING_INFO } from "./chat.ts";
+import { isMissile } from "../../sim/systems/missiles.ts";
+import type { FlightKind } from "../../sim/world.ts";
 import { FLIGHT_INFO } from "./flights.ts";
+
+const BUSTER_LEVELS = DEFAULT_RULES.flights.busterLevels;
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -60,8 +64,72 @@ export function toastsForEvents(
 ): ToastInput[] {
   const toasts: ToastInput[] = [];
   const myTeam = teamOf(me);
+  // The kind of flight that arrived last: the buildings it strikes are its doing. A missile's
+  // hits are summed into one toast (missileHit / warheadDetonated) instead of one per building.
+  let arrived: FlightKind | null = null;
+  let mineHit = 0;
   for (const event of events) {
     switch (event.type) {
+      case "flightArrived":
+        arrived = event.kind;
+        mineHit = 0;
+        break;
+      case "missileHit": {
+        const info = FLIGHT_INFO[event.missile];
+        const levels = event.missile === "buster" ? BUSTER_LEVELS : 1;
+        if (event.owner === me) {
+          toasts.push({
+            text:
+              event.buildings > 0
+                ? `${info.icon} Your ${info.name} hit ${event.buildings} building${event.buildings > 1 ? "s" : ""}: −${levels} level${levels > 1 ? "s" : ""} each`
+                : event.missile === "buster"
+                  ? `${info.icon} Your bunker buster found nothing to hit`
+                  : `${info.icon} Your strike missile hit — no buildings there; defences suppressed`,
+            tone: "success",
+            ...(event.victim ? { player: event.victim } : {}),
+          });
+        } else if (mineHit > 0 || event.victim === me) {
+          toasts.push({
+            text:
+              mineHit > 0
+                ? `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit ${mineHit} of your buildings (−${levels} level${levels > 1 ? "s" : ""})`
+                : `${info.icon} ${nameOf(event.owner)}'s strike missile knocked out your defences there`,
+            tone: "danger",
+            player: event.owner,
+          });
+        }
+        break;
+      }
+      case "warheadDetonated": {
+        const mine = event.victims.find((v) => v.id === me);
+        if (mine) {
+          toasts.push({
+            text: `☢ ${nameOf(event.owner)}'s strategic warhead scorched ${mine.tiles.toLocaleString("en-US")} tiles of your land (−${formatTroops(mine.troops)} troops)`,
+            tone: "danger",
+            player: event.owner,
+          });
+        } else if (event.owner === me) {
+          const worst = [...event.victims].sort((a, b) => b.tiles - a.tiles)[0];
+          toasts.push({
+            text: worst
+              ? `☢ Your warhead scorched ${event.tiles.toLocaleString("en-US")} tiles — ${nameOf(worst.id)} lost ${formatTroops(worst.troops)} troops`
+              : "☢ Your warhead hit empty land",
+            tone: "success",
+            ...(worst ? { player: worst.id } : {}),
+          });
+        } else {
+          // Everyone hears of a warhead (it is rare, and it changes the game).
+          const worst = [...event.victims].sort((a, b) => b.tiles - a.tiles)[0];
+          toasts.push({
+            text: worst
+              ? `☢ ${nameOf(event.owner)}'s strategic warhead struck ${nameOf(worst.id)}`
+              : `☢ ${nameOf(event.owner)}'s strategic warhead struck empty land`,
+            tone: "info",
+            player: event.owner,
+          });
+        }
+        break;
+      }
       case "attackStarted":
         if (event.target === me) {
           toasts.push({
@@ -112,6 +180,23 @@ export function toastsForEvents(
       case "flightIntercepted": {
         // SAMs (GAME_DESIGN.md §3.17.7) and Fortress Wall flak (2B.3): our planes lost, or our hit.
         const weapon = event.weapon === "flak" ? "Fortress Wall flak" : "SAM";
+        if (isMissile(event.kind)) {
+          const info = FLIGHT_INFO[event.kind];
+          if (event.owner === me) {
+            toasts.push({
+              text: `💥 ${nameOf(event.by)}'s SAM shot down your ${info.name}`,
+              tone: "danger",
+              player: event.by,
+            });
+          } else if (event.by === me) {
+            toasts.push({
+              text: `🎯 Your SAM shot down ${nameOf(event.owner)}'s ${info.name}`,
+              tone: "success",
+              player: event.owner,
+            });
+          }
+          break;
+        }
         if (event.planes === 0) {
           // Only an escort fighter (2B.4): it took the shot meant for a plane.
           if (event.owner === me) {
@@ -150,6 +235,11 @@ export function toastsForEvents(
         break;
       }
       case "buildingStruck": {
+        // Missiles (2B.5) are summed up by missileHit / warheadDetonated.
+        if (arrived !== null && isMissile(arrived)) {
+          if (event.playerId === me) mineHit++;
+          break;
+        }
         // Air strikes (GAME_DESIGN.md §3.17.7, 2B.4): the victim and the striker hear of it.
         const name = levelRules(
           DEFAULT_RULES,

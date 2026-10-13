@@ -37,8 +37,12 @@
     port: "Port",
     airport: "Airport",
     sam: "SAM",
+    silo: "Missile Silo",
     wall: "Wall",
   } as const;
+  const MISSILE_KM = DEFAULT_RULES.flights.missileRadius;
+  const BUSTER_LEVELS = DEFAULT_RULES.flights.busterLevels;
+  const WARHEAD_KM = DEFAULT_RULES.flights.warheadRadius;
   let cardElement = $state<HTMLElement | null>(null);
   let height = $state(0);
   let viewportWidth = $state(1280);
@@ -108,7 +112,7 @@
     {/if}
     {#if card.disabledSeconds > 0}
       <div class="struck">
-        💥 Out of action after an air strike — {Math.ceil(card.disabledSeconds)} s
+        💥 Out of action after a strike — {Math.ceil(card.disabledSeconds)} s
       </div>
     {/if}
     {#if card.effects.length > 0}
@@ -152,6 +156,74 @@
         >
       </div>
       <div class="muted hint">Press V to see every SAM's range (air defence view)</div>
+    {/if}
+
+    {#if card.silo}
+      {@const silo = card.silo}
+      {@const empty = silo.ready < 1}
+      <div class="divider"></div>
+      <div class="sam">
+        <span class="muted">Missiles</span>
+        <span class="shots" aria-label="{silo.ready} of {silo.max} ready">
+          {#each Array.from({ length: silo.max }, (_, k) => k) as k (k)}<span
+              class="shot"
+              class:on={k < silo.ready}
+            ></span>{/each}
+        </span>
+        <span class="muted"
+          >{silo.ready === silo.max
+            ? "all ready"
+            : `next in ${Math.ceil(silo.secondsToNext)} s`}</span
+        >
+      </div>
+      <button
+        type="button"
+        class="upgrade"
+        disabled={empty || silo.gold < silo.missileCost}
+        onclick={() => onAirlift(card.id, "missile")}
+      >
+        <span>🚀 Strike missile</span>
+        <span class="price" class:short={silo.gold < silo.missileCost}
+          >{formatTroops(silo.missileCost)}</span
+        >
+      </button>
+      <div class="muted hint">
+        Every enemy building within {MISSILE_KM} km of the target loses a level; their walls there stop
+        working for a while. SAM II+ can shoot it down
+      </div>
+      {#if silo.buster}
+        <button
+          type="button"
+          class="upgrade"
+          disabled={empty || silo.gold < silo.missileCost}
+          onclick={() => onAirlift(card.id, "buster")}
+        >
+          <span>🎯 Bunker buster</span>
+          <span class="price" class:short={silo.gold < silo.missileCost}
+            >{formatTroops(silo.missileCost)}</span
+          >
+        </button>
+        <div class="muted hint">One enemy building loses {BUSTER_LEVELS} levels</div>
+      {/if}
+      {#if silo.warheadSecondsLeft !== null}
+        <button
+          type="button"
+          class="upgrade"
+          disabled={empty || silo.warheadSecondsLeft > 0 || silo.gold < silo.warheadCost}
+          onclick={() => onAirlift(card.id, "warhead")}
+        >
+          <span>☢ Strategic warhead</span>
+          <span class="price" class:short={silo.gold < silo.warheadCost}
+            >{silo.warheadSecondsLeft > 0
+              ? `ready in ${Math.ceil(silo.warheadSecondsLeft)} s`
+              : formatTroops(silo.warheadCost)}</span
+          >
+        </button>
+        <div class="muted hint">
+          Anywhere: {WARHEAD_KM} km of enemy land becomes scorched no-man's-land — buildings destroyed,
+          troops lost. Hitting an ally breaks the alliance. Only SAM III stops it
+        </div>
+      {/if}
     {/if}
 
     {#if card.airlift}

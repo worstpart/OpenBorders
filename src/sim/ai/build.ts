@@ -69,6 +69,8 @@ import { distanceSq, withinRange } from "../geometry.ts";
 import { bordersTarget } from "../systems/attacks.ts";
 import { airportRange, ASSAULT_LEVEL, samInterceptors, STRIKE_LEVEL } from "../systems/flights.ts";
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
+import { siloRange } from "../systems/missiles.ts";
+import { runawayLeader } from "./missile.ts";
 import { expectedTradePerTick } from "../systems/trade.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
 import {
@@ -139,10 +141,19 @@ function buildingGoal(world: World, bot: Player): Goal | null {
   // Worked out only when an Airport option is affordable soon (it scans enemies' borders).
   let prospect: boolean | null = null;
   const assaults = () => (prospect ??= assaultProspect(world, bot));
+  let siloTargets: boolean | null = null;
+  const missiles = () => (siloTargets ??= siloProspect(world, bot));
   for (const b of mine) {
     if (b.level >= maxLevel(rules, b.type)) continue;
     const level = b.level + 1;
     const price = buildingPrice(rules, b.type, level, levelsOwned(world.buildings, bot.id, b.type));
+    if (b.type === "silo") {
+      if (price <= reach && missiles()) {
+        const value = siloValue(world, bot, level) - siloValue(world, bot, b.level);
+        consider(price, value, { ...none, upgrade: b.id });
+      }
+      continue;
+    }
     if (b.type === "airport") {
       // The Air Base (2B.4): strikes, worth it while enemy buildings stand within its reach.
       if (level >= STRIKE_LEVEL) {
@@ -184,6 +195,12 @@ function buildingGoal(world: World, bot: Player): Goal | null {
       )
         continue;
       const price = buildingPrice(rules, type, 1, levelsOwned(world.buildings, bot.id, type));
+      // One Silo, and only with enemy buildings in its reach (2B.5).
+      if (type === "silo") {
+        if (mine.some((b) => b.type === "silo") || price > reach || !missiles()) continue;
+        consider(price, siloValue(world, bot, 1), { ...none, newType: type });
+        continue;
+      }
       const assault = type === "airport" && price <= reach && assaults();
       if (type === "airport" && !needy && !assault) continue;
       const value =
@@ -541,8 +558,48 @@ function strikeProspect(world: World, bot: Player, airport: Building): boolean {
   });
 }
 
-/** What SAMs guard (GAME_DESIGN.md §3.17.7): the bot's economy and its Airports. */
-const GUARDED: ReadonlySet<BuildingType> = new Set<BuildingType>(["housing", "factory", "airport"]);
+/**
+ * True when a building of an enemy nation or human (not a friend, not a tribe) stands within
+ * Silo I range of the middle of the bot's land (2B.5): something for its missiles to hit.
+ */
+function siloProspect(world: World, bot: Player): boolean {
+  const levels = world.rules.buildings.types.silo.levels;
+  const middle = landMiddle(world, bot);
+  if (middle < 0 || levels.length === 0) return false;
+  const reach = levels[0]!.range ?? 0;
+  return world.buildings.some((b) => {
+    if (b.owner === bot.id || areFriendly(world, bot.id, b.owner)) return false;
+    const owner = getPlayer(world, b.owner);
+    if (!owner?.alive || isTribe(owner)) return false;
+    return withinRange(world.map, middle, b.tile, reach);
+  });
+}
+
+/**
+ * What a Silo at `level` is worth (2B.5): `siloWorth` × capacity for the whole ladder, each
+ * level counting its share of the price; the Strategic Missile Complex counts double while a
+ * runaway leader stands (its warhead is what checks them).
+ */
+function siloValue(world: World, bot: Player, level: number): number {
+  const levels = world.rules.buildings.types.silo.levels;
+  if (level < 1) return 0;
+  let total = 0;
+  let paid = 0;
+  for (let l = 1; l <= levels.length; l++) {
+    const cost = levels[l - 1]!.cost;
+    total += cost;
+    if (l <= level) paid += cost * (l === 3 && runawayLeader(world, bot) ? 2 : 1);
+  }
+  return world.rules.ai.build.siloWorth * bot.capacity * (paid / total);
+}
+
+/** What SAMs guard (GAME_DESIGN.md §3.17.7): the bot's economy, Airports and Silos. */
+const GUARDED: ReadonlySet<BuildingType> = new Set<BuildingType>([
+  "housing",
+  "factory",
+  "airport",
+  "silo",
+]);
 
 /** The bot's guarded buildings while an air threat hangs over them (see the header). */
 interface AirDefence {
@@ -558,13 +615,21 @@ function airDefence(world: World, bot: Player, mine: readonly Building[]): AirDe
   const guarded = mine.filter((b) => GUARDED.has(b.type));
   if (guarded.length === 0) return null;
   const margin = rules.ai.build.samThreatMargin;
+  // Hostile Airports and Silos (2B.5) whose reach covers one of them.
   const threat = world.buildings.some(
     (a) =>
-      a.type === "airport" &&
+      (a.type === "airport" || a.type === "silo") &&
       a.level >= 1 &&
       a.owner !== bot.id &&
       !areFriendly(world, bot.id, a.owner) &&
-      guarded.some((g) => withinRange(world.map, a.tile, g.tile, airportRange(rules, a) + margin)),
+      guarded.some((g) =>
+        withinRange(
+          world.map,
+          a.tile,
+          g.tile,
+          (a.type === "silo" ? siloRange(rules, a) : airportRange(rules, a)) + margin,
+        ),
+      ),
   );
   if (!threat) return null;
   let totalLevels = 0;

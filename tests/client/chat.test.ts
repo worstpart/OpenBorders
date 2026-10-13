@@ -123,6 +123,8 @@ describe("the incoming-threat warning", () => {
       flights: [],
       friends: new Set(),
       me: 1,
+      buildings: [],
+      width: 5,
       tick: 40,
     });
     expect(threats.map((t) => t.key)).toEqual(["boat:1", "boat:3"]);
@@ -139,6 +141,8 @@ describe("the incoming-threat warning", () => {
         friends: new Set(),
         me: 0,
         tick: 0,
+        buildings: [],
+        width: 5,
       }),
     ).toEqual([]);
   });
@@ -166,6 +170,8 @@ describe("the incoming-threat warning", () => {
       flights: [flight(7, 2, 0), flight(8, 1, 0), flight(9, 3, 1), flight(10, 2, 2)],
       friends: new Set([3]),
       me: 1,
+      buildings: [],
+      width: 5,
       tick: 40,
     });
     expect(threats.map((t) => t.key)).toEqual(["boat:1", "flight:7"]);
@@ -175,6 +181,7 @@ describe("the incoming-threat warning", () => {
       from: 2,
       planes: 4,
       tile: 0,
+      warning: false,
       secondsLeft: 2.7,
     });
   });
@@ -197,6 +204,7 @@ describe("alert sounds", () => {
     planes: kind === "boat" ? 0 : 4,
     tile: 0,
     secondsLeft: 10,
+    warning: false,
   });
 
   it("a land attack on us sounds once per attacker, then that attacker is quiet for 30 s", () => {

@@ -42,12 +42,45 @@ export function buildingsEnabled(rules: GameRules): boolean {
 
 /**
  * Building types this game offers: Ports only come with boats (GAME_DESIGN.md §3.18),
- * Airports and SAMs with flights (§3.17.7).
+ * Airports, SAMs and Missile Silos with flights (§3.17.7–3.17.8: missiles are flights).
  */
 export function buildingAvailable(rules: GameRules, type: BuildingType): boolean {
   if (type === "port") return rules.naval.enabled;
-  if (type === "airport" || type === "sam") return rules.flights.enabled;
+  if (type === "airport" || type === "sam" || type === "silo") return rules.flights.enabled;
   return true;
+}
+
+/**
+ * Factory III's war production (GAME_DESIGN.md §3.17.9, 2B.5): the share of the usual time
+ * `building`'s reloads and mission cooldowns take — less than 1 while a working factory of its
+ * owner with war production stands within that factory's range of it (the best one counts).
+ */
+export function warProduction(
+  world: World,
+  building: { readonly owner: PlayerId; readonly tile: number },
+): number {
+  let factor = 1;
+  const rules = world.rules;
+  for (const b of world.buildings) {
+    if (b.type !== "factory" || b.owner !== building.owner || !working(b, world.tick)) continue;
+    const effect = levelRules(rules, "factory", b.level);
+    const share = effect.warProductionFactor ?? 1;
+    if (share >= factor) continue;
+    if (withinRange(world.map, b.tile, building.tile, effect.warProductionRange ?? 0)) {
+      factor = share;
+    }
+  }
+  return factor;
+}
+
+/** `ticks` shortened by war production for `building` (whole ticks). */
+export function producedTicks(
+  world: World,
+  building: { readonly owner: PlayerId; readonly tile: number },
+  ticks: number,
+): number {
+  const factor = warProduction(world, building);
+  return factor === 1 ? ticks : Math.round(ticks * factor);
 }
 
 export function isBuildingType(value: unknown): value is BuildingType {

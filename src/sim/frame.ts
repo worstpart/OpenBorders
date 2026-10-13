@@ -16,6 +16,7 @@ import type {
   Ping,
   PlayerId,
   PlayerKind,
+  Scorched,
   Suppression,
   TradeShip,
   World,
@@ -225,6 +226,8 @@ export interface TickFrame {
   readonly flights: readonly FlightSnapshot[];
   /** Suppression zones in force (air strikes on a point, 2B.4), oldest first. */
   readonly suppressions: readonly Suppression[];
+  /** Scorched land in force (strategic warheads, 2B.5), oldest first. */
+  readonly scorched: readonly Scorched[];
   /** Map pings still showing, oldest first. */
   readonly pings: readonly PingSnapshot[];
   readonly events: readonly SimEvent[];
@@ -355,6 +358,7 @@ function snapshotFlight(flight: Flight): FlightSnapshot {
 
 const NONE: readonly number[] = Object.freeze([]);
 const NO_ZONES: readonly Suppression[] = Object.freeze([]);
+const NO_SCORCHED: readonly Scorched[] = Object.freeze([]);
 
 export function buildFrame(world: World): TickFrame {
   const changedTiles = world.changes.toArray();
@@ -410,6 +414,7 @@ export function buildFrame(world: World): TickFrame {
     flights: world.flights.map(snapshotFlight),
     suppressions:
       world.suppressions.length > 0 ? world.suppressions.map((z) => ({ ...z })) : NO_ZONES,
+    scorched: world.scorched.length > 0 ? world.scorched.map((z) => ({ ...z })) : NO_SCORCHED,
     pings: world.pings.map((p) => ({ ...p })),
     events: world.events.slice(),
     winner: world.winner,

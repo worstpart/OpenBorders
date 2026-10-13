@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ · 2B.5 ✅ |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -512,7 +512,7 @@ bot games before anyone has to play them.
 | 2B.2 ✅ | **SAM I–III** — interceptors, reload, radius rings, air-defense view, hostile-airspace rule, SAM destruction; AI SAM placement (cover Housing/Factory/Airports) | 2B.0 (shoots airlifts over hostile airspace from day one) | Airlifts lose planes over hostile SAMs exactly per the rule; no stacking bonuses |
 | 2B.3 ✅ | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 ✅ | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
-| 2B.5 | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
+| 2B.5 ✅ | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
 | 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
 
 **Milestone 2B.0 result (2026-10-06)** — the flight foundation (ARCHITECTURE §5.7 "as built").
@@ -713,6 +713,32 @@ and "Out of action after an air strike — 10 s" on its card; a suppression zone
 "💥 suppressed · 24 s"; no console errors. Not seen clearly in the browser (unit-tested):
 escort fighters on the map. Tests: 442 (`tests/sim/strike.test.ts`, `tests/client/strike.test.ts`,
 one D-029 test in `tests/sim/assault.test.ts`).
+
+**Milestone 2B.5 result (2026-10-12)** — Missile Silo I–III, SAM II/III against missiles, Factory
+III war production, explosion particles (GAME_DESIGN §3.17.8 "as built (2B.5)", ARCHITECTURE §5.7,
+D-030). **Rules:** Silo 250k / +400k / +800k (15 / 20 / 30 s); slots 1 / 2 / 3, reload 30 / 25 /
+20 s; range 250 / 400 km / the whole map; strike missile 75k (enemy buildings within 8 km −1
+level, out of action 20 s; the target's land suppressed 8 km for 30 s), bunker buster (II, 75k,
+−2 levels), strategic warhead (III, 500k, 90 s: 20 km scorched neutral land, 3× expansion cost for
+60 s, buildings destroyed, home troops lost in proportion; allies hit → alliance broken). SAM II
+stops missiles, SAM III the warhead too, and warns of launches within 90 km; Factory III: Airports
+and Silos within 60 km reload 25% faster. **Particles (the user's request mid-milestone):** every
+explosion (SAM/flak hits, strikes landing, buildings hit, missile and warhead blasts) throws
+sparks, fire, smoke and debris — client-only. **Nations:** `ai/missile.ts` (see GAME_DESIGN);
+`siloWorth` 0.4. **Headless** (30 games each, before in brackets): Islands median 22.7 min
+[23.0], 0.9 Silos, 0.1 Silo III, 0.3 strike missiles + 1.8 bunker busters, one warhead in 30
+games (1,257 tiles, 23K troops), 0.1 Air Bases [0.2]; Continent 9.0 [8.6], no Silos; Two lands
+teams 5.0 [5.4]. **Regression:** flights-off games replay 2B.4 (6cea105) exactly (12 games, 4
+configs). **Browser** (own tab, Islands, Easy, 0 tribes, gold from allied nations by `sendAs`):
+Silo I → III built and upgraded; the cards ("Missiles ▮▮▮ all ready", 🚀 Strike missile 75K,
+🎯 Bunker buster, ☢ Strategic warhead 500K); aiming labels "🚀 2 buildings −1 level · suppress
+8 km for 30 s · 75K gold · 8 s" and "☢ scorch 1,257 tiles of land · 500K gold · 9 s"; "⚠ SAMs on
+the route would shoot it down" with only the SAM II ringed; a strike missile struck a Port II and
+destroyed a Housing; missiles and a bunker buster shot down by a SAM II (explosion particles in
+slow motion); the warhead's blast (fire, sparks, debris, shock ring), the charred "☢ scorched ·
+60 s" circle and the toast "☢ Your warhead scorched 1,257 tiles — Valdorra lost 12.5K troops"; no
+console errors. First version drew the smoke over the fire — fixed (smoke underneath, lighter).
+Tests: 473 (`tests/sim/missile.test.ts`, `tests/client/missile.test.ts`).
 
 **Dependency map** (what must exist first):
 

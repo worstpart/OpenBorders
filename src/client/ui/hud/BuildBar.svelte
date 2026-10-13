@@ -56,6 +56,17 @@
             build
           {/if}
           <span class="muted">· Esc to cancel</span>
+        {:else if airlift?.mode === "missile"}
+          Click enemy land within range for a strike missile — its buildings within {DEFAULT_RULES
+            .flights.missileRadius} km lose a level
+          <span class="muted">· Esc or right-click to cancel</span>
+        {:else if airlift?.mode === "buster"}
+          Click an enemy building within range for a bunker buster
+          <span class="muted">· Esc or right-click to cancel</span>
+        {:else if airlift?.mode === "warhead"}
+          Click enemy land anywhere for the strategic warhead — {DEFAULT_RULES.flights
+            .warheadRadius} km scorched
+          <span class="muted">· Esc or right-click to cancel</span>
         {:else if airlift?.mode === "strike"}
           Click an enemy building, or their land (walls), within range for an air strike
           <span class="muted">· Esc or right-click to cancel</span>

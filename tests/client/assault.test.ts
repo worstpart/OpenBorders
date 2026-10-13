@@ -188,6 +188,7 @@ describe("assault and flak toasts", () => {
     const flak = (owner: number, by: number): SimEvent => ({
       type: "flightIntercepted",
       flightId: 1,
+      kind: "assault",
       owner,
       by,
       tile: at(40, 10),

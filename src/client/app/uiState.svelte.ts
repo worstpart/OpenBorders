@@ -276,9 +276,11 @@ class UiState {
       owner: this.owner,
       boats: this.boats,
       flights: this.flights,
+      buildings: this.buildings,
       friends: this.friends,
       me: this.me?.alive ? this.localPlayerId : 0,
       tick: this.tick,
+      width: this.map?.width ?? 0,
     };
   }
 

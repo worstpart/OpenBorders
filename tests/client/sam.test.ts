@@ -75,13 +75,18 @@ describe("SAM card", () => {
     expect(buildingCard(ctx(), building({ owner: 3 })).sam).not.toBeNull();
   });
 
-  it("marks what only comes with missiles as later", () => {
+  it("names what each level adds against missiles (2B.5)", () => {
     expect(upgradeLines(DEFAULT_RULES, "sam", 1)).toEqual([
       "Radius 35 km",
       "2 interceptors, reload 8 s each",
-      "Later: also intercepts missiles (with Missile Silos)",
+      "New: also shoots down missiles (not warheads)",
     ]);
-    expect(upgradeLines(DEFAULT_RULES, "sam", 2).at(-1)).toMatch(/^Later: /);
+    expect(upgradeLines(DEFAULT_RULES, "sam", 2)).toEqual([
+      "Radius 45 km",
+      "3 interceptors, reload 6 s each",
+      "New: stops strategic warheads — the only defence against them",
+      "New: early warning of enemy launches within 90 km",
+    ]);
   });
 });
 
@@ -116,6 +121,7 @@ describe("SAM toasts", () => {
   const shot = (owner: number, by: number, planesLeft = 3): SimEvent => ({
     type: "flightIntercepted",
     flightId: 1,
+    kind: "airlift",
     owner,
     by,
     tile: at(40, 10),

@@ -600,3 +600,28 @@ encircled as before. Nations aim their counter-attack at the landing pocket.
 **Alternatives.** Keep collisions but only near the pocket (attacks target players, not places —
 much more state); let the landed army's troops defend the pocket (a second defence model).
 
+
+## D-030 — Missile details, the warhead's blast, and explosion particles · Accepted 2026-10-12
+
+**Context.** GAME_DESIGN §3.17.8 fixed the Silo's levels, prices and the three missiles, but not
+who a blast hits, how missiles meet SAMs, or how the warhead treats your own side. The handoff
+said to ask the user only if the scorched-land rule changed the game a lot; it doesn't (one
+warhead in 30 long headless games). During 2B.5 the user asked for **particle effects on every
+explosion** ("airstrikes, missiles, blocked missiles by SAMs, anywhere where there will be an
+explosion").
+
+**Decision** (mine, minor — the user may revisit after playing):
+- Missiles hit enemies only: a strike missile spares your and your friends' buildings; a bunker
+  buster must be aimed at an enemy building.
+- The **warhead** scorches everyone's land in 20 km **except yours and your teammates'**; allies
+  are hit and the alliance breaks with you as the traitor (as the design said). It must be aimed
+  at a hostile player's tile. The victims lose home troops in the share of their land lost, and
+  the launcher counts as who took their land (loot if it eliminates them).
+- Missiles are one "plane" each; SAM II+ stop conventional missiles, only SAM III the warhead;
+  flak ignores missiles. Several missiles at once saturate interceptors.
+- Firing spends a Silo slot (the warhead too) and costs gold up front.
+- **Particles** are client-only visuals (they never touch the simulation), placed in 2B.5
+  because the missile explosions were being built.
+
+**Alternatives.** A blast that hits the launcher too (OpenFront-like, but a trap for new players
+firing near their own border); interceptable-by-any-SAM missiles (would make SAM I enough).

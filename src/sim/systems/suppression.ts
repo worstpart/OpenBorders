@@ -2,7 +2,7 @@
  * Suppression zones (GAME_DESIGN.md §3.17.7, milestone 2B.4): an air strike on a point
  * suppresses the struck player's land around it for a while — walls there hold nothing and
  * cost nothing extra to break, Fortress Wall flak there is silent, and attacks taking that
- * land pay `suppressedLoss`× the losses. Missiles (2B.5) will suppress the same way.
+ * land pay `suppressedLoss`× the losses. Strike missiles (2B.5) suppress the same way.
  *
  * The zone belongs to the land's owner at the time of the strike (`victim`): a tile inside
  * the circle counts only while the victim still holds it. The wall hooks (walls.ts), the
@@ -23,26 +23,22 @@ export function isSuppressed(world: World, tile: number): boolean {
   return false;
 }
 
-/** Starts a suppression zone over `victim`'s land around `tile` (see the header). */
+/**
+ * Starts a suppression zone over `victim`'s land around `tile` (see the header): an air
+ * strike's size by default; a strike missile's (2B.5) passes its own.
+ */
 export function suppress(
   world: World,
   flightId: number,
   by: PlayerId,
   victim: PlayerId,
   tile: number,
+  radius = world.rules.flights.suppressionRadius,
+  ticks = world.rules.flights.suppressionTicks,
 ): void {
-  const f = world.rules.flights;
-  const untilTick = world.tick + f.suppressionTicks;
-  world.suppressions.push({ tile, radius: f.suppressionRadius, victim, by, untilTick });
-  world.events.push({
-    type: "suppressed",
-    flightId,
-    by,
-    victim,
-    tile,
-    radius: f.suppressionRadius,
-    untilTick,
-  });
+  const untilTick = world.tick + ticks;
+  world.suppressions.push({ tile, radius, victim, by, untilTick });
+  world.events.push({ type: "suppressed", flightId, by, victim, tile, radius, untilTick });
 }
 
 /** Tick system part (step 2c, before the flights): zones whose time is up are lifted. */

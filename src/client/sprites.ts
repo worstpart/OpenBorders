@@ -3,7 +3,8 @@
  * `tools/iconPack.mjs` into `assets/icons/<kind>-<level>.png` — buildings, walls and vehicles,
  * one per level, the eras WW1 → WW2 → Modern standing for levels I → III — and four single
  * missiles (`<kind>.png`). The map draws them on Canvas2D (render/), the HUD as plain images
- * (BuildingIcon.svelte). SAMs use theirs since 2B.2; Silo and missile art waits for 2B.5;
+ * (BuildingIcon.svelte). SAMs use theirs since 2B.2, the Silo and missiles since 2B.5 (missiles,
+ * unlike the isometric vehicles, are turned to their heading: `rotation`);
  * walls are drawn as lines on the map and use their art in the HUD; warships have no art yet.
  *
  * The isometric art does not rotate well, so vehicles are mirrored left/right by heading
@@ -139,7 +140,8 @@ function shrink(image: HTMLImageElement, width: number): HTMLCanvasElement {
 export const sprites = new SpriteCache();
 
 /**
- * Draws a sprite `width` CSS px wide, its centre at (x, y); `flip` mirrors it left/right.
+ * Draws a sprite `width` CSS px wide, its centre at (x, y); `flip` mirrors it left/right and
+ * `rotation` (radians) turns it.
  * Returns false (drawing nothing) while the image is still loading.
  */
 export function drawSprite(
@@ -150,6 +152,7 @@ export function drawSprite(
   y: number,
   width: number,
   flip = false,
+  rotation = 0,
 ): boolean {
   const ratio = window.devicePixelRatio || 1;
   const image = sprites.get(kind, level, width * ratio);
@@ -157,6 +160,7 @@ export function drawSprite(
   const height = (width * image.height) / image.width;
   ctx.save();
   ctx.translate(x, y);
+  if (rotation !== 0) ctx.rotate(rotation);
   if (flip) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";

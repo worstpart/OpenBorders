@@ -32,6 +32,7 @@ import {
 import { isAllied, isTraitor } from "./diplomacy.ts";
 import { wallBreakTroops, wallHoldTicks, wallLossFactor } from "./walls.ts";
 import { isSpawnProtected } from "./spawn.ts";
+import { scorchedFactor } from "./missiles.ts";
 import { isSuppressed } from "./suppression.ts";
 import { gradientNoise } from "../map/noise.ts";
 import { TileQueue } from "./tileQueue.ts";
@@ -390,8 +391,14 @@ function growthResistance(world: World, attack: Attack, tile: number): number {
 /** Troops the attacker pays to take `tile`. */
 export function tileCost(world: World, attack: Attack, tile: number): number {
   const terrain = world.map.terrain[tile]!;
-  if (attack.target === NEUTRAL)
-    return attack.lossFactor * terrainValue(world.rules.expansion.costPerTile, terrain);
+  if (attack.target === NEUTRAL) {
+    // Scorched land (a strategic warhead, 2B.5) is dearer to settle for a while.
+    return (
+      attack.lossFactor *
+      scorchedFactor(world, tile) *
+      terrainValue(world.rules.expansion.costPerTile, terrain)
+    );
+  }
   const { combat } = world.rules;
   const defender = getPlayer(world, attack.target)!;
   const ratio = clamp(outnumbering(world, attack), combat.lossRatioMin, combat.lossRatioMax);

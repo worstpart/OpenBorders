@@ -14,27 +14,36 @@
  * lift's planes, and each suppression zone as an orange hatched circle with its countdown
  * (zones are public, like flights).
  *
+ * Missiles (2B.5): the second sheet's missile art turned to its heading (strike missiles by the
+ * Silo's era, the bunker buster and the warhead their own), a blast where one hits — a flash and
+ * a ring over its radius — and scorched land as a charred circle with its countdown.
+ *
  * Drawn with Canvas2D on the label overlay, like boats. Positions come from the tick alone
  * (app/flights.ts → the simulation's flightPoint), so flights glide smoothly between ticks.
  * Until the image has loaded, a plain aircraft glyph stands in.
  */
 import type { BuildingSnapshot, FlightSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
-import type { Suppression } from "../../sim/world.ts";
+import type { Scorched, Suppression } from "../../sim/world.ts";
+import { isMissile } from "../../sim/systems/missiles.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import {
   FLIGHT_INFO,
   flightPosition,
   flightSecondsLeft,
   flightSprite,
+  BLAST_MS,
   liftProblemText,
+  missileEffectText,
   PUFF_MS,
   SHOT_MS,
   strikeEffectText,
   type AirliftPreview,
+  type BlastEffect,
   type ShotEffect,
 } from "../app/flights.ts";
 import { formatTroops } from "../format.ts";
+import type { ParticleSystem } from "./particles.ts";
 import { drawSprite, FACES_LEFT, spriteHeight } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
@@ -59,8 +68,16 @@ export interface FlightDrawInput {
   readonly now: number;
   /** Suppression zones in force (air strikes on a point, 2B.4). */
   readonly suppressions: readonly Suppression[];
+  /** Scorched land in force (strategic warheads, 2B.5), and missile blasts still showing. */
+  readonly scorched: readonly Scorched[];
+  readonly blasts: readonly BlastEffect[];
+  /** Explosion particles (sparks, fire, smoke, debris), drawn over everything else. */
+  readonly particles: ParticleSystem | null;
   readonly rules: GameRules;
 }
+
+/** The missile art points up and to the right; this is its angle (radians, screen y down). */
+const MISSILE_ART_ANGLE = -0.6;
 
 const MINE = "rgba(246, 241, 228, 0.8)";
 const THREAT = "rgba(255, 110, 90, 0.9)";
@@ -86,7 +103,10 @@ export class FlightLayer {
       input.flights.length === 0 &&
       !input.airlift &&
       input.shots.length === 0 &&
-      input.suppressions.length === 0
+      input.suppressions.length === 0 &&
+      input.scorched.length === 0 &&
+      input.blasts.length === 0 &&
+      !input.particles?.active
     )
       return;
     const ctx = this.context;
@@ -104,6 +124,9 @@ export class FlightLayer {
     const me = input.localPlayerId;
     const size = Math.max(26, Math.min(44, view.zoom * 5));
 
+    for (const zone of input.scorched) {
+      this.scorchedZone(zone, tileScreen, view.zoom, input.tick, input.tickMs, w, h);
+    }
     for (const zone of input.suppressions) {
       this.zone(zone, tileScreen, view.zoom, input.tick, input.tickMs, w, h);
     }
@@ -149,6 +172,10 @@ export class FlightLayer {
       const level = Math.max(1, source?.level ?? 1);
       const color = input.colorOf(flight.owner);
       const sprite = flightSprite(flight.kind);
+      if (isMissile(flight.kind)) {
+        this.missile(sprite, level, p.x, p.y, at.dx, at.dy, size, color);
+        continue;
+      }
       const height = spriteHeight(sprite, level, size);
       this.shadow(p.x, p.y + height * 0.55, size, color);
       const flip = FACES_LEFT[sprite] ? at.dx > 0 : at.dx < 0;
@@ -176,7 +203,111 @@ export class FlightLayer {
       }
     }
     for (const shot of input.shots) this.shot(shot, tileScreen, input.now, view.zoom);
+    for (const blast of input.blasts) this.blast(blast, tileScreen, input.now, view.zoom);
+    input.particles?.draw(ctx, toScreen, view.zoom, input.now, w, h);
     for (const label of labels) this.label(label.x, label.y, label.text);
+  }
+
+  /** A missile: its art turned to its heading, a faint smoke trail behind in its owner's colour. */
+  private missile(
+    sprite: ReturnType<typeof flightSprite>,
+    level: number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    size: number,
+    color: string,
+  ): void {
+    const ctx = this.context;
+    const heading = dx === 0 && dy === 0 ? 0 : Math.atan2(dy, dx);
+    const length = Math.hypot(dx, dy) || 1;
+    const back = { x: x - (dx / length) * size * 0.9, y: y - (dy / length) * size * 0.9 };
+    ctx.save();
+    const gradient = ctx.createLinearGradient(back.x, back.y, x, y);
+    gradient.addColorStop(0, "rgba(220, 220, 220, 0)");
+    gradient.addColorStop(1, color);
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(back.x, back.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.restore();
+    const width = size * (sprite === "icbm" ? 1.1 : 0.85);
+    if (!drawSprite(ctx, sprite, level, x, y, width, false, heading - MISSILE_ART_ANGLE)) {
+      this.aircraft(x, y, dx, dy, size * 0.5, color);
+    }
+  }
+
+  /** A missile's blast: a bright flash, then a ring spreading over its radius and fading. */
+  private blast(
+    blast: BlastEffect,
+    tileScreen: (tile: number) => { x: number; y: number },
+    now: number,
+    zoom: number,
+  ): void {
+    const age = now - blast.start;
+    if (age < 0 || age > BLAST_MS) return;
+    const t = age / BLAST_MS;
+    const c = tileScreen(blast.tile);
+    const r = Math.max(8, blast.radius * zoom);
+    const ctx = this.context;
+    ctx.save();
+    // The flash: brightest at once, gone by a third of the way.
+    const flash = Math.max(0, 1 - t * 3);
+    if (flash > 0) {
+      const glow = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * (0.4 + 0.6 * t * 3));
+      glow.addColorStop(0, `rgba(255, 250, 225, ${0.95 * flash})`);
+      glow.addColorStop(0.5, `rgba(255, 190, 90, ${(blast.warhead ? 0.7 : 0.5) * flash})`);
+      glow.addColorStop(1, "rgba(255, 120, 40, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // The shock ring.
+    ctx.globalAlpha = 1 - t;
+    ctx.lineWidth = blast.warhead ? 4 : 2.5;
+    ctx.strokeStyle = blast.warhead ? "rgba(255, 210, 140, 0.95)" : "rgba(255, 170, 80, 0.9)";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r * Math.min(1, 0.15 + t * 1.2), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Scorched land (a warhead, 2B.5): a charred circle with its countdown. */
+  private scorchedZone(
+    zone: Scorched,
+    tileScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+    tick: number,
+    tickMs: number,
+    w: number,
+    h: number,
+  ): void {
+    const c = tileScreen(zone.tile);
+    const r = zone.radius * zoom;
+    if (c.x + r < 0 || c.y + r < 0 || c.x - r > w || c.y - r > h) return;
+    const ctx = this.context;
+    ctx.save();
+    const char = ctx.createRadialGradient(c.x, c.y, r * 0.2, c.x, c.y, r);
+    char.addColorStop(0, "rgba(28, 20, 16, 0.55)");
+    char.addColorStop(0.8, "rgba(45, 30, 22, 0.4)");
+    char.addColorStop(1, "rgba(60, 38, 26, 0.15)");
+    ctx.fillStyle = char;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.setLineDash([3, 5]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(255, 120, 70, 0.6)";
+    ctx.stroke();
+    ctx.restore();
+    const seconds = Math.max(0, Math.ceil(((zone.untilTick - tick) * tickMs) / 1000));
+    this.label(c.x, c.y - r - 8, `☢ scorched · ${seconds} s`, "#ff9a6b");
   }
 
   /** A SAM shot: the streak flies to the plane, then a puff blooms and fades there. */
@@ -312,16 +443,19 @@ export class FlightLayer {
   ): void {
     const ctx = this.context;
     const from = tileScreen(aim.airport.tile);
-    ctx.save();
-    ctx.setLineDash([8, 6]);
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "rgba(246, 241, 228, 0.7)";
-    ctx.fillStyle = "rgba(246, 241, 228, 0.05)";
-    ctx.beginPath();
-    ctx.arc(from.x, from.y, aim.range * zoom, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    if (Number.isFinite(aim.range)) {
+      // (A Silo III reaches the whole map: no ring.)
+      ctx.save();
+      ctx.setLineDash([8, 6]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(246, 241, 228, 0.7)";
+      ctx.fillStyle = "rgba(246, 241, 228, 0.05)";
+      ctx.beginPath();
+      ctx.arc(from.x, from.y, aim.range * zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     if (aim.tile === null) return;
     const to = tileScreen(aim.tile);
     const color = aim.problem ? BAD : OK;
@@ -340,13 +474,44 @@ export class FlightLayer {
       ctx.stroke();
       ctx.restore();
     }
+    if (aim.missile && aim.missile.kind !== "buster") {
+      // The area a strike missile hits (orange) or a warhead scorches (red).
+      const warhead = aim.missile.kind === "warhead";
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = warhead ? "rgba(255, 90, 70, 0.9)" : "rgba(255, 150, 70, 0.8)";
+      ctx.fillStyle = warhead ? "rgba(255, 70, 50, 0.12)" : "rgba(255, 140, 60, 0.08)";
+      ctx.beginPath();
+      ctx.arc(to.x, to.y, aim.missile.radius * zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     const text = aim.problem
       ? liftProblemText(aim.mode, aim.problem)
       : aim.strike
         ? `💥 ${strikeEffectText(rules, aim.strike)} · ${Math.ceil(aim.seconds)} s`
-        : `${aim.mode === "assault" ? "🪂" : "✈"} ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
+        : aim.missile
+          ? `${FLIGHT_INFO[aim.mode].icon} ${missileEffectText(rules, aim.missile)} · ${formatTroops(aim.cost)} gold · ${Math.ceil(aim.seconds)} s`
+          : `${aim.mode === "assault" ? "🪂" : "✈"} ${formatTroops(aim.troops)} · ${Math.ceil(aim.seconds)} s`;
     this.label(to.x, to.y - Math.max(10, zoom * 1.5) - 8, text);
-    if (!aim.problem && aim.planesLost > 0) {
+    if (aim.missile?.kind === "warhead" && aim.missile.allies.length > 0) {
+      this.label(
+        to.x,
+        to.y - Math.max(10, zoom * 1.5) - 40,
+        "⚠ hits an ally's land: your alliance breaks",
+        "#ff8a7a",
+      );
+    }
+    if (!aim.problem && aim.missile && aim.planesLost > 0) {
+      this.label(
+        to.x,
+        to.y - Math.max(10, zoom * 1.5) - 24,
+        "⚠ SAMs on the route would shoot it down",
+        "#ffb36b",
+      );
+    } else if (!aim.problem && aim.planesLost > 0) {
       // Hostile SAMs on the route (their rings are drawn under it, render/buildings.ts).
       this.label(
         to.x,

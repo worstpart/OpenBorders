@@ -610,9 +610,10 @@ up) 11.6–12.1 min.
 
 ### 3.17 Buildings & strategic warfare — design (2026-10-02; partly built)
 
-> **Status (2026-10-07):** built so far — Housing, Factory (2.5), walls (2.6), Port I–II
-> (2.7), trade (2.8), flights (2B.0), Airport I + airlift (2B.1), SAM I–III (2B.2); rows marked
-> ✅ in §3.17.10. The rest is still the plan.
+> **Status (2026-10-12):** built so far — Housing, Factory (2.5, war production 2B.5), walls
+> (2.6), Port I–II (2.7), trade (2.8), flights (2B.0), Airport I–III (2B.1, 2B.3, 2B.4), SAM I–III
+> (2B.2; against missiles 2B.5), Missile Silo I–III (2B.5); rows marked ✅ in §3.17.10. Port III
+> is still the plan (2B.6).
 > It is the design the user asked for on 2026-10-02 (seven buildings with three levels each, Border
 > Defense, SAMs, Missile Silos and Airports) — written *before* any code. The user's
 > answers of 2026-10-02: air & strategic warfare comes **before multiplayer** (Phase 2B,
@@ -921,13 +922,58 @@ the Fortress Wall, and the assault lands whole and takes the land. **Since the 2
 | II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target loses **two** levels; slots let you fire two at once (saturates SAMs) |
 | III | Strategic Missile Complex | 3 | 20 s | whole map | 75k / **500k** | **Strategic warhead** (own 90 s cooldown): 20 km radius — land becomes neutral *scorched* land (3× expansion cost for 60 s), buildings destroyed, owner loses home troops in proportion to land lost. Breaks an alliance if it hits the ally (like OpenFront). Only SAM III can intercept it |
 
+*As built (2B.5):* the table as written, with these details decided while building it (D-030).
+**Missile Silo** (250k / +400k / +800k; 15 / 20 / 30 s; any land of yours; destroyed when
+captured). Its card shows its missiles (filled = ready, "next in N s") and a button per missile
+it can fire, with its price. Missiles fly at 3 km/s as one "plane", visible to everyone with
+their ETA, the second sheet's art turned to their heading (strike missiles in the Silo's era,
+the bunker buster the air-to-ground missile, the warhead the ICBM). Firing spends one missile;
+they reload one at a time (30 / 25 / 20 s). **Strike missile** (75k): every enemy building
+within 8 km of the target loses a level (level I or unfinished: destroyed) and is out of action
+20 s; the target player's land within 8 km is suppressed for 30 s like an air strike's point —
+your own and your friends' buildings are never hit. **Bunker buster** (II, 75k): the enemy
+building on the tile loses two levels (and is out of action 20 s); it must be aimed at a
+building. **Strategic warhead** (III, 500k, its own 90 s cooldown, the whole map): every land
+tile within 20 km that isn't yours or a teammate's becomes neutral; buildings there are
+destroyed; each owner loses that share of their home troops (20% of their land → 20% of their
+home troops); for 60 s expanding into that land costs 3× (a charred circle with its
+countdown). Hitting an ally's land breaks the alliance — you are the traitor. You aim at an
+enemy's tile (not neutral land, not a friend's). **Interception:** SAM II and III shoot down
+conventional missiles, only SAM III the warhead, one interceptor per missile — so a Silo II/III
+can fire several at once to get one through (saturation). Flak doesn't touch missiles. **Early
+warning (SAM III):** every hostile launch within 90 km of your working SAM III appears in your
+incoming list (and sounds the horn, as rate-limited as any flight), wherever it is aimed; a
+warhead whose 20 km blast would reach your land counts as incoming even if aimed next door.
+**War production (Factory III):** your Airports and Silos within 60 km of a working Mega
+Industrial Complex reload and cool down 25% faster. **Aiming:** "🚀 2 buildings −1 level ·
+suppress 8 km for 30 s · 75K gold · 8 s" with the 8 km circle (a bunker buster: "Metropolis →
+level I"; the warhead: "☢ scorch 1,257 tiles of land" with a red 20 km circle and "⚠ hits an
+ally's land: your alliance breaks"), "⚠ SAMs on the route would shoot it down", and only the
+SAMs that can stop that missile are ringed. **Explosions (the user's request during 2B.5):**
+everything that blows up — a plane or missile shot down, an air strike landing, a building hit,
+a missile's or a warhead's blast — throws out sparks, fire, smoke and debris, scaled to its size
+(the warhead's fills its 20 km circle). Toasts: one per missile ("🚀 Your strike missile hit 2
+buildings: −1 level each", "🚀 X's strike missile hit 1 of your buildings"), "💥 X's SAM shot
+down your strike missile", and a warhead is news for everyone ("☢ X's strategic warhead struck
+Y"; the victim: "… scorched 1,257 tiles of your land (−12K troops)"). **Nations:** a Silo is
+worth `siloWorth` 0.4 × capacity for the whole ladder (each level its share of the price, level
+III double while a runaway leader stands) while an enemy nation or human has buildings within
+250 km of their land; one Silo. They fire a strike missile or bunker buster at an enemy they are
+at war with when the levels it would cost are worth twice the price, one more missile than the
+SAM II+ interceptors on the route (never while mobilizing), and the warhead only at a **runaway
+leader** (a non-friend holding a third of all owned land), where it scorches the most of the
+leader's land, never on an ally's land and never into a SAM III. A hostile Silo in reach counts
+as an air threat for their SAMs. In headless games (30 Islands games, 8 nations) Silos
+appear only in long games: 0.9 a game, ~2 missiles, one warhead in 30 games, median length
+22.7 min (23.0 before); none on the Continent (9.0 min) or in team games (5.0 min).
+
 #### 3.17.9 Housing, Factory, Port
 
 - **Housing** — troop capacity (the gold → army engine, OpenFront's City). A fixed bonus,
   so a small player gains proportionally more (anti-snowball, like OpenFront).
 - **Factory** — gold income and cheaper Mobilize (OpenFront's trains are replaced by a
   plain income number; the user's "military production" is the Mobilize discount and, at
-  level III, faster reloads for nearby airports and silos once they exist).
+  level III, faster reloads for nearby airports and silos — built in 2B.5).
 - **Port** ✅ I–II (2.7, §3.18) — boats launch from *any* coast; a Port makes them better.
   Level III's warship patrol waits for the naval follow-up (only if boats prove fun); its
   coastal fortification will be a coastal wall (§3.17.6).
@@ -944,7 +990,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Housing ✅ | III Metropolis | +220k (350k) | 20 s | +250k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | a tower between houses, 3 pips |
 | Factory ✅ | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | hall + one chimney |
 | Factory ✅ | II Industrial Complex | +120k (180k) | 10 s | +90 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | hall + two chimneys |
-| Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production**: airports & silos within 60 km reload 25% faster (Phase 2B — not built yet) | 60 | — | — | same — a prime target | hall + three chimneys |
+| Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production** ✅ (2B.5): airports & silos within 60 km reload 25% faster | 60 | — | — | same — a prime target | hall + three chimneys |
 | Port ✅ | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port ✅ | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
 | Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (a Stone Wall along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
@@ -952,11 +998,11 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
 | Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** ✅ (2B.3: one plane per hostile flight that flies within 3 km) | — | — | — | same | thick stone, merlons, big towers |
 | SAM ✅ | I SAM Site | 80k (80k) | 10 s | shoots hostile aircraft | — | 25 | 1 interceptor | 10 | saturation, strikes, flying around | single launcher, dish |
-| SAM ✅ | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles (with missiles, 2B.5) | 35 | 2 | 8 | same | twin launcher + radar |
-| SAM ✅ | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning (with missiles, 2B.5) | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
-| Missile Silo | I | 250k (250k) | 15 s | strike missile (75k per launch) | — | 250 | 1 slot | 30 | SAM II+, capture (destroyed) | hatch in the ground |
-| Missile Silo | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
-| Missile Silo | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
+| SAM ✅ | II Advanced SAM Site | +180k (260k) | 15 s | 2 interceptors | intercepts conventional missiles ✅ (2B.5) | 35 | 2 | 8 | same | twin launcher + radar |
+| SAM ✅ | III Integrated Air Defense | +400k (660k) | 25 s | 3 interceptors | intercepts the strategic warhead; early warning ✅ (2B.5) | 45 | 3 | 6 | same, bunker busters | launcher array, rotating radar |
+| Missile Silo ✅ | I | 250k (250k) | 15 s | strike missile (75k per launch) | — | 250 | 1 slot | 30 | SAM II+, capture (destroyed) | hatch in the ground |
+| Missile Silo ✅ | II Advanced Silo | +400k (650k) | 20 s | 2 slots | bunker buster | 400 | 2 | 25 | SAM II+ | two hatches |
+| Missile Silo ✅ | III Strategic Missile Complex | +800k (1.45M) | 30 s | 3 slots | **strategic warhead** (500k, 90 s) | map | 3 | 20 / 90 | SAM III only | three hatches, warning stripes |
 | Airport ✅ | I | 120k (120k) | 15 s | airlift to friends | — | 250 | 10% of capacity | 30 | hostile SAMs on the route, capture | short runway, small terminal, transport plane |
 | Airport ✅ | II Military Airport | +300k (420k) | 20 s | bigger, longer lifts | **airborne assault** | 300 | 15% | 25 | SAMs, Fortress Wall flak, encirclement of the landing once it stalls | longer runway, hangars |
 | Airport ✅ | III Air Base | +700k (1.12M) | 25 s | escorts | **air strike** (fighters) | 350 | 20% | 20 (lift) / 30 (strike) | SAMs (saturated by numbers), strikes back | runway pair, tower, fighters |

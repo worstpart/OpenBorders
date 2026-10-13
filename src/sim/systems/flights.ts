@@ -23,8 +23,10 @@
  *  - Arrivals act by kind: airlift → the friend's home troops, what doesn't fit under their
  *    capacity flies back ("return" → the owner's home troops) — 2B.1; assault → a beachhead
  *    attack (2B.3); strike → a building loses a level and stops working for a while, or a
- *    point is suppressed (2B.4); missiles in 2B.5. Test flights (debug,
- *    rules.flights.testFlights) do nothing when they arrive.
+ *    point is suppressed (2B.4); a missile hits buildings or scorches land (missiles.ts,
+ *    2B.5). Test flights (debug, rules.flights.testFlights) do nothing when they arrive.
+ *  - Missiles (2B.5) are flights of one "plane": only SAMs that can stop that kind of missile
+ *    shoot at them (II+: conventional, III: the warhead), and flak ignores them.
  *  - Air strike (Air Base, Airport III, 2B.4): a wing of fighters from the Air Base to an
  *    enemy's tile in range, on its own cooldown (slot 1). Over the target: if an enemy
  *    building stands on the tile, it loses a level when at least `strikeDamagePlanes`
@@ -62,6 +64,7 @@ import {
   type Building,
   type Flight,
   type FlightKind,
+  type MissileKind,
   type Player,
   type PlayerId,
   type World,
@@ -71,6 +74,7 @@ import {
   buildingsEnabled,
   findBuilding,
   levelRules,
+  producedTicks,
   readyCharges,
   spendCharge,
   startCooldown,
@@ -80,6 +84,7 @@ import {
 import { areFriendly } from "./diplomacy.ts";
 import { troopRoom } from "./economy.ts";
 import { hostileTarget } from "./naval.ts";
+import { isMissile, landMissile, samStops } from "./missiles.ts";
 import { isSuppressed, suppress } from "./suppression.ts";
 
 /** The kinds of plane, which set a flight's speed (GAME_DESIGN.md §3.17.7). */
@@ -343,7 +348,11 @@ export function applyAirlift(
     airport,
     AIRLIFT_SLOT,
     world.tick,
-    levelRules(rules, "airport", airport.level).missionCooldownTicks ?? 0,
+    producedTicks(
+      world,
+      airport,
+      levelRules(rules, "airport", airport.level).missionCooldownTicks ?? 0,
+    ),
   );
   return null;
 }
@@ -431,7 +440,11 @@ export function applyAssault(
     airport,
     AIRLIFT_SLOT,
     world.tick,
-    levelRules(rules, "airport", airport.level).missionCooldownTicks ?? 0,
+    producedTicks(
+      world,
+      airport,
+      levelRules(rules, "airport", airport.level).missionCooldownTicks ?? 0,
+    ),
   );
   return null;
 }
@@ -568,7 +581,11 @@ export function applyAirStrike(
     airport,
     STRIKE_SLOT,
     world.tick,
-    levelRules(rules, "airport", airport.level).strikeCooldownTicks ?? 0,
+    producedTicks(
+      world,
+      airport,
+      levelRules(rules, "airport", airport.level).strikeCooldownTicks ?? 0,
+    ),
   );
   return null;
 }
@@ -791,7 +808,8 @@ export function samReady(rules: GameRules, sam: SamLike, tick: number): number {
  * says whose SAMs shoot at that owner's planes), and how many interceptors they have ready
  * now: the flight is followed tick by tick over the same tiles the simulation checks
  * (flightTile), so the HUD and the nations see exactly what a launch would meet — except
- * for interceptors that reload while it flies.
+ * for interceptors that reload while it flies. A missile (2B.5) meets only the SAMs that can
+ * stop its kind.
  */
 export function interceptorsOnRoute(
   rules: GameRules,
@@ -802,8 +820,15 @@ export function interceptorsOnRoute(
   to: number,
   plane: PlaneType,
   tick: number,
+  missile?: MissileKind,
 ): { readonly sams: readonly SamLike[]; readonly interceptors: number } {
-  const threats = sams.filter((s) => s.level >= 1 && s.type === "sam" && hostile(s.owner));
+  const threats = sams.filter(
+    (s) =>
+      s.level >= 1 &&
+      s.type === "sam" &&
+      hostile(s.owner) &&
+      (missile === undefined || samStops(rules, s.level, missile)),
+  );
   if (threats.length === 0) return { sams: [], interceptors: 0 };
   const path: FlightPath = {
     fromTile: from,
@@ -839,9 +864,11 @@ function interceptFlights(world: World): void {
   // shootDown drops flights with no planes left from world.flights, so walk a copy.
   for (const flight of world.flights.slice()) {
     const tile = flightTile(world.map, flight, world.tick);
+    const missile = isMissile(flight.kind) ? flight.kind : null;
     for (const sam of sams) {
       if (flight.planes === 0) break;
       if (fired.has(sam.id) || sam.owner === flight.owner) continue;
+      if (missile && !samStops(rules, sam.level, missile)) continue;
       if (!working(sam, world.tick) || areFriendly(world, sam.owner, flight.owner)) continue;
       const level = levelRules(rules, "sam", sam.level);
       if (readyCharges(sam, level.interceptors ?? 0, world.tick) < 1) continue;
@@ -912,7 +939,7 @@ function flakFlights(world: World): void {
   if (!flak || !world.walls.some((w) => w.level >= flak.level)) return;
   const { map, tick } = world;
   for (const flight of world.flights.slice()) {
-    if (tick <= flight.launchTick) continue;
+    if (tick <= flight.launchTick || isMissile(flight.kind)) continue;
     const now = flakWallsNear(world, flightTile(map, flight, tick), flak, flight.owner);
     if (now.size === 0) continue;
     const before = flakWallsNear(world, flightTile(map, flight, tick - 1), flak, flight.owner);
@@ -950,8 +977,9 @@ export function advanceFlights(world: World): void {
       planes: flight.planes,
       troops: flight.troops,
     });
-    // Test flights do nothing on arrival; missiles will act here (2B.5).
+    // Test flights do nothing on arrival.
     if (flight.kind === "airlift") deliverAirlift(world, flight);
+    else if (isMissile(flight.kind)) landMissile(world, flight);
     else if (flight.kind === "assault") landAssault(world, flight);
     else if (flight.kind === "strike") landStrike(world, flight);
     else if (flight.kind === "return") getPlayer(world, flight.owner)!.homeTroops += flight.troops;
@@ -986,6 +1014,7 @@ export function shootDown(
     type: "flightIntercepted",
     flightId: flight.id,
     owner: flight.owner,
+    kind: flight.kind,
     by,
     tile,
     fromTile,

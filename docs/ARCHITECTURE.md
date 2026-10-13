@@ -487,14 +487,16 @@ was built, tested and replaced the same day; nothing of it remains in the code.
 **Tick order additions** (ARCHITECTURE §5.3):
 
 ```
-1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, assault, airStrike ✅; launchMissile
+1.  applyCommands      + build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, boat, recallBoat; (2B) airlift, assault, airStrike, launchMissile ✅
 1c. advanceBuildings   constructions/upgrades finish; disabled timers and reloads run out
 2b. advanceBoats       (2.7) boats that arrive land as beachhead attacks (or home); recalled boats unload
 2c. advanceFlights     (2B.0 ✅ arrivals) SAM interceptions first (2B.2 ✅), Fortress Wall flak (2B.3 ✅), then
                        flights over their target arrive, with arrival effects: airlift → friend's home troops (2B.1);
                        assault → beachhead attack (2.7, 2B.3 ✅) — before step 3, like boats, so a
                        landing's first tile falls the same tick; strike → strikeBuilding or a
-                       suppression zone (2B.4 ✅; expireSuppressions first); missiles (2B.5)
+                       suppression zone (2B.4 ✅; expireSuppressions first); missile → missiles.ts
+                       landMissile: buildings struck, a suppression zone, or a warhead's scorched
+                       land via setOwner(NEUTRAL) (2B.5 ✅; expireScorched first)
 3.  advanceAttacks     reads the wall hooks (loss, break troops, hold; suppression in 2B)
     (setOwner)         captured tiles transfer or destroy their building; wall tiles break
 6.  growTroops / 6b earnGold   read the cached per-player building effects
@@ -649,6 +651,51 @@ the interceptors a route meets. Airlift/assault problems gained "disabled". **AI
 `airlift.strikeSecondsLeft` and `disabledSeconds`; `render/flights.ts` draws escorts and the
 zones (frame `suppressions`); `render/buildings.ts` the struck badge; toasts for
 `buildingStruck`, `suppressed` and escort hits.
+
+**Missile Silos (2B.5 — as built).** Building type `silo` (`onCapture: "destroy"`, any land;
+offered only with flights). Level rules: `missileSlots`, `reloadTicks`, `range` or `wholeMap`
+(III), `bunkerBuster` (II+), `warheadCooldownTicks` (III, mission slot 0 = `WARHEAD_SLOT`);
+SAM levels gain `interceptsMissiles` (II+), `interceptsWarheads` and `earlyWarning` (III);
+Factory III gains `warProductionRange` / `warProductionFactor`. `rules.flights`: `missileCost`,
+`missileRadius`, `missileLevels`, `missileSuppressionTicks`, `busterLevels`,
+`missileDisableTicks`, `warheadCost`, `warheadRadius`, `scorchedTicks`, `scorchedCost`.
+**State:** missiles are ordinary `Flight`s (kinds `missile` / `buster` / `warhead`, one
+"plane", missile speed); a Silo's slots are its charges (`reloads`, like SAM interceptors);
+`world.scorched` (`Scorched {tile, radius, by, untilTick}`, hashed only while non-empty, so
+games without warheads keep their hashes). New `systems/missiles.ts`: `isMissile`,
+`missileLevel`, `missileCost`, `samStops`, `siloRange` (Infinity for the whole map),
+`siloSlots`, `siloReady`, `warheadCooldownLeft`, `missileProblem` + texts (shared with the HUD
+and the nations), `applyLaunchMissile` (command `launchMissile {buildingId, tile, missile}`),
+`landMissile` (strike missile: `strikeBuilding` on every enemy building in `missileRadius` +
+`suppress` with its own radius/time; buster: `strikeBuilding` −2 on the building at the tile;
+warhead: `warheadTiles` → buildings destroyed via `strikeBuilding`, tiles `setOwner(NEUTRAL)`,
+victims' home troops × lost share, `lastLostTo` = launcher, `applyAllianceBreak` for allies hit),
+`scorchedFactor` (read by `tileCost` for neutral tiles), `expireScorched` (step 2c). Events
+`missileHit`, `warheadDetonated`; `flightIntercepted` gained `kind`. `flights.ts`: SAMs fire at
+a missile only if `samStops`; flak skips missiles; `interceptorsOnRoute` takes an optional
+missile kind. `buildings.ts`: `warProduction` / `producedTicks` (Airport cooldowns and Silo
+reloads/warhead cooldown). `suppress` takes an optional radius and duration. **AI:**
+`ai/missile.ts` `decideMissiles` (every nation each think, after the strike; not while it
+mobilizes) and `runawayLeader`; `build.ts` `siloProspect` / `siloValue` (`siloWorth`), and
+hostile Silos count as an air threat for SAMs (Silos are guarded too). Headless `airPerGame` adds
+`silos`, `siloUpgrades`, `silosIII`, `missiles`, `busters`, `warheads`, `missilesShotDown`,
+`missileLevels`, `missileKills`, `warheadTiles`, `warheadTroops`, `warheadBuildings`.
+**Client:** `LiftMode` gains the missile kinds (`isMissileMode`); `airliftPreview` hands them to
+`missilePreview` (the Silo stands in `airport`): `cost` and `missile: MissileEffect`
+(`missileEffectText`; a warhead lists the allies it would hit); card `silo` status; SAM rings
+while aiming show only SAMs that stop that missile; threats gain kind `missile`, a warhead whose
+blast reaches your land, and SAM III early warning (`warning`); toasts sum a missile's hits into
+one; `render/flights.ts` draws missiles (art turned to the heading — `drawSprite` gained
+`rotation`), blasts and scorched zones (frame `scorched`).
+
+**Explosion particles (2B.5, the user's request).** `render/particles.ts` `ParticleSystem`:
+`explode(kind, x, y, now, delay)` with presets `intercept` / `building` / `strike` /
+`destroyed` / `missile` / `warhead` (sparks, fire, smoke, debris, a shock ring), particles in
+tile coordinates, at most `MAX_PARTICLES` (the oldest go first), drawn by the flight layer (smoke
+under the rest). `client.ts` `explode(event)` maps events to explosions: `flightIntercepted`
+(after the SAM streak), `flightArrived` of a strike, `buildingStruck`, `missileHit`,
+`warheadDetonated`. Client-only: `Math.random` is fine there (the determinism guard covers
+`src/sim`).
 
 **Landed armies don't collide (D-029, after the 2B.4 playtest).** `resolveCollisions` skips any
 pair where either attack has `landingTile ≥ 0`; `bot.ts` aims a counter against a beachhead at

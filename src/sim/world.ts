@@ -246,9 +246,27 @@ export interface TradeShip {
  * What a flight is (GAME_DESIGN.md §3.17.7): "test" (a debug flight of empty transports,
  * 2B.0), "airlift" (troops to a friend, 2B.1), "return" (an airlift's troops that didn't
  * fit, flying home), "assault" (an airborne assault onto an enemy's land, 2B.3) and "strike"
- * (a fighter wing hitting a building or suppressing a point, 2B.4); 2B.5 adds missiles.
+ * (a fighter wing hitting a building or suppressing a point, 2B.4); missiles from a Silo
+ * (2B.5): "missile" (the strike missile), "buster" (bunker buster) and "warhead" (strategic).
  */
-export type FlightKind = "test" | "airlift" | "return" | "assault" | "strike";
+export type FlightKind =
+  "test" | "airlift" | "return" | "assault" | "strike" | "missile" | "buster" | "warhead";
+
+/** The missile kinds (GAME_DESIGN.md §3.17.8): a Silo fires these. */
+export type MissileKind = "missile" | "buster" | "warhead";
+
+/**
+ * Scorched land (GAME_DESIGN.md §3.17.8, 2B.5): where a strategic warhead struck. Until
+ * `untilTick`, neutral land within `radius` tiles of `tile` costs rules.flights.scorchedCost×
+ * the troops to expand into.
+ */
+export interface Scorched {
+  readonly tile: number;
+  readonly radius: number;
+  /** Who launched the warhead. */
+  readonly by: PlayerId;
+  readonly untilTick: number;
+}
 
 /**
  * A flight (GAME_DESIGN.md §3.17.7, ARCHITECTURE.md §5.7): a group of planes flying in a
@@ -349,6 +367,8 @@ export interface World {
   nextFlightId: number;
   /** Suppression zones still in force, oldest first (air strikes on a point, 2B.4). */
   suppressions: Suppression[];
+  /** Scorched land still in force, oldest first (strategic warheads, 2B.5). */
+  scorched: Scorched[];
   /** Map pings still showing, oldest first (GAME_DESIGN.md §3.20). */
   pings: Ping[];
   nextPingId: number;
@@ -531,6 +551,7 @@ export function createWorld(setup: GameSetup): World {
     flights: [],
     nextFlightId: 1,
     suppressions: [],
+    scorched: [],
     pings: [],
     nextPingId: 1,
     alliances: new Map(),

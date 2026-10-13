@@ -66,6 +66,7 @@ import {
   type GameRules,
   type Personality,
 } from "../src/sim/rules.ts";
+import { isMissile } from "../src/sim/systems/missiles.ts";
 import { runTick, TICK_STEPS, type TickStep } from "../src/sim/tick.ts";
 import { createWorld, type World } from "../src/sim/world.ts";
 import { loadRules } from "./rulesFile.ts";
@@ -202,6 +203,22 @@ export interface GameReport {
     strikeLevels: number;
     strikeKills: number;
     suppressions: number;
+    /** Missile Silos (2B.5): Silos built, upgrades, Silos III. */
+    silos: number;
+    siloUpgrades: number;
+    silosIII: number;
+    /** Launches by kind, and missiles SAMs shot down. */
+    missiles: number;
+    busters: number;
+    warheads: number;
+    missilesShotDown: number;
+    /** Building levels conventional missiles took, and buildings they destroyed. */
+    missileLevels: number;
+    missileKills: number;
+    /** Strategic warheads: tiles scorched, home troops and buildings lost. */
+    warheadTiles: number;
+    warheadTroops: number;
+    warheadBuildings: number;
   };
   /** Per tick step: average and worst milliseconds. */
   systemsMs: Record<TickStep, { avg: number; max: number }>;
@@ -447,9 +464,24 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     strikeLevels: 0,
     strikeKills: 0,
     suppressions: 0,
+    silos: 0,
+    siloUpgrades: 0,
+    silosIII: 0,
+    missiles: 0,
+    busters: 0,
+    warheads: 0,
+    missilesShotDown: 0,
+    missileLevels: 0,
+    missileKills: 0,
+    warheadTiles: 0,
+    warheadTroops: 0,
+    warheadBuildings: 0,
   };
+  // What kind of flight arrived last: buildings it strikes are its doing (strike or missile).
+  let arrivedKind = "";
   // The armies airborne assaults landed: their tiles are summed at the end.
   const airborneArmies: { tilesTaken: number }[] = [];
+  const missileIds = new Set<number>();
   let reason = "timeout";
   let error: string | null = null;
 
@@ -517,7 +549,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         } else if (event.type === "buildingStarted" && event.buildingType === "sam") {
           if (event.level === 1) air.sams++;
           else air.samUpgrades++;
+        } else if (event.type === "buildingStarted" && event.buildingType === "silo") {
+          if (event.level === 1) air.silos++;
+          else air.siloUpgrades++;
+          if (event.level === 3) air.silosIII++;
         } else if (event.type === "flightIntercepted") {
+          if (missileIds.has(event.flightId)) air.missilesShotDown += event.planes;
           air.planesShotDown += event.planes;
           air.troopsShotDown += event.troopsLost;
           if (event.weapon === "flak") air.flakShots += event.planes;
@@ -530,9 +567,24 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
           const army = world.attacks.find((a) => a.id === event.attackId);
           if (army) airborneArmies.push(army);
         } else if (event.type === "flightLaunched" && event.kind === "strike") air.strikes++;
+        else if (event.type === "flightLaunched" && isMissile(event.kind)) {
+          missileIds.add(event.flightId);
+          if (event.kind === "missile") air.missiles++;
+          else if (event.kind === "buster") air.busters++;
+          else air.warheads++;
+        } else if (event.type === "flightArrived") arrivedKind = event.kind;
         else if (event.type === "buildingStruck") {
-          air.strikeLevels += event.levelBefore - event.level;
-          if (event.level === 0) air.strikeKills++;
+          if (arrivedKind === "strike") {
+            air.strikeLevels += event.levelBefore - event.level;
+            if (event.level === 0) air.strikeKills++;
+          } else if (arrivedKind === "missile" || arrivedKind === "buster") {
+            air.missileLevels += event.levelBefore - event.level;
+            if (event.level === 0) air.missileKills++;
+          }
+        } else if (event.type === "warheadDetonated") {
+          air.warheadTiles += event.tiles;
+          air.warheadBuildings += event.buildings;
+          for (const v of event.victims) air.warheadTroops += v.troops;
         } else if (event.type === "suppressed") air.suppressions++;
         else if (event.type === "airliftDelivered") {
           air.troopsDelivered += event.troops;

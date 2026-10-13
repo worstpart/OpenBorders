@@ -24,8 +24,16 @@ import {
   type StrikeProblem,
 } from "../../sim/systems/flights.ts";
 import { levelRules } from "../../sim/systems/buildings.ts";
+import {
+  isMissile,
+  missileCost,
+  missileProblem,
+  missileProblemText,
+  siloRange,
+  type MissileProblem,
+} from "../../sim/systems/missiles.ts";
 import type { BuildingType } from "../../sim/rules.ts";
-import { NEUTRAL, type FlightKind, type PlayerId } from "../../sim/world.ts";
+import { NEUTRAL, type FlightKind, type MissileKind, type PlayerId } from "../../sim/world.ts";
 
 export interface FlightInfo {
   /** Map and chip icon. */
@@ -45,21 +53,61 @@ export const FLIGHT_INFO: Readonly<Record<FlightKind, FlightInfo>> = {
   return: { icon: "✈", name: "return flight", hostile: false },
   assault: { icon: "🪂", name: "airborne assault", hostile: true },
   strike: { icon: "💥", name: "air strike", hostile: true },
+  missile: { icon: "🚀", name: "strike missile", hostile: true },
+  buster: { icon: "🎯", name: "bunker buster", hostile: true },
+  warhead: { icon: "☢", name: "strategic warhead", hostile: true },
 };
 
 /**
  * An Airport's missions (GAME_DESIGN.md §3.17.7): lifts to a friend or onto an enemy, and an
- * Air Base's air strike (2B.4) — all aimed the same way.
+ * Air Base's air strike (2B.4) — and a Missile Silo's missiles (2B.5, §3.17.8): all aimed the
+ * same way.
  */
-export type LiftMode = "airlift" | "assault" | "strike";
+export type LiftMode = "airlift" | "assault" | "strike" | MissileKind;
+
+/** True when `mode` is a Silo's missile rather than an Airport's mission. */
+export function isMissileMode(mode: LiftMode): mode is MissileKind {
+  return isMissile(mode);
+}
 
 /**
  * The map sprite of a flight: helicopters carry airborne assaults (D-028). The pack's "plane"
  * art is a fighter of each era (biplane, WW2 fighter, jet), so transports and strikes share it.
  */
-export function flightSprite(kind: FlightKind): "plane" | "helicopter" {
+export function flightSprite(
+  kind: FlightKind,
+): "plane" | "helicopter" | "missile" | "airToGroundMissile" | "icbm" {
+  if (kind === "missile") return "missile";
+  if (kind === "buster") return "airToGroundMissile";
+  if (kind === "warhead") return "icbm";
   return kind === "assault" ? "helicopter" : "plane";
 }
+
+/**
+ * What a missile aimed at a tile would do (2B.5): a strike missile — the enemy buildings within
+ * its radius each lose a level, and the land there is suppressed; a bunker buster — the
+ * building there loses two levels; the warhead — the land it would scorch, and the allies it
+ * would hit (their alliance breaks).
+ */
+export type MissileEffect =
+  | {
+      readonly kind: "missile";
+      readonly buildings: number;
+      readonly radius: number;
+      readonly seconds: number;
+    }
+  | {
+      readonly kind: "buster";
+      readonly buildingType: BuildingType;
+      readonly level: number;
+      readonly levelAfter: number;
+    }
+  | {
+      readonly kind: "warhead";
+      readonly radius: number;
+      readonly tiles: number;
+      readonly allies: readonly PlayerId[];
+    };
 
 /**
  * What an air strike aimed at a tile would do (2B.4): hit the enemy building standing there
@@ -92,7 +140,8 @@ export interface AirliftPreview {
   readonly tile: number | null;
   readonly troops: number;
   readonly seconds: number;
-  readonly problem: AirliftProblem | AssaultProblem | StrikeProblem | "noTroops" | null;
+  readonly problem:
+    AirliftProblem | AssaultProblem | StrikeProblem | MissileProblem | "noTroops" | null;
   /**
    * Planes the hostile SAMs on the route would shoot down with the interceptors they have
    * ready now (GAME_DESIGN.md §3.17.7), at most all of them, and how many planes fly — the
@@ -103,14 +152,18 @@ export interface AirliftPreview {
   readonly escorts: number;
   /** A strike: what it would do there (null: no target yet, or it can't go there). */
   readonly strike: StrikeEffect | null;
+  /** A missile (2B.5): what it would do there, and its price (null / 0: not a missile). */
+  readonly missile: MissileEffect | null;
+  readonly cost: number;
 }
 
 /** Why a lift can't go there, in words (the two modes share some problems, not the words). */
 export function liftProblemText(
   mode: LiftMode,
-  problem: AirliftProblem | AssaultProblem | StrikeProblem | "noTroops",
+  problem: AirliftProblem | AssaultProblem | StrikeProblem | MissileProblem | "noTroops",
 ): string {
   if (problem === "noTroops") return "no troops to send";
+  if (isMissileMode(mode)) return missileProblemText(problem as MissileProblem, mode);
   return mode === "assault"
     ? ASSAULT_PROBLEM_TEXT[problem as AssaultProblem]
     : mode === "strike"
@@ -130,14 +183,41 @@ export function airliftPreview(
   percent: number,
   buildings: readonly BuildingSnapshot[] = [],
   mode: LiftMode = "airlift",
+  teammates: ReadonlySet<PlayerId> = new Set(),
 ): AirliftPreview {
+  if (isMissileMode(mode)) {
+    return missilePreview(
+      rules,
+      map,
+      airport,
+      me,
+      owner,
+      friends,
+      teammates,
+      tick,
+      tile,
+      buildings,
+      mode,
+    );
+  }
   const range = airportRange(rules, airport);
   const striking = mode === "strike";
   const troops = striking ? 0 : airliftTroops(rules, airport.level, me, Math.round(percent * 100));
   const f = rules.flights;
   const planes = striking ? f.strikePlanes : mode === "assault" ? f.assaultPlanes : f.airliftPlanes;
   const escorts = striking ? 0 : escortsOf(rules, airport.level);
-  const none = { mode, airport, range, tile, troops, planes, escorts, strike: null };
+  const none = {
+    mode,
+    airport,
+    range,
+    tile,
+    troops,
+    planes,
+    escorts,
+    strike: null,
+    missile: null,
+    cost: 0,
+  };
   if (tile === null) return { ...none, seconds: 0, problem: null, planesLost: 0 };
   const holder = owner[tile]!;
   const hostile = holder !== NEUTRAL && isHostile(holder, me.id, friends);
@@ -178,6 +258,146 @@ export function airliftPreview(
         ? strikeEffect(rules, buildings, tile, holder, planes - planesLost)
         : null,
   };
+}
+
+/** A Silo's missile aimed at `tile` (see airliftPreview; the Silo stands in `airport`). */
+function missilePreview(
+  rules: GameRules,
+  map: GameMap,
+  silo: BuildingSnapshot,
+  me: PlayerSnapshot,
+  owner: Uint16Array,
+  friends: ReadonlySet<PlayerId>,
+  teammates: ReadonlySet<PlayerId>,
+  tick: number,
+  tile: number | null,
+  buildings: readonly BuildingSnapshot[],
+  kind: MissileKind,
+): AirliftPreview {
+  const range = siloRange(rules, silo);
+  const cost = missileCost(rules, kind);
+  const none = {
+    mode: kind,
+    airport: silo,
+    range,
+    tile,
+    troops: 0,
+    planes: 1,
+    escorts: 0,
+    strike: null,
+    cost,
+  };
+  if (tile === null) return { ...none, seconds: 0, problem: null, planesLost: 0, missile: null };
+  const holder = owner[tile]!;
+  const hostile = holder !== NEUTRAL && isHostile(holder, me.id, friends);
+  const enemy = (id: PlayerId) => id !== NEUTRAL && isHostile(id, me.id, friends);
+  const target = buildings.find((b) => b.tile === tile && enemy(b.owner));
+  const problem = missileProblem(
+    rules,
+    map,
+    silo,
+    tick,
+    tile,
+    kind,
+    hostile,
+    target !== undefined,
+    me.gold,
+  );
+  const seconds = (flightTicks(rules, map, silo.tile, tile, "missile") * rules.tickMs) / 1000;
+  const shots = problem
+    ? 0
+    : interceptorsOnRoute(
+        rules,
+        map,
+        buildings,
+        (samOwner) => isHostile(samOwner, me.id, friends),
+        silo.tile,
+        tile,
+        "missile",
+        tick,
+        kind,
+      ).interceptors;
+  return {
+    ...none,
+    seconds,
+    problem,
+    planesLost: Math.min(1, shots),
+    missile: problem
+      ? null
+      : missileEffect(rules, map, owner, buildings, tile, kind, me.id, enemy, friends, teammates),
+  };
+}
+
+/** What a missile of `kind` over `tile` would do (see MissileEffect). */
+function missileEffect(
+  rules: GameRules,
+  map: GameMap,
+  owner: Uint16Array,
+  buildings: readonly BuildingSnapshot[],
+  tile: number,
+  kind: MissileKind,
+  me: PlayerId,
+  enemy: (id: PlayerId) => boolean,
+  friends: ReadonlySet<PlayerId>,
+  teammates: ReadonlySet<PlayerId>,
+): MissileEffect {
+  const f = rules.flights;
+  const r2 = (radius: number, b: number) => {
+    const dx = (b % map.width) - (tile % map.width);
+    const dy = Math.floor(b / map.width) - Math.floor(tile / map.width);
+    return dx * dx + dy * dy <= radius * radius;
+  };
+  if (kind === "missile") {
+    return {
+      kind,
+      buildings: buildings.filter((b) => enemy(b.owner) && r2(f.missileRadius, b.tile)).length,
+      radius: f.missileRadius,
+      seconds: (f.missileSuppressionTicks * rules.tickMs) / 1000,
+    };
+  }
+  if (kind === "buster") {
+    const target = buildings.find((b) => b.tile === tile && enemy(b.owner))!;
+    return {
+      kind,
+      buildingType: target.type,
+      level: target.level,
+      levelAfter: Math.max(0, target.level - f.busterLevels),
+    };
+  }
+  // The warhead spares only your own land and your teammates' (missiles.ts warheadTiles).
+  const r = f.warheadRadius;
+  const x0 = tile % map.width;
+  const y0 = Math.floor(tile / map.width);
+  let tiles = 0;
+  const allies = new Set<PlayerId>();
+  for (let y = Math.max(0, y0 - r); y <= Math.min(map.height - 1, y0 + r); y++) {
+    for (let x = Math.max(0, x0 - r); x <= Math.min(map.width - 1, x0 + r); x++) {
+      if ((x - x0) ** 2 + (y - y0) ** 2 > r * r) continue;
+      const holder = owner[y * map.width + x]!;
+      if (holder === NEUTRAL || holder === me || teammates.has(holder)) continue;
+      tiles++;
+      if (friends.has(holder)) allies.add(holder);
+    }
+  }
+  return { kind, radius: r, tiles, allies: [...allies].sort((a, b) => a - b) };
+}
+
+/** A missile's effect in a few words, for the aiming label. */
+export function missileEffectText(rules: GameRules, effect: MissileEffect): string {
+  if (effect.kind === "missile") {
+    const hit =
+      effect.buildings > 0
+        ? `${effect.buildings} building${effect.buildings > 1 ? "s" : ""} −1 level · `
+        : "";
+    return `${hit}suppress ${effect.radius} km for ${effect.seconds} s`;
+  }
+  if (effect.kind === "buster") {
+    const name = levelRules(rules, effect.buildingType, Math.max(1, effect.level)).name;
+    return effect.levelAfter === 0
+      ? `destroy ${name}`
+      : `${name} → level ${ROMAN[effect.levelAfter]}`;
+  }
+  return `scorch ${effect.tiles.toLocaleString("en-US")} tiles of land`;
 }
 
 /** What a strike with `through` fighters arriving over `tile` would do (see StrikeEffect). */
@@ -252,3 +472,16 @@ export function flightPosition(
 export function flightSecondsLeft(flight: FlightSnapshot, tick: number, tickMs: number): number {
   return Math.max(0, ((flight.arriveTick - tick) * tickMs) / 1000);
 }
+
+/** A missile's blast being drawn (2B.5): a flash, then a ring spreading over its radius. */
+export interface BlastEffect {
+  readonly tile: number;
+  /** Tiles. */
+  readonly radius: number;
+  readonly warhead: boolean;
+  /** performance.now() when it hit. */
+  readonly start: number;
+}
+
+/** How long a blast shows (ms). */
+export const BLAST_MS = 1600;

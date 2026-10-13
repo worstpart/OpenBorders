@@ -29,15 +29,19 @@ import type { PingKind } from "../../sim/rules.ts";
 import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
 import {
   airliftPreview,
+  BLAST_MS,
   isHostile,
+  isMissileMode,
   liftProblemText,
   PUFF_MS,
   SHOT_MS,
   type AirliftPreview,
+  type BlastEffect,
   type LiftMode,
   type ShotEffect,
 } from "./flights.ts";
 import { airportRange, samInterceptors, samRadius, samReady } from "../../sim/systems/flights.ts";
+import { samStops, siloRange } from "../../sim/systems/missiles.ts";
 import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
 import {
@@ -66,6 +70,8 @@ import {
   type LabelPlacement,
   type LootFloater,
 } from "../render/labels.ts";
+import { ParticleSystem, type ExplosionKind } from "../render/particles.ts";
+import type { SimEvent } from "../../sim/events.ts";
 import { PerfOverlay } from "../render/perfOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { DEFAULT_RULES, makeRules, type Difficulty } from "../../sim/rules.ts";
@@ -166,6 +172,9 @@ export class GameClient {
   private tradeEffects: TradeEffect[] = [];
   /** SAM shots being drawn (GAME_DESIGN.md §3.17.7). */
   private shotEffects: ShotEffect[] = [];
+  private blastEffects: BlastEffect[] = [];
+  /** Explosion particles (the user's request in 2B.5): every explosion on the map. */
+  private readonly particles = new ParticleSystem();
   /** Which map is loaded, and the latest load asked for (older results are dropped). */
   private mapKey = "";
   private mapRequest = 0;
@@ -473,22 +482,27 @@ export class GameClient {
           ? "land an assault"
           : preview.mode === "strike"
             ? "strike"
-            : "airlift";
+            : isMissileMode(preview.mode)
+              ? "fire"
+              : "airlift";
       this.toast({
         text: `Can't ${what} there: ${liftProblemText(preview.mode, preview.problem)}`,
         tone: "info",
       });
       return;
     }
+    const mode = preview.mode;
     this.host.send(
-      preview.mode === "strike"
+      mode === "strike"
         ? { type: "airStrike", buildingId: preview.airport.id, tile }
-        : {
-            type: preview.mode,
-            buildingId: preview.airport.id,
-            tile,
-            percentBp: Math.round(ui.attackPercent * 100),
-          },
+        : isMissileMode(mode)
+          ? { type: "launchMissile", buildingId: preview.airport.id, tile, missile: mode }
+          : {
+              type: mode,
+              buildingId: preview.airport.id,
+              tile,
+              percentBp: Math.round(ui.attackPercent * 100),
+            },
     );
     ui.airliftFrom = null;
   }
@@ -511,6 +525,7 @@ export class GameClient {
       ui.attackPercent,
       ui.buildings,
       ui.liftMode,
+      ui.teammates,
     );
   }
 
@@ -525,12 +540,19 @@ export class GameClient {
     const selected = ui.menu?.kind === "building" ? ui.menu.id : null;
     const all = ui.airDefense || ui.placing === "sam";
     const aiming = ui.airliftFrom !== null;
+    // Aiming a missile (2B.5): only the SAMs that can stop it matter.
+    const missile = aiming && isMissileMode(ui.liftMode) ? ui.liftMode : null;
     const rings: RangeRing[] = [];
     for (const b of ui.buildings) {
       if (b.level < 1) continue;
       const tone = b.owner === me ? "mine" : ui.friends.has(b.owner) ? "friend" : "hostile";
       if (b.type === "sam") {
-        const show = all || b.id === selected || (aiming && isHostile(b.owner, me, ui.friends));
+        const show =
+          all ||
+          b.id === selected ||
+          (aiming &&
+            isHostile(b.owner, me, ui.friends) &&
+            (missile === null || samStops(DEFAULT_RULES, b.level, missile)));
         if (!show) continue;
         rings.push({
           tile: b.tile,
@@ -547,9 +569,52 @@ export class GameClient {
           ready: 0,
           max: 0,
         });
+      } else if (b.type === "silo" && b.id === selected) {
+        const radius = siloRange(DEFAULT_RULES, b);
+        if (Number.isFinite(radius)) rings.push({ tile: b.tile, radius, tone, ready: 0, max: 0 });
       }
     }
     return rings;
+  }
+
+  /**
+   * Explosion particles for an event, where something blows up: a SAM or flak hit (once the
+   * shot's streak reaches it), an air strike landing, a building struck or destroyed, a
+   * missile's or a warhead's blast.
+   */
+  private explode(event: SimEvent): void {
+    const map = this.map;
+    if (!map) return;
+    const now = performance.now();
+    const at = (tile: number, kind: ExplosionKind, delay = 0) =>
+      this.particles.explode(
+        kind,
+        (tile % map.width) + 0.5,
+        Math.floor(tile / map.width) + 0.5,
+        now,
+        delay,
+      );
+    if (event.type === "flightIntercepted") {
+      const missile =
+        event.kind === "missile" || event.kind === "buster" || event.kind === "warhead";
+      at(event.tile, missile ? "strike" : "intercept", event.fromTile >= 0 ? SHOT_MS : 0);
+    } else if (event.type === "flightArrived" && event.kind === "strike") {
+      at(event.tile, "strike");
+    } else if (event.type === "buildingStruck") {
+      at(event.tile, event.level === 0 ? "destroyed" : "building");
+    } else if (event.type === "missileHit") {
+      at(event.tile, event.missile === "buster" ? "strike" : "missile");
+    } else if (event.type === "warheadDetonated") {
+      at(event.tile, "warhead");
+    }
+  }
+
+  /** Missile blasts still showing (older ones are dropped). */
+  private blastsNow(now: number): BlastEffect[] {
+    if (this.blastEffects.length > 0) {
+      this.blastEffects = this.blastEffects.filter((b) => now - b.start < BLAST_MS);
+    }
+    return this.blastEffects;
   }
 
   /** SAM shots still showing (older ones are dropped). */
@@ -574,7 +639,7 @@ export class GameClient {
     const map = this.map;
     const cell = this.camera.tileAt(at);
     if (!map || !cell) return null;
-    if (ui.liftMode === "strike") {
+    if (ui.liftMode === "strike" || ui.liftMode === "missile" || ui.liftMode === "buster") {
       const id = this.buildingUnder(at);
       const hit = id === null ? undefined : ui.buildings.find((b) => b.id === id);
       if (hit && hit.owner !== ui.localPlayerId) return hit.tile;
@@ -759,6 +824,8 @@ export class GameClient {
     this.lootEffects = [];
     this.tradeEffects = [];
     this.shotEffects = [];
+    this.blastEffects = [];
+    this.particles.clear();
     this.emotes = [];
     this.alerts = new AlertPlanner();
     this.baseFlags = new Uint8Array(1);
@@ -824,6 +891,17 @@ export class GameClient {
         ui.myLastEmoteTick = frame.tick;
       } else if (event.type === "pinged" && event.from === me) {
         ui.myLastPingTick = frame.tick;
+      }
+      this.explode(event);
+      if (event.type === "missileHit" || event.type === "warheadDetonated") {
+        // A missile's blast (2B.5): a flash and a ring over its radius.
+        this.blastEffects.push({
+          tile: event.tile,
+          radius:
+            event.type === "warheadDetonated" ? event.radius : DEFAULT_RULES.flights.missileRadius,
+          warhead: event.type === "warheadDetonated",
+          start: performance.now(),
+        });
       }
       if (event.type === "flightIntercepted" && event.fromTile >= 0) {
         this.shotEffects.push({
@@ -1269,6 +1347,9 @@ export class GameClient {
         shots: this.shotsNow(startedAt),
         now: startedAt,
         suppressions: this.latestFrame?.suppressions ?? [],
+        scorched: this.latestFrame?.scorched ?? [],
+        blasts: this.blastsNow(startedAt),
+        particles: this.particles,
         rules: DEFAULT_RULES,
       });
     }

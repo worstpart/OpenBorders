@@ -223,10 +223,10 @@ export interface EconomyRules {
 
 /**
  * Building types built so far (GAME_DESIGN.md §3.17). The air/strategic buildings (Phase
- * 2B) join this list in their own milestones (Airport: 2B.1, SAM: 2B.2). Border Defense is not a
- * one-tile building but a drawn wall (D-024): see WallRules.
+ * 2B) join this list in their own milestones (Airport: 2B.1, SAM: 2B.2, Missile Silo: 2B.5).
+ * Border Defense is not a one-tile building but a drawn wall (D-024): see WallRules.
  */
-export const BUILDING_TYPES = ["housing", "factory", "port", "airport", "sam"] as const;
+export const BUILDING_TYPES = ["housing", "factory", "port", "airport", "sam", "silo"] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 
 /**
@@ -281,6 +281,31 @@ export interface BuildingLevelRules {
   readonly interceptors?: number;
   /** …and reloads them one at a time, each taking this many ticks. */
   readonly reloadTicks?: number;
+  /** SAM II+ (2B.5): its interceptors also shoot down conventional missiles… */
+  readonly interceptsMissiles?: boolean;
+  /**
+   * …SAM III: and the strategic warhead; and its early warning announces hostile launches
+   * within `earlyWarning` × its radius to its owner (the HUD).
+   */
+  readonly interceptsWarheads?: boolean;
+  readonly earlyWarning?: number;
+  /**
+   * Missile Silos (GAME_DESIGN.md §3.17.8, 2B.5): it holds this many missiles (slots), each
+   * reloaded in `reloadTicks` one at a time, and fires them at targets within `range` tiles —
+   * or anywhere on the map (`wholeMap`)…
+   */
+  readonly missileSlots?: number;
+  readonly wholeMap?: boolean;
+  /** …at level II also the bunker buster… */
+  readonly bunkerBuster?: boolean;
+  /** …at level III the strategic warhead, ready again this many ticks after one. */
+  readonly warheadCooldownTicks?: number;
+  /**
+   * Factory III's war production (2B.5): the owner's Airports and Silos within
+   * `warProductionRange` tiles of it reload and cool down in `warProductionFactor`× the time.
+   */
+  readonly warProductionRange?: number;
+  readonly warProductionFactor?: number;
 }
 
 export interface BuildingTypeRules {
@@ -475,6 +500,31 @@ export interface FlightRules {
   readonly suppressionRadius: number;
   readonly suppressionTicks: number;
   readonly suppressedLoss: number;
+  /**
+   * Missiles (Missile Silo, GAME_DESIGN.md §3.17.8, 2B.5), one "plane" each. A conventional
+   * missile (strike missile or bunker buster) costs `missileCost` gold to launch. The strike
+   * missile: every enemy building within `missileRadius` tiles of the target loses
+   * `missileLevels` level(s), and the target's land there is suppressed (as by an air strike)
+   * for `missileSuppressionTicks`…
+   */
+  readonly missileCost: number;
+  readonly missileRadius: number;
+  readonly missileLevels: number;
+  readonly missileSuppressionTicks: number;
+  /** …the bunker buster: the enemy building at the target loses `busterLevels` levels… */
+  readonly busterLevels: number;
+  /** …and a building a missile hits is out of action for this long. */
+  readonly missileDisableTicks: number;
+  /**
+   * The strategic warhead (Silo III) costs `warheadCost`: everyone's land within
+   * `warheadRadius` of the target but the launcher's and their teammates' becomes neutral
+   * scorched land — its buildings destroyed, its owner losing home troops in proportion to
+   * the land lost — on which expansion costs `scorchedCost`× for `scorchedTicks`.
+   */
+  readonly warheadCost: number;
+  readonly warheadRadius: number;
+  readonly scorchedTicks: number;
+  readonly scorchedCost: number;
 }
 
 /** How nations build (GAME_DESIGN.md §3.17, ai/build.ts). Tribes never build. */
@@ -544,6 +594,12 @@ export interface BuildAiRules {
    * nation or human has buildings within its reach.
    */
   readonly strikeWorth: number;
+  /**
+   * Missile Silos (2B.5): a Silo level is worth this share of capacity while an enemy nation
+   * or human has buildings within its reach (I–II: worth strikes; III: the warhead's value
+   * comes on top while a runaway leader stands — see AiRules.warheadLeaderShare).
+   */
+  readonly siloWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -669,6 +725,18 @@ export interface AiRules {
   readonly strikeAirportWeight: number;
   readonly suppressionWorth: number;
   readonly strikeMinValue: number;
+  /**
+   * Missiles (GAME_DESIGN.md §3.17.8, 2B.5): a nation launches a strike missile or bunker
+   * buster only when the levels it would cost enemies are worth at least `missileValueFactor`×
+   * its price (and never into SAMs that would stop it), keeping its Mobilize war chest…
+   */
+  readonly missileValueFactor: number;
+  /**
+   * …and the strategic warhead only at a runaway leader: a nation or human (not a friend)
+   * holding at least `warheadLeaderShare` of all owned land, at the spot where it hits the
+   * most of their land.
+   */
+  readonly warheadLeaderShare: number;
   /** Wars on tribes a nation runs at once (against nations: one at a time). */
   readonly maxTribeWars: number;
   /** Counter an incoming army when home troops are at least this many times its size... */
@@ -917,6 +985,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     strikeAirportWeight: 1.5,
     suppressionWorth: 1,
     strikeMinValue: 30_000,
+    // Missiles cost gold: only when they take twice their price in enemy levels. The warhead
+    // only at a player who holds a third of the owned land (a runaway leader).
+    missileValueFactor: 2,
+    warheadLeaderShare: 0.33,
     counterAbove: 1.1,
     counterSize: 1.3,
     retreatBelow: 0.3,
@@ -1030,6 +1102,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // (~1M gold with escalation) that only late leaders reach it: 0.2–0.3 Air Bases a game
       // on Islands whether this is 0.5 or 1.0 (2B.4 headless).
       strikeWorth: 0.5,
+      // Silos are the last investment: a nation reaches one only in long games.
+      siloWorth: 0.4,
     },
   },
   tribe: {
@@ -1133,6 +1207,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             buildTicks: 200,
             income: 220,
             mobilizeDiscount: 0.2,
+            // War production (2B.5): nearby Airports and Silos reload a quarter faster.
+            warProductionRange: 60,
+            warProductionFactor: 0.75,
           },
         ],
       },
@@ -1205,8 +1282,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // Air defence (§3.17.7): each interceptor always destroys one hostile plane in its
       // radius, and they reload one at a time. No stacking bonuses: overlapping SAMs add
       // interceptors, never multipliers — more planes than interceptors (saturation) get
-      // through. Intercepting missiles (II) and the warhead + early warning (III) come with
-      // missiles (2B.5).
+      // through. Level II also shoots down conventional missiles, level III the strategic
+      // warhead (the only counter to it) and warns of launches within twice its radius (2B.5).
       sam: {
         onCapture: "adopt",
         placement: "land",
@@ -1226,6 +1303,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 35,
             interceptors: 2,
             reloadTicks: 80,
+            interceptsMissiles: true,
           },
           {
             name: "Integrated Air Defense",
@@ -1234,6 +1312,46 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 45,
             interceptors: 3,
             reloadTicks: 60,
+            interceptsMissiles: true,
+            interceptsWarheads: true,
+            earlyWarning: 2,
+          },
+        ],
+      },
+      // Missiles (§3.17.8, 2B.5): a late-game check on a leader. The strike missile (75k a
+      // launch) costs every enemy building within 8 km a level; the bunker buster (II) two
+      // levels of one building; the strategic warhead (III, 500k, 90 s) scorches 20 km. A
+      // captured Silo is destroyed (too swingy to hand over). Slots reload one at a time.
+      silo: {
+        onCapture: "destroy",
+        placement: "land",
+        levels: [
+          {
+            name: "Missile Silo",
+            cost: 250_000,
+            buildTicks: 150,
+            range: 250,
+            missileSlots: 1,
+            reloadTicks: 300,
+          },
+          {
+            name: "Advanced Silo",
+            cost: 400_000,
+            buildTicks: 200,
+            range: 400,
+            missileSlots: 2,
+            reloadTicks: 250,
+            bunkerBuster: true,
+          },
+          {
+            name: "Strategic Missile Complex",
+            cost: 800_000,
+            buildTicks: 300,
+            wholeMap: true,
+            missileSlots: 3,
+            reloadTicks: 200,
+            bunkerBuster: true,
+            warheadCooldownTicks: 900,
           },
         ],
       },
@@ -1339,6 +1457,18 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     suppressionRadius: 10,
     suppressionTicks: 300,
     suppressedLoss: 0.8,
+    // A strike missile costs about a Developed Housing: worth it against a cluster of
+    // buildings, not against one. The warhead is a once-a-game decision for most players.
+    missileCost: 75_000,
+    missileRadius: 8,
+    missileLevels: 1,
+    missileSuppressionTicks: 300,
+    busterLevels: 2,
+    missileDisableTicks: 200,
+    warheadCost: 500_000,
+    warheadRadius: 20,
+    scorchedTicks: 600,
+    scorchedCost: 3,
   },
 });
 

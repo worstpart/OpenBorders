@@ -169,6 +169,15 @@ const SAM = [
   "M11.5 13.5A4 4 0 0 0 18.5 13.5Z", // radar dish
 ].join("");
 
+/** Missile Silo (2B.5): a missile rising out of an open hatch (fallback for the painted art). */
+const SILO = [
+  rect(3, 18, 18, 3), // ground
+  "M6 18L8 15H16L18 18Z", // open hatch
+  "M10.5 15V7L12 3.5L13.5 7V15Z", // missile
+  "M10.5 12L8.8 14.5H10.5Z", // fins
+  "M13.5 12L15.2 14.5H13.5Z",
+].join("");
+
 export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, string, string]>> = {
   housing: [HOUSE_1, HOUSE_2, HOUSE_3],
   factory: [FACTORY_1, FACTORY_2, FACTORY_3],
@@ -176,6 +185,7 @@ export const BUILDING_ICONS: Readonly<Record<BuildingType, readonly [string, str
   port: [PORT_1, PORT_2, PORT_2],
   airport: [AIRPORT, AIRPORT, AIRPORT],
   sam: [SAM, SAM, SAM],
+  silo: [SILO, SILO, SILO],
 };
 
 /** The wall tool and wall cards (GAME_DESIGN.md §3.17.6). */

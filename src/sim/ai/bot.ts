@@ -80,6 +80,7 @@ import {
 } from "../systems/flights.ts";
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
+import { decideMissiles } from "./missile.ts";
 import { decideStrike } from "./strike.ts";
 import { working } from "../systems/buildings.ts";
 import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
@@ -159,6 +160,13 @@ export function thinkBots(world: World): void {
     // Air strikes (2B.4): free but for their cooldown, so a ready Air Base always flies one.
     const strike = tribe ? null : decideStrike(world, bot, actions);
     if (strike) world.pendingCommands.push({ playerId: bot.id, command: strike });
+    // Missiles (2B.5): they cost gold, so not while the war chest goes to Mobilize.
+    if (!tribe) {
+      const mobilizing = [...gold.before, ...gold.after].some((c) => c.type === "mobilize");
+      for (const command of decideMissiles(world, bot, actions, mobilizing)) {
+        world.pendingCommands.push({ playerId: bot.id, command });
+      }
+    }
     const wasting = bot.capacity > 0 && bot.homeTroops >= ai.wastingAt * bot.capacity;
     brain.idleThinks = actions.length === 0 && wasting ? brain.idleThinks + 1 : 0;
   }

@@ -205,6 +205,7 @@ describe("losing planes", () => {
         type: "flightIntercepted",
         flightId: flight.id,
         owner: 1,
+        kind: flight.kind,
         by: 2,
         tile: at(3, 3),
         fromTile: -1,

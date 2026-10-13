@@ -148,6 +148,12 @@ export function hashWorld(world: World): number {
       h.addInt(z.tile).addInt(z.radius).addInt(z.victim).addInt(z.by).addInt(z.untilTick);
     }
   }
+  // Scorched land (2B.5), only while some is in force.
+  if (world.scorched.length > 0) {
+    h.addInt(0x5c5).addInt(world.scorched.length);
+    for (const z of world.scorched)
+      h.addInt(z.tile).addInt(z.radius).addInt(z.by).addInt(z.untilTick);
+  }
   h.addInt(world.nextPingId).addInt(world.pings.length);
   for (const p of world.pings) {
     h.addInt(p.id)
