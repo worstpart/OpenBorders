@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ · 2B.5 ✅ |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ · 2B.5 ✅ · 2B.6 ✅ — awaiting the user's playtest approval |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -513,7 +513,7 @@ bot games before anyone has to play them.
 | 2B.3 ✅ | **Airport II airborne assault** — hostile landing, beachhead attack (from 2.7), ×1.25 airborne losses, landing-pocket protection, SAM and Defense Line III flak interception; AI: assault busy/depleted targets, bypass fortified borders | 2B.1, 2B.2, 2.6, 2.7 | Assaults open a front and then play exactly like ground attacks; no "teleport army" meta in headless games |
 | 2B.4 ✅ | **Airport III air strikes** — fighter wings, building damage (−1 level, disabled), point suppression (zone-modifier hook from 2.6), escorts; AI: strike SAMs/posts before assaults, strike prime targets | 2B.3 | Combined arms works: strike → suppress → assault → capture |
 | 2B.5 ✅ | **Missile Silo I–III** — strike missile, bunker buster, strategic warhead (scorched land), SAM II/III missile interception, Factory III war production; AI: silos in long games, warheads vs runaway leaders | 2B.0, 2B.2 | A late-game leader can be checked by missiles; SAM III is the only warhead counter |
-| 2B.6 | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
+| 2B.6 ✅ | **Port III Naval Base + strategic balance pass** — coastal fortification; warship patrol (boats proved fun — user, 2.8 start); **warships capture non-allied trade ships** (the ship sails to the captor's nearest Port and its cargo is theirs; allies' and teammates' ships immune — D-026); full balance and AI pass across all buildings | 2.7, 2.8 trade, 2B.5 | Playtest approval; Phase 2B handoff |
 
 **Milestone 2B.0 result (2026-10-06)** — the flight foundation (ARCHITECTURE §5.7 "as built").
 Built: `world.flights` with positions as a pure function of the tick (straight line, speed
@@ -740,6 +740,38 @@ slow motion); the warhead's blast (fire, sparks, debris, shock ring), the charre
 console errors. First version drew the smoke over the fire — fixed (smoke underneath, lighter).
 Tests: 473 (`tests/sim/missile.test.ts`, `tests/client/missile.test.ts`).
 
+**Milestone 2B.6 result (2026-10-14)** — Port III Naval Base, warships, coastal fortification,
+and the Phase 2B balance pass (GAME_DESIGN §3.18.1, ARCHITECTURE §5.7 "Warships", D-031).
+**The user's choices at the start:** warships patrol automatically (no steering); they attack
+troop boats, warships and trade ships of non-friends; warship art from an image prompt I wrote
+(`docs/art/WARSHIP_ART_PROMPT.md`) — a grey troop boat stands in meanwhile, labelled on the
+Port card. **Rules:** Naval Base +300k / 20 s, +25 gold/tick, a trade ship every 7 s, 2
+warships patrolling 40 km (1.5 km/tick, 1,000 health, a shell every 2 s within 8 km: sinks a
+troop boat or does 250 damage; trade ships boarded, cargo to the captor's Port; rebuilt after
+60 s), its owner's coast within 30 km a Stone Wall. **Decided during the milestone:** trade
+ships bound for the owner's or a friend's Port are left alone (headless: otherwise ~180
+captures a game, everyone's trade starved); nations keep their boats out of waters hostile
+warships guard. **Balance pass:** team games need **85%** combined land (was 70%: 4 v 4 on
+Islands ended with the land race, 5.5 min, a level-III building in 3/30 games → 9.3 min,
+16/30); `navalBaseWorth` 0.15 (at 0.3 nations built 4.1 Naval Bases a game on Islands and
+almost stopped building Silos and Air Bases). The Phase 2 carry-overs: aggressors now win
+14/60 Continent games (5/60 at Phase 2); Islands free-for-alls 20.6 min (22.7 before 2B.6),
+inside the accepted 15–20 min band's upper edge; team games no longer end before Phase 2B's
+content. **Headless** (final rules): Islands (40) median 20.6 min, wins expander 13 · turtle
+14 · opportunist 7 · aggressor 6, 2.7 Naval Bases, 5.4 warship launches, 2.8 trade ships
+captured, 7.5K boat troops sunk a game, 0.7 Silos, 0.3 missiles, 0.6 assaults, 0.4 strikes;
+Continent (60) 8.8 min, 15 · 18 · 13 · 14; Two lands (40) 10.1 min; Islands 2 teams (30) 9.3
+min, teams 15 · 14; 10 nations + 100 tribes (30) 10.8 min. Ticks average ≤ 1 ms, warships
+0.01 ms; no errors, no timeouts, every game has a winner. **Regression:** warships-off
+free-for-all games replay 2B.5 (3ebaaaa) exactly (9 games, 3 configs; team games differ by
+design — the 85% goal). **Browser** (own tab, Islands, Easy, 0 tribes, gold from allied
+nations by `sendAs`): Port I → III built; two grey warships patrol; an enemy boat of 25.5K
+troops sunk off the coast (shell streak, splash, toast "⚓ Your warship sank Westmarch's boat
+(21.3K troops)" on a second try); the Naval Base card ("Warships: 2 of 2 at sea", the stand-in
+note); the coast drawn as a grey stone line (first version: separate dots at high zoom —
+joined into a line); no console errors. Tests: 489 (`tests/sim/warships.test.ts`, team goal
+in `tests/sim/teams.test.ts`).
+
 **Dependency map** (what must exist first):
 
 ```
@@ -823,12 +855,12 @@ Complexity: **L** low · **M** medium · **H** high · **VH** very high.
 | Flat gold + trade/trains | E2 + Mobilize (to be decided) | — | P2 | M | |
 | City (+max troops) | **Housing** I–III | — | 2.5 | M | Planned 2026-10-02 (§3.17) |
 | Defense Post | **Border Defense** I–III: fortified border zones drawn as walls | — | 2.6 | H | Planned (D-022) |
-| Port | **Port** I–II (2.7), III (2B.6) | ✅ I–II | 2.7 / 2B | M | |
+| Port | **Port** I–II (2.7), III (2B.6) | ✅ I–III | 2.7 / 2B | M | |
 | Factory + trains/railroads | **Factory** I–III: plain gold income + Mobilize discount (no trains) | — | 2.5 | M | Trains stay out (opaque) |
 | Structure levels/upgrades | **Exactly 3 named levels**, level = health | — | 2.5 | M | Planned (D-021) |
 | Transport ships | Same + route/ETA preview | ✅ | 2.7 | H | Weighted A* over sea tiles; the beachhead attack is generic (2B reuses it) |
 | Trade ships | Same: Port to Port, both sides paid by distance | ✅ | 2.8 | M | User's request (D-026); no embargo yet |
-| Warships & naval combat | Naval Base patrol (Port III); captures non-allied trade ships | — | 2B.6 | H | User: allies immune, all other trade can be intercepted |
+| Warships & naval combat | Naval Base patrol (Port III); captures non-allied trade ships | ✅ | 2B.6 | H | User: allies immune, all other trade can be intercepted; automatic patrol (D-031) |
 | Silos, SAMs | **Missile Silo** I–III (conventional missiles, one strategic warhead at III), **SAM** I–III | — | 2B | VH | User's direction 2026-10-02 (D-021) replaces "not planned" |
 | Atom/Hydrogen/MIRV, fallout | Only the Silo III strategic warhead (scorched land, 60 s) | — | 2B.5 | H | No MIRV |
 | *(new)* Airports & aircraft | **Airport** I–III: airlift, airborne assault, air strikes | — | 2B | VH | Not in OpenFront; biggest risk to the feel (§3.17.3) |

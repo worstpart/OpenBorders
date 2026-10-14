@@ -39,10 +39,12 @@
     ui.phase === "spawn" ? "Spawn" : formatClock((ui.tick - ui.playStartTick) / 10),
   );
   const victory = DEFAULT_RULES.victory;
+  /** Team games need the team's combined share (2B.6: higher than a lone player's). */
+  const start = $derived(ui.teamGame ? victory.teamLandShare : victory.landShare);
   const goal = $derived(
     ui.phase === "spawn"
-      ? victory.landShare
-      : winLandShare(DEFAULT_RULES, ui.tick - ui.playStartTick),
+      ? start
+      : winLandShare(DEFAULT_RULES, ui.tick - ui.playStartTick, ui.teamGame),
   );
   const wholePercent = (share: number): string => `${Math.round(share * 100)}%`;
   const goalTitle =
@@ -54,7 +56,7 @@
 <div class="top-right">
   <div class="bar">
     <span class="clock" title="Match time">{clock}</span>
-    <span class="goal" class:dropping={goal < victory.landShare} title={goalTitle}>
+    <span class="goal" class:dropping={goal < start} title={goalTitle}>
       Win {wholePercent(goal)}
     </span>
     {#if ui.speed !== 1}<span class="speed" title="Game speed">{ui.speed}×</span>{/if}

@@ -229,7 +229,8 @@ interface World {
                      (after encircle, so an annexed player is out in the same tick)
 6. growTroops        capacity & regeneration
 6b. earnGold         gold income (milestone 2.4); advanceTrade: trade ships dock and sail (2.8)
-                     (2b advanceBoats and 2c advanceFlights run between steps 2 and 3 — §5.7)
+                     (2a advanceWarships, 2b advanceBoats and 2c advanceFlights run between
+                     steps 2 and 3 — §5.7)
 7. thinkAI           bots emit commands for the NEXT tick (world.pendingCommands,
                      applied first in step 1 — same validation path as people)
 8. checkVictory
@@ -394,7 +395,7 @@ runner keep using LocalHost with a manual clock.
 
 ---
 
-### 5.7 Buildings, ranges and flights — *2.5 buildings, 2B.0 flights, 2B.1 Airport I, 2B.2 SAMs, 2B.3 Airport II + flak, 2B.4 Air Base strikes built; the rest PLANNED*
+### 5.7 Buildings, ranges and flights — *built: 2.5 buildings, 2B.0 flights, 2B.1–2B.4 Airports, SAMs, flak, strikes, 2B.5 Silos, 2B.6 Naval Base + warships*
 
 Design: GAME_DESIGN §3.17; roadmap 2.5 → 2.6 → 2.7 → Phase 2B. The goal of 2.5 is that
 nothing built then has to be rewritten for airports, SAMs and missiles later.
@@ -745,10 +746,41 @@ ships that arrive dock (the destination Port's *current* owner receives; none if
 gone or now the sender's own), then every finished Port whose beat comes up (`(tick + id·37)
 mod tradeEveryTicks`) sends a ship to a random partner Port (`tradePartners`: other living
 players' finished Ports sharing a sea) using `world.rng`. Port-to-Port routes are cached per
-map (static). `owner`/`toPort` are mutable so warships can capture ships (2B.6). Events:
+map (static). Warships (2B.6) capture a ship by replacing it with a new `captured` one. Events:
 `tradeDocked`; frames carry `tradeShips` snapshots (made once per ship); players carry
 `tradeGold`. Nations value a Port's trade with `expectedTradePerTick` (straight-line
 distances, no searches).
+
+**Warships (2B.6, `systems/warships.ts`, D-031).** `world.warships` (ascending ids, hashed
+once a game has had one — so earlier games keep their hashes): owner, base (the Naval Base's
+building id), hp, the current leg (`fromTile` → `route` → `toTile`, leaving at `legTick` at
+`rules.warships.tilesPerTick` — the position is a pure function of the tick, like a boat's),
+`readyTick` (sunk: in the shipyard until then; -1 at sea), `reloadTick`, and what it is
+after. `advanceWarships` is tick step **2a** (before boats land, so a boat can be sunk on its
+last tile): `keepFleets` gives every Port at level ≥ 3 its quota (launched at once,
+rebuilt after `rebuildTicks` while the Base works; owner changes scuttle and rebuild; a gone
+or downgraded Base removes them), then each warship at sea picks prey from one list made
+per tick (boats, warships, uncaptured trade ships with their current tiles): non-friends
+inside its Base's patrol radius, rank boat < warship < trade, nearest, lower id; trade ships
+bound for a friend's Port are skipped. Within `gunRange` it holds still and fires every
+`reloadTicks`: a boat is removed (field troops updated), a warship loses `shellDamage`,
+a trade ship is replaced by a new one (`captured`, bound for the captor's nearest working
+Port — new id, so frames, the worker protocol and the client see a new ship). Otherwise it
+sails: a new `seaRoute` (budget `maxRouteNodes`) every `repathTicks` during a chase, or
+to a random tile of the Base's patrol area (`patrolTiles`, cached per map, picked with
+`world.rng`) when idle. Coastal fortification is virtual: `coastFortLevel`
+(buildings.ts, shared with the HUD) gives a coast tile of the Base's owner within its range
+a wall level, and `walls.ts` `workingFort` takes the higher of it and a drawn wall — so
+every wall hook (losses, break troops, hold time, suppression) applies unchanged. Events:
+`warshipLaunched`, `warshipFired`, `warshipSunk`, `boatSunk`, `tradeCaptured`
+(`tradeDocked.captured` for a prize). Frames carry `warships` snapshots (remade when the leg,
+health, owner or shipyard state changes); the client draws them in `render/boats.ts` (the
+stand-in art is the boat sprite under a grey canvas filter until `warship-3.png` exists),
+the shell as a shot streak with particles, and the fortified coast as a stone line
+(`render/buildings.ts`, tiles from `client/app/buildings.ts` `fortifiedCoast`, computed
+once per frame). `rules.warships.enabled = false` (headless `--no-warships`) caps Ports at
+level II and replays 2B.5 games exactly; team games need `rules.victory.teamLandShare`
+(85%, 2B.6).
 
 **Frames and rendering.** Frames carry building deltas (added/changed/removed: id, type,
 owner, tile, level, targetLevel, readyTick, disabled) and flight launch/interception/

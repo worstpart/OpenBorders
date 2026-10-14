@@ -8,7 +8,7 @@
  *                          [--workers N] [--json out.json] [--quiet]
  *                          [--rules overrides.json] [--personality expander]
  *                          [--no-alliances] [--teams N] [--no-economy] [--no-buildings]
- *                          [--no-boats] [--no-trade] [--no-flights] [--continent]
+ *                          [--no-boats] [--no-trade] [--no-flights] [--no-warships] [--continent]
  *
  * Plays games with the real simulation (no browser) and reports how they went: winner
  * and reason, length, when the land race ended, lead changes, eliminations, rejected
@@ -42,6 +42,9 @@
  * took, and the planes Fortress Wall flak shot down (2B.3); Air Bases, air strikes flown, the
  * levels they cost buildings, the buildings they destroyed, and the points they suppressed
  * (2B.4).
+ * --no-warships turns the Naval Base and its warships off (2B.6); each game reports Naval
+ * Bases, warship launches (new and rebuilt), boats they sank with the troops aboard, trade
+ * ships they captured, and warships sunk in battle.
  *
  * Tick times are also broken down per system (`systemsMs`: average and worst per step,
  * plus the steps of each game's slowest tick) to show where the time goes.
@@ -181,6 +184,13 @@ export interface GameReport {
     tradeTrips: number;
     tradeGold: number;
     tradeLost: number;
+    /** Warships (2B.6): Naval Bases, launches, boats sunk (troops aboard), prizes, ships sunk. */
+    navalBases: number;
+    warshipLaunches: number;
+    boatsSunk: number;
+    boatTroopsSunk: number;
+    tradeCaptured: number;
+    warshipsSunk: number;
   };
   /** Air (GAME_DESIGN §3.17.7), totals over all players. */
   air: {
@@ -257,6 +267,7 @@ async function main(): Promise<void> {
       "no-boats": { type: "boolean", default: false },
       "no-trade": { type: "boolean", default: false },
       "no-flights": { type: "boolean", default: false },
+      "no-warships": { type: "boolean", default: false },
       continent: { type: "boolean", default: false },
       style: { type: "string", default: "continent" },
       size: { type: "string" },
@@ -275,9 +286,12 @@ async function main(): Promise<void> {
   const withTrade = args["no-trade"]
     ? { ...withBoats, trade: { ...withBoats.trade, enabled: false } }
     : withBoats;
-  const rules = args["no-flights"]
+  const withFlights = args["no-flights"]
     ? { ...withTrade, flights: { ...withTrade.flights, enabled: false } }
     : withTrade;
+  const rules = args["no-warships"]
+    ? { ...withFlights, warships: { ...withFlights.warships, enabled: false } }
+    : withFlights;
   const options: Options = {
     games: Number(args.games),
     bots: Number(args.bots),
@@ -443,6 +457,12 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
     tradeTrips: 0,
     tradeGold: 0,
     tradeLost: 0,
+    navalBases: 0,
+    warshipLaunches: 0,
+    boatsSunk: 0,
+    boatTroopsSunk: 0,
+    tradeCaptured: 0,
+    warshipsSunk: 0,
   };
   const air: GameReport["air"] = {
     airports: 0,
@@ -534,13 +554,20 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         } else if (event.type === "tradeDocked") {
           if (event.gold > 0) {
             naval.tradeTrips++;
-            naval.tradeGold += 2 * event.gold;
+            naval.tradeGold += (event.captured ? 1 : 2) * event.gold;
           } else naval.tradeLost++;
-        } else if (event.type === "boatRecalled") naval.recalled++;
+        } else if (event.type === "warshipLaunched") naval.warshipLaunches++;
+        else if (event.type === "boatSunk") {
+          naval.boatsSunk++;
+          naval.boatTroopsSunk += event.troops;
+        } else if (event.type === "tradeCaptured") naval.tradeCaptured++;
+        else if (event.type === "warshipSunk" && event.by !== 0) naval.warshipsSunk++;
+        else if (event.type === "boatRecalled") naval.recalled++;
         else if (event.type === "boatReturned" && event.troops === 0) naval.sunk++;
         else if (event.type === "buildingStarted" && event.buildingType === "port") {
           if (event.level === 1) naval.ports++;
           else naval.portUpgrades++;
+          if (event.level === 3) naval.navalBases++;
         }
         if (event.type === "buildingStarted" && event.buildingType === "airport") {
           if (event.level === 1) air.airports++;

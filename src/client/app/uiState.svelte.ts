@@ -10,6 +10,7 @@ import type {
   BoatSnapshot,
   FlightSnapshot,
   TradeShipSnapshot,
+  WarshipSnapshot,
   BuildingSnapshot,
   WallSnapshot,
   PlayerSnapshot,
@@ -110,6 +111,8 @@ class UiState {
   tradeShips = $state.raw<readonly TradeShipSnapshot[]>([]);
   /** Flights in the air (GAME_DESIGN.md §3.17.7). */
   flights = $state.raw<readonly FlightSnapshot[]>([]);
+  /** Warships (2B.6), sunk ones in their shipyard too. */
+  warships = $state.raw<readonly WarshipSnapshot[]>([]);
   /** Map pings the local player sees: theirs and their friends' (GAME_DESIGN.md §3.20). */
   pings = $state.raw<readonly PingSnapshot[]>([]);
   /** Tick of the local player's last emoji and ping (-1 = none), for the menu's cooldowns. */
@@ -139,6 +142,8 @@ class UiState {
   owner: Uint16Array = new Uint16Array(0);
   /** The client's copy of the Border Defense level per tile (GAME_DESIGN.md §3.17.6). */
   fort: Uint8Array = new Uint8Array(0);
+  /** Coast tiles a Naval Base fortifies (2B.6), with their wall level; refreshed every frame. */
+  coastForts = $state.raw<ReadonlyMap<number, number>>(new Map());
   /** Tick of the local player's last alliance request to each player (for the cooldown). */
   myRequests = $state.raw<ReadonlyMap<PlayerId, number>>(new Map());
   /** Tick of the local player's last donation to each friend, by donationKeyOf(to, resource). */
@@ -179,6 +184,7 @@ class UiState {
     this.boats = [];
     this.tradeShips = [];
     this.flights = [];
+    this.warships = [];
     this.pings = [];
     this.myLastEmoteTick = -1;
     this.myLastPingTick = -1;
@@ -219,6 +225,7 @@ class UiState {
       allies: this.allies,
       teammates: this.teammates,
       fort: this.fort,
+      coastForts: this.coastForts,
     };
   }
 
@@ -249,6 +256,7 @@ class UiState {
       owner: this.owner,
       buildings: this.buildings,
       walls: this.walls,
+      warships: this.warships,
       me: this.me,
       tick: this.tick,
       playing: this.phase === "playing",

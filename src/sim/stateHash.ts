@@ -120,6 +120,26 @@ export function hashWorld(world: World): number {
       .addNumber(s.tilesPerTick)
       .addInt(s.arriveTick)
       .addInt(s.gold);
+    // Captured (2B.6) only when true, so earlier games keep their hashes.
+    if (s.captured) h.addInt(0xca9);
+  }
+  // Warships (2B.6), hashed once the game has had one.
+  if (world.nextWarshipId > 1) {
+    h.addInt(0x2b6).addInt(world.nextWarshipId).addInt(world.warships.length);
+    for (const w of world.warships) {
+      h.addInt(w.id)
+        .addInt(w.owner)
+        .addInt(w.base)
+        .addInt(w.hp)
+        .addInt(w.fromTile)
+        .addInt(w.route.length)
+        .addInt(w.toTile)
+        .addInt(w.legTick)
+        .addInt(w.readyTick)
+        .addInt(w.reloadTick)
+        .addString(w.targetKind)
+        .addInt(w.targetId);
+    }
   }
   // Flights (2B.0), hashed once the game has had one (so games without flights keep the
   // hashes they had before 2B.0 — the regression check compares them).

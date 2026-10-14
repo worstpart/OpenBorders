@@ -69,6 +69,7 @@ import {
 } from "../systems/diplomacy.ts";
 import { bordersTarget } from "../systems/attacks.ts";
 import { coastTiles, seasOf, touchesSea } from "../systems/naval.ts";
+import { guardedWaters } from "../systems/warships.ts";
 import { distanceSq } from "../geometry.ts";
 import { wallLevel } from "../systems/walls.ts";
 import {
@@ -626,6 +627,7 @@ function chooseSeaTarget(
   const minGain = style.minLandGain * (wasting ? ai.wastingGainFactor * boredom : 1);
   let best: Choice | null = null;
   let bestScore = 0;
+  let guarded: ReturnType<typeof guardedWaters> | null = null;
   for (const target of world.players) {
     const id = target.id;
     if (id === bot.id || !target.alive || target.tiles === 0) continue;
@@ -654,14 +656,16 @@ function chooseSeaTarget(
       (isTribe(target) ? ai.tribePreference : 1) *
       (isTraitor(world, target) ? ai.traitorPreference : 1);
     if (score <= bestScore) continue;
-    // Their coast nearest us, on one of our seas.
+    // Their coast nearest us, on one of our seas — out of reach of hostile warships (2B.6).
     let landing = -1;
+    guarded ??= guardedWaters(world, bot.id);
     const reach = seaReach(world);
     let nearest = reach * reach;
     for (const tile of target.border) {
       const d = distanceSq(map, tile, center);
       if (d >= nearest || !isCoast(map, tile) || !touchesSea(map, body, tile, around.seas))
         continue;
+      if (guarded.some((g) => distanceSq(map, g.tile, tile) <= g.rangeSq)) continue;
       landing = tile;
       nearest = d;
     }

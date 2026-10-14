@@ -61,6 +61,7 @@ import {
   wallPreview,
   type Placeable,
   type WallPreview,
+  fortifiedCoast,
 } from "./buildings.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
@@ -128,6 +129,9 @@ export interface ClientElements {
   overlayParent: HTMLElement;
   fontFamily: string;
 }
+
+/** No fortified coast (no Naval Base). */
+const NO_FORTS: ReadonlyMap<number, number> = new Map();
 
 export class GameClient {
   private readonly renderer: MapRenderer;
@@ -606,6 +610,9 @@ export class GameClient {
       at(event.tile, event.missile === "buster" ? "strike" : "missile");
     } else if (event.type === "warheadDetonated") {
       at(event.tile, "warhead");
+    } else if (event.type === "warshipFired" && event.result !== "captured") {
+      // A shell (2B.6): a splash on a hit, a fireball when it sinks the ship.
+      at(event.to, event.result === "sunk" ? "destroyed" : "intercept", SHOT_MS);
     }
   }
 
@@ -903,6 +910,9 @@ export class GameClient {
           start: performance.now(),
         });
       }
+      if (event.type === "warshipFired" && event.result !== "captured") {
+        this.shotEffects.push({ fromTile: event.from, tile: event.to, start: performance.now() });
+      }
       if (event.type === "flightIntercepted" && event.fromTile >= 0) {
         this.shotEffects.push({
           fromTile: event.fromTile,
@@ -1022,6 +1032,11 @@ export class GameClient {
     ui.boats = frame.boats;
     ui.tradeShips = frame.tradeShips;
     ui.flights = frame.flights;
+    ui.warships = frame.warships;
+    ui.coastForts =
+      this.map && frame.buildings.some((b) => b.type === "port" && b.level >= 3)
+        ? fortifiedCoast(DEFAULT_RULES, this.map, this.owner, frame.buildings, frame.tick)
+        : NO_FORTS;
     ui.pings = visiblePings(frame.pings, ui.localPlayerId, ui.friends);
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
@@ -1317,6 +1332,7 @@ export class GameClient {
         ghost: this.buildGhost(),
         rings: this.rangeRings(),
         walls: ui.walls,
+        coastForts: ui.coastForts,
         selectedWall: ui.menu?.kind === "wall" ? ui.menu.id : null,
         wallPreview: this.wallDraft(),
         rules: DEFAULT_RULES,
@@ -1324,6 +1340,7 @@ export class GameClient {
       this.boatLayer.draw(view, {
         boats: ui.boats,
         tradeShips: ui.tradeShips,
+        warships: ui.warships,
         width: this.map.width,
         tick,
         localPlayerId: ui.localPlayerId,

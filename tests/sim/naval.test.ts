@@ -234,9 +234,9 @@ describe("Ports", () => {
     ).toBeNull();
     run(w, RULES.buildings.types.port.levels[0]!.buildTicks);
     const port = w.buildings[0]!;
-    if (level >= 2) {
+    for (let l = 2; l <= level; l++) {
       order(w, 1, { type: "upgrade", buildingId: port.id });
-      run(w, RULES.buildings.types.port.levels[1]!.buildTicks);
+      run(w, RULES.buildings.types.port.levels[l - 1]!.buildTicks);
     }
     expect(port.level).toBe(level);
     return w;
@@ -266,8 +266,9 @@ describe("Ports", () => {
     expect(two.players[0]!.bonus.income).toBe(15); // harbour income; trade comes on top (§3.19)
   });
 
-  it("stops at level II for now", () => {
-    const w = withPort(2);
+  it("goes up to level III, the Naval Base (2B.6), and no further", () => {
+    const w = withPort(3);
+    expect(w.buildings[0]!.level).toBe(3);
     expect(rejection(order(w, 1, { type: "upgrade", buildingId: w.buildings[0]!.id }))).toBe(
       "already at the top level",
     );

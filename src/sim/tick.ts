@@ -28,6 +28,7 @@ import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { advanceTrade } from "./systems/trade.ts";
+import { advanceWarships } from "./systems/warships.ts";
 import {
   advanceFlights,
   applyAirlift,
@@ -53,6 +54,7 @@ export const TICK_STEPS = [
   "commands",
   "diplomacy",
   "collisions",
+  "warships",
   "boats",
   "flights",
   "attacks",
@@ -96,6 +98,9 @@ export function runTick(world: World, turn: Turn, probe?: TickProbe): TickFrame 
     // 2. Opposing armies cancel out.
     resolveCollisions(world);
     probe?.("collisions");
+    // 2a. Warships patrol, chase and fire: boats can sink before they land (§3.18.1).
+    advanceWarships(world);
+    probe?.("warships");
     // 2b. Boats land (as beachhead attacks) or get home (GAME_DESIGN.md §3.18).
     advanceBoats(world);
     probe?.("boats");

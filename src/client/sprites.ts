@@ -5,7 +5,9 @@
  * missiles (`<kind>.png`). The map draws them on Canvas2D (render/), the HUD as plain images
  * (BuildingIcon.svelte). SAMs use theirs since 2B.2, the Silo and missiles since 2B.5 (missiles,
  * unlike the isometric vehicles, are turned to their heading: `rotation`);
- * walls are drawn as lines on the map and use their art in the HUD; warships have no art yet.
+ * walls are drawn as lines on the map and use their art in the HUD. Warships (2B.6) have no
+ * art yet: until `warship-<level>.png` exists (`hasSprite`), the map draws the Modern troop
+ * boat in grey as a stand-in (render/boats.ts).
  *
  * The isometric art does not rotate well, so vehicles are mirrored left/right by heading
  * instead. Each image is loaded once; for the map it is also kept pre-shrunk to the sizes
@@ -23,6 +25,7 @@ export type SpriteKind =
   | "helicopter"
   | "boat"
   | "tradeShip"
+  | "warship"
   | "missile"
   | SingleSprite;
 
@@ -39,6 +42,7 @@ const SINGLE: ReadonlySet<string> = new Set([
 export const FACES_LEFT: Readonly<Partial<Record<SpriteKind, boolean>>> = {
   boat: true,
   tradeShip: true,
+  warship: true,
   plane: false,
   helicopter: false,
   missile: false,
@@ -66,6 +70,11 @@ export function spriteUrl(kind: SpriteKind, level = 1): string {
   const url = URLS[`./assets/icons/${spriteKey(kind, level)}.png`];
   if (url === undefined) throw new Error(`No sprite ${kind}-${level}`);
   return url;
+}
+
+/** True if the art for this sprite exists (warships have none yet, 2B.6). */
+export function hasSprite(kind: SpriteKind, level = 1): boolean {
+  return URLS[`./assets/icons/${spriteKey(kind, level)}.png`] !== undefined;
 }
 
 /** Loaded sprites and their shrunk copies (browser only). */

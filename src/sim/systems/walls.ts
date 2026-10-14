@@ -21,6 +21,7 @@ import type { GameRules, WallLevelRules } from "../rules.ts";
 import { ownerTileHash } from "../stateHash.ts";
 import type { Player, PlayerId, Wall, World } from "../world.ts";
 import { isSuppressed } from "./suppression.ts";
+import { coastFortLevel } from "./buildings.ts";
 
 /** A wall holds even a crushing army at least this share of its hold time. */
 const MIN_HOLD_SHARE = 0.5;
@@ -279,10 +280,14 @@ export function breakWallTile(world: World, tile: number, by: PlayerId): void {
 
 /**
  * The wall level that works on `tile` now: 0 with no wall, or while an air strike suppresses
- * it (2B.4) — the hooks below all read it.
+ * it (2B.4) — the hooks below all read it. A Naval Base's coastal fortification (2B.6) counts
+ * as a wall on its coast.
  */
 function workingFort(world: World, tile: number): number {
-  const level = world.fortLevel[tile]!;
+  const level = Math.max(
+    world.fortLevel[tile]!,
+    coastFortLevel(world.rules, world.map, world.owner, world.buildings, world.tick, tile),
+  );
   return level === 0 || isSuppressed(world, tile) ? 0 : level;
 }
 

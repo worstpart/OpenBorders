@@ -330,6 +330,59 @@ export function toastsForEvents(
           });
         }
         break;
+      case "boatSunk":
+        // Warships (2B.6): a boat sunk at sea, troops and all.
+        if (event.owner === me) {
+          toasts.push({
+            text: `⚓ ${nameOf(event.by)}'s warship sank your boat — ${formatTroops(event.troops)} troops lost`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `⚓ Your warship sank ${nameOf(event.owner)}'s boat (${formatTroops(event.troops)} troops)`,
+            tone: "success",
+            player: event.owner,
+          });
+        } else if (event.target === me) {
+          toasts.push({
+            text: `⚓ ${nameOf(event.by)}'s warship sank ${nameOf(event.owner)}'s boat bound for your coast`,
+            tone: "success",
+            player: event.owner,
+          });
+        }
+        break;
+      case "tradeCaptured":
+        if (event.from === me) {
+          toasts.push({
+            text: `⚓ ${nameOf(event.by)}'s warship captured your trade ship`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `⚓ Your warship captured ${nameOf(event.from)}'s trade ship — ${formatTroops(event.gold)} gold aboard`,
+            tone: "success",
+            player: event.from,
+          });
+        }
+        break;
+      case "warshipSunk":
+        if (event.by === 0) break; // scuttled: the Base's capture has its own toast
+        if (event.owner === me) {
+          toasts.push({
+            text: `⚓ ${nameOf(event.by)} sank your warship${event.readyTick >= 0 ? " — a new one is being built" : ""}`,
+            tone: "danger",
+            player: event.by,
+          });
+        } else if (event.by === me) {
+          toasts.push({
+            text: `⚓ Your warship sank ${nameOf(event.owner)}'s warship`,
+            tone: "success",
+            player: event.owner,
+          });
+        }
+        break;
       case "boatLanded":
         if (event.owner === me && event.attackId < 0) {
           toasts.push({

@@ -23,9 +23,9 @@ const RULES = makeRules({
   tribe: EVERY_TICK,
   attack: { noiseShare: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
-  victory: { landShare: 2 },
+  victory: { ...DEFAULT_RULES.victory, landShare: 2, teamLandShare: 2 },
 });
-/** Default win share (70%), for the victory tests. */
+/** Default win shares (70%, teams 85%), for the victory tests. */
 const WIN_RULES = makeRules({
   attack: { noiseShare: 0 },
   troops: { growthFloor: 0, growthScale: 0 },
@@ -128,8 +128,24 @@ describe("teams", () => {
 });
 
 describe("team victory", () => {
-  it("a team wins on its combined land; the biggest member is the winner", () => {
-    // 20 land tiles: team 1 holds 8 + 6 = 14 (70%), neither member alone.
+  it("a team wins on its combined land (85%); the biggest member is the winner", () => {
+    // 20 land tiles: team 1 holds 8 + 10 = 18 (90%), neither member alone (70% = 14).
+    const world = worldFromAscii(
+      `
+      ~~~~~~~~~~~~
+      ~1111222223~
+      ~1111222223~
+      ~~~~~~~~~~~~
+      `,
+      { rules: WIN_RULES, teams: [1, 1, 2] },
+    );
+    const events = run(world, 2);
+    expect(events).toContainEqual({ type: "gameOver", winner: 2, team: 1, reason: "landShare" });
+    expect(world.winningTeam).toBe(1);
+  });
+
+  it("a team needs more than a lone player: 70% together isn't enough (2B.6)", () => {
+    // Team 1 holds 8 + 6 = 14 of 20 land tiles (70%).
     const world = worldFromAscii(
       `
       ~~~~~~~~~~~~
@@ -139,9 +155,8 @@ describe("team victory", () => {
       `,
       { rules: WIN_RULES, teams: [1, 1, 2] },
     );
-    const events = run(world, 2);
-    expect(events).toContainEqual({ type: "gameOver", winner: 1, team: 1, reason: "landShare" });
-    expect(world.winningTeam).toBe(1);
+    run(world, 2);
+    expect(world.phase).toBe("playing");
   });
 
   it("allied teams don't win together", () => {

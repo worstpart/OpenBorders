@@ -19,6 +19,7 @@ import type {
   Scorched,
   Suppression,
   TradeShip,
+  Warship,
   World,
 } from "./world.ts";
 
@@ -119,6 +120,30 @@ export interface TradeShipSnapshot {
   readonly tilesPerTick: number;
   readonly arriveTick: number;
   readonly gold: number;
+  /** Taken by a warship (2B.6): sailing for the captor's Port. */
+  readonly captured: boolean;
+}
+
+/**
+ * A warship (GAME_DESIGN.md §3.18.1, 2B.6). Its position follows from its leg and the tick
+ * (systems/warships.ts warshipTile), like a boat's. Made again when its leg, health, owner or
+ * shipyard state changes; shared between frames otherwise.
+ */
+export interface WarshipSnapshot {
+  readonly id: number;
+  readonly owner: PlayerId;
+  /** Its Naval Base (building id). */
+  readonly base: number;
+  readonly hp: number;
+  readonly fromTile: number;
+  readonly route: Int32Array;
+  readonly toTile: number;
+  readonly legTick: number;
+  readonly tilesPerTick: number;
+  /** In the shipyard (sunk) until this tick; -1 = at sea. */
+  readonly readyTick: number;
+  /** What it is after ("" = patrolling). */
+  readonly targetKind: "" | "boat" | "warship" | "trade";
 }
 
 /** A building (GAME_DESIGN.md §3.17). */
@@ -224,6 +249,8 @@ export interface TickFrame {
   readonly tradeShips: readonly TradeShipSnapshot[];
   /** Every flight in the air, by ascending id. */
   readonly flights: readonly FlightSnapshot[];
+  /** Every warship (sunk ones in their shipyard too), by ascending id (2B.6). */
+  readonly warships: readonly WarshipSnapshot[];
   /** Suppression zones in force (air strikes on a point, 2B.4), oldest first. */
   readonly suppressions: readonly Suppression[];
   /** Scorched land in force (strategic warheads, 2B.5), oldest first. */
@@ -328,10 +355,46 @@ function snapshotTradeShip(ship: TradeShip): TradeShipSnapshot {
     tilesPerTick: ship.tilesPerTick,
     arriveTick: ship.arriveTick,
     gold: ship.gold,
+    captured: ship.captured === true,
   };
   tradeCache.set(ship, snapshot);
   return snapshot;
 }
+
+const warshipCache = new WeakMap<Warship, WarshipSnapshot>();
+
+function snapshotWarship(ship: Warship, tilesPerTick: number): WarshipSnapshot {
+  const cached = warshipCache.get(ship);
+  if (
+    cached &&
+    cached.legTick === ship.legTick &&
+    cached.fromTile === ship.fromTile &&
+    cached.toTile === ship.toTile &&
+    cached.route.length === ship.route.length &&
+    cached.hp === ship.hp &&
+    cached.owner === ship.owner &&
+    cached.readyTick === ship.readyTick &&
+    cached.targetKind === ship.targetKind
+  )
+    return cached;
+  const snapshot: WarshipSnapshot = {
+    id: ship.id,
+    owner: ship.owner,
+    base: ship.base,
+    hp: ship.hp,
+    fromTile: ship.fromTile,
+    route: ship.route.slice(),
+    toTile: ship.toTile,
+    legTick: ship.legTick,
+    tilesPerTick,
+    readyTick: ship.readyTick,
+    targetKind: ship.targetKind,
+  };
+  warshipCache.set(ship, snapshot);
+  return snapshot;
+}
+
+const NO_WARSHIPS: readonly WarshipSnapshot[] = Object.freeze([]);
 
 const flightCache = new WeakMap<Flight, FlightSnapshot>();
 
@@ -412,6 +475,10 @@ export function buildFrame(world: World): TickFrame {
     boats: world.boats.map(snapshotBoat),
     tradeShips: world.tradeShips.map(snapshotTradeShip),
     flights: world.flights.map(snapshotFlight),
+    warships:
+      world.warships.length > 0
+        ? world.warships.map((w) => snapshotWarship(w, world.rules.warships.tilesPerTick))
+        : NO_WARSHIPS,
     suppressions:
       world.suppressions.length > 0 ? world.suppressions.map((z) => ({ ...z })) : NO_ZONES,
     scorched: world.scorched.length > 0 ? world.scorched.map((z) => ({ ...z })) : NO_SCORCHED,

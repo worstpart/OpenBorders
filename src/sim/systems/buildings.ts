@@ -98,9 +98,50 @@ export function levelRules(
   return found;
 }
 
-/** The top level of a building type (3; Port 2 until Phase 2B). */
+/**
+ * The top level of a building type (3). The Port's level III, the Naval Base (2B.6), only in
+ * games with warships: without them a Port stops at level II, as before 2B.6.
+ */
 export function maxLevel(rules: GameRules, type: BuildingType): number {
-  return rules.buildings.types[type].levels.length;
+  const levels = rules.buildings.types[type].levels.length;
+  return type === "port" && !warshipsEnabled(rules) ? Math.min(2, levels) : levels;
+}
+
+/**
+ * Coastal fortification (GAME_DESIGN.md §3.18.1, 2B.6): the wall level a Naval Base gives
+ * `tile` — a coast tile of its owner's within its range (the best working one counts); 0
+ * elsewhere. Shared with the HUD (live buildings or snapshots).
+ */
+export function coastFortLevel(
+  rules: GameRules,
+  map: GameMap,
+  owner: ArrayLike<number>,
+  buildings: readonly {
+    readonly type: string;
+    readonly owner: PlayerId;
+    readonly tile: number;
+    readonly level: number;
+    readonly disabledUntil: number;
+  }[],
+  tick: number,
+  tile: number,
+): number {
+  if (!warshipsEnabled(rules) || !isCoast(map, tile)) return 0;
+  const holder = owner[tile]!;
+  if (holder === NEUTRAL) return 0;
+  let best = 0;
+  for (const b of buildings) {
+    if (b.type !== "port" || b.owner !== holder || !working(b, tick)) continue;
+    const effect = levelRules(rules, "port", b.level);
+    const level = effect.coastFort ?? 0;
+    if (level > best && withinRange(map, b.tile, tile, effect.range ?? 0)) best = level;
+  }
+  return best;
+}
+
+/** Warships (GAME_DESIGN.md §3.18.1, 2B.6) need boats, buildings and the economy. */
+export function warshipsEnabled(rules: GameRules): boolean {
+  return rules.warships.enabled && rules.naval.enabled && buildingsEnabled(rules);
 }
 
 /** What the price escalation counts: the levels of `type` a player owns, building ones included. */

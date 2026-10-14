@@ -18,11 +18,12 @@ import { landAllFlights } from "./flights.ts";
 
 type Reason = "landShare" | "lastStanding" | "noneLeft";
 
-/** Share of all land needed to win after `playTicks` ticks of play. */
-export function winLandShare(rules: GameRules, playTicks: number): number {
+/** Share of all land needed to win after `playTicks` ticks of play (`team`: by a team). */
+export function winLandShare(rules: GameRules, playTicks: number, team = false): number {
   const v = rules.victory;
   const steps = Math.floor(Math.max(0, playTicks - v.declineStartTicks) / v.declineStepTicks);
-  return Math.max(v.minLandShare, v.landShare - steps * v.declineStep);
+  const start = team ? v.teamLandShare : v.landShare;
+  return Math.max(v.minLandShare, start - steps * v.declineStep);
 }
 
 /** Tick system. */
@@ -30,7 +31,10 @@ export function checkVictory(world: World): void {
   const playTicks = world.playStartTick >= 0 ? world.tick - world.playStartTick : 0;
   const needed = Math.ceil(winLandShare(world.rules, playTicks) * world.map.landTiles);
   const standing = world.players.filter((p) => p.alive && p.tiles > 0);
-  if (world.teamCount > 0 && checkTeamVictory(world, standing, needed)) return;
+  if (world.teamCount > 0) {
+    const teamNeeded = Math.ceil(winLandShare(world.rules, playTicks, true) * world.map.landTiles);
+    if (checkTeamVictory(world, standing, teamNeeded)) return;
+  }
 
   const dominant = standing.find((p) => p.tiles >= needed);
   if (dominant) return endGame(world, dominant.id, 0, "landShare");

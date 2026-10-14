@@ -240,6 +240,37 @@ export interface TradeShip {
   readonly arriveTick: number;
   /** Gold each side earns when it docks. */
   readonly gold: number;
+  /**
+   * Taken by a warship (2B.6): it sails for the captor's Port, and whoever owns that Port when
+   * it docks gets the cargo (`gold`) — no one else. A captured ship can't be taken again.
+   */
+  readonly captured?: boolean;
+}
+
+/**
+ * A warship (GAME_DESIGN.md §3.18.1, 2B.6, D-031): one of a Naval Base's patrol. It sails in
+ * legs — from `fromTile` over `route` to `toTile`, leaving at `legTick` at
+ * rules.warships.tilesPerTick — so, like a boat, its position follows from the tick. A sunk
+ * warship stays on the list, "in the shipyard", until `readyTick`.
+ */
+export interface Warship {
+  readonly id: number;
+  owner: PlayerId;
+  /** The Naval Base (building id) it belongs to. */
+  readonly base: number;
+  hp: number;
+  /** The current leg (`fromTile` = `toTile` and an empty route: lying still). */
+  fromTile: number;
+  route: Int32Array;
+  toTile: number;
+  legTick: number;
+  /** Sunk (or scuttled): back at its Base at this tick; -1 = at sea. */
+  readyTick: number;
+  /** It may fire again from this tick on. */
+  reloadTick: number;
+  /** What it is after: a boat, a warship or a trade ship (by id); "" = patrolling. */
+  targetKind: "" | "boat" | "warship" | "trade";
+  targetId: number;
 }
 
 /**
@@ -362,6 +393,9 @@ export interface World {
   /** Trade ships at sea, by ascending id (GAME_DESIGN.md §3.19). */
   tradeShips: TradeShip[];
   nextTradeShipId: number;
+  /** Warships (2B.6), by ascending id — sunk ones included, waiting in their shipyard. */
+  warships: Warship[];
+  nextWarshipId: number;
   /** Flights in the air, by ascending id (GAME_DESIGN.md §3.17.7). */
   flights: Flight[];
   nextFlightId: number;
@@ -548,6 +582,8 @@ export function createWorld(setup: GameSetup): World {
     nextBoatId: 1,
     tradeShips: [],
     nextTradeShipId: 1,
+    warships: [],
+    nextWarshipId: 1,
     flights: [],
     nextFlightId: 1,
     suppressions: [],

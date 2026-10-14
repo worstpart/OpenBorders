@@ -3,10 +3,16 @@
  * building/wall card, the wall being drawn, and which building or wall a click hits. Pure
  * functions over frame snapshots; prices and placement rules come from the simulation.
  */
-import type { BuildingSnapshot, PlayerSnapshot, WallSnapshot } from "../../sim/frame.ts";
+import type {
+  BuildingSnapshot,
+  PlayerSnapshot,
+  WallSnapshot,
+  WarshipSnapshot,
+} from "../../sim/frame.ts";
 import type { GameMap } from "../../sim/map/gameMap.ts";
 import { BUILDING_TYPES, type BuildingType, type GameRules } from "../../sim/rules.ts";
 import {
+  coastFortLevel,
   buildingAvailable,
   buildingPrice,
   buildingsEnabled,
@@ -55,6 +61,8 @@ export interface BuildContext {
   readonly owner: Uint16Array;
   readonly buildings: readonly BuildingSnapshot[];
   readonly walls: readonly WallSnapshot[];
+  /** Warships (2B.6), for a Naval Base's card. */
+  readonly warships?: readonly WarshipSnapshot[];
   readonly me: PlayerSnapshot | undefined;
   readonly tick: number;
   readonly playing: boolean;
@@ -64,7 +72,7 @@ export interface BuildContext {
 export const BUILDING_ROLE: Record<Placeable, string> = {
   housing: "More troops",
   factory: "More gold",
-  port: "Trade & faster boats",
+  port: "Trade, faster boats, warships",
   airport: "Airlift, airborne assault, air strikes",
   sam: "Shoots down enemy planes",
   silo: "Missiles that hit buildings far away",
@@ -97,6 +105,14 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   }
   if (effect.tradeEveryTicks && tradeEnabled(rules)) {
     lines.push(`A trade ship every ${(effect.tradeEveryTicks * rules.tickMs) / 1000} s`);
+  }
+  if (effect.warships) {
+    lines.push(
+      `${effect.warships} warships patrol ${effect.patrolRange ?? 0} km around it: they sink enemy boats and capture passing trade ships`,
+    );
+  }
+  if (effect.coastFort) {
+    lines.push(`Your coast within ${effect.range ?? 0} km is fortified like a Stone Wall`);
   }
   if (effect.liftShare) {
     lines.push(`Airlift: up to ${Math.round(effect.liftShare * 100)}% of your troop capacity`);
@@ -207,6 +223,14 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     lines.push(
       `${now.boatLoss ? "" : "New: Marines — "}landings lose ${Math.round((1 - next.boatLoss) * 100)}% less`,
     );
+  }
+  if (next.warships && !now.warships) {
+    lines.push(
+      `New: ${next.warships} warships patrol ${next.patrolRange ?? 0} km of sea — they sink enemy boats, fight warships and capture passing trade ships`,
+    );
+  }
+  if (next.coastFort && !now.coastFort) {
+    lines.push(`New: your coast within ${next.range ?? 0} km is fortified like a Stone Wall`);
   }
   if (next.liftShare) {
     lines.push(`Lifts up to ${Math.round(next.liftShare * 100)}% of your troop capacity`);
@@ -551,7 +575,11 @@ export function buildingCard(ctx: BuildContext, building: BuildingSnapshot): Bui
     owner: building.owner,
     level: building.level,
     name: levelRules(rules, building.type, shownLevel).name,
-    effects: [...effectLines(rules, building.type, building.level), ...tradeLines(ctx, building)],
+    effects: [
+      ...effectLines(rules, building.type, building.level),
+      ...tradeLines(ctx, building),
+      ...fleetLines(ctx, building),
+    ],
     work: workOf(ctx, building),
     upgrade,
     airlift:
@@ -610,9 +638,55 @@ function siloStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard
 }
 
 /** Levels that come in later updates (Phase 2B), by type, after the top level built so far. */
-const LATER_LEVELS: Partial<Record<BuildingType, string>> = {
-  port: "Level III (Naval Base) comes in a later update",
-};
+const LATER_LEVELS: Partial<Record<BuildingType, string>> = {};
+
+/**
+ * Coastal fortification (2B.6): every coast tile a Naval Base fortifies now, with its wall
+ * level. Empty without Naval Bases.
+ */
+export function fortifiedCoast(
+  rules: GameRules,
+  map: GameMap,
+  owner: Uint16Array,
+  buildings: readonly BuildingSnapshot[],
+  tick: number,
+): Map<number, number> {
+  const forts = new Map<number, number>();
+  for (const b of buildings) {
+    if (b.type !== "port" || b.level < 1) continue;
+    const effect = levelRules(rules, "port", b.level);
+    if (!effect.coastFort) continue;
+    const range = effect.range ?? 0;
+    const cx = b.tile % map.width;
+    const cy = Math.floor(b.tile / map.width);
+    for (let y = Math.max(0, cy - range); y <= Math.min(map.height - 1, cy + range); y++) {
+      for (let x = Math.max(0, cx - range); x <= Math.min(map.width - 1, cx + range); x++) {
+        const tile = y * map.width + x;
+        if (forts.has(tile) || owner[tile] !== b.owner) continue;
+        const level = coastFortLevel(rules, map, owner, buildings, tick, tile);
+        if (level > 0) forts.set(tile, level);
+      }
+    }
+  }
+  return forts;
+}
+
+/** A Naval Base's warships (2B.6): at sea, or being rebuilt. */
+function fleetLines(ctx: BuildContext, building: BuildingSnapshot): string[] {
+  if (building.type !== "port" || !ctx.warships) return [];
+  const fleet = ctx.warships.filter((s) => s.base === building.id);
+  if (fleet.length === 0) return [];
+  const atSea = fleet.filter((s) => s.readyTick < 0).length;
+  const lines = [`Warships: ${atSea} of ${fleet.length} at sea`];
+  const next = Math.min(...fleet.filter((s) => s.readyTick >= 0).map((s) => s.readyTick));
+  if (Number.isFinite(next)) {
+    lines.push(
+      `Next warship ready in ${Math.ceil(seconds(ctx.rules, Math.max(0, next - ctx.tick)))} s`,
+    );
+  }
+  lines.push("(Warship art is a stand-in until your warship sheet arrives)");
+  return lines;
+}
 
 /** A working Port's trade (GAME_DESIGN.md §3.19): its partners, and your trade so far. */
 function tradeLines(ctx: BuildContext, building: BuildingSnapshot): string[] {

@@ -170,6 +170,11 @@ export interface EliminationRules {
 export interface VictoryRules {
   /** Share of all land that wins the game outright… */
   readonly landShare: number;
+  /**
+   * …in team games, the share a team's members need together (2B.6 balance pass: at 70%
+   * a team of four reached it as the land race ended, before any level-III building)…
+   */
+  readonly teamLandShare: number;
   /** …until this many ticks of play; then it drops by `declineStep`… */
   readonly declineStartTicks: number;
   /** …every this many ticks… */
@@ -306,10 +311,21 @@ export interface BuildingLevelRules {
    */
   readonly warProductionRange?: number;
   readonly warProductionFactor?: number;
+  /**
+   * Naval Base (Port III, 2B.6, D-031): it keeps this many warships at sea, patrolling within
+   * `patrolRange` tiles of it (rules.warships)…
+   */
+  readonly warships?: number;
+  readonly patrolRange?: number;
+  /**
+   * …and its owner's coast within `range` tiles of it is fortified like a wall of this level
+   * (coastal fortification: landings and attacks along that coast pay the wall's price).
+   */
+  readonly coastFort?: number;
 }
 
 export interface BuildingTypeRules {
-  /** Levels I, II, III (Port: I–II so far — Naval Base in a later milestone). */
+  /** Levels I, II, III (the Port's level III, the Naval Base, only with rules.warships). */
   readonly levels: readonly BuildingLevelRules[];
   /**
    * Where it can stand: any land of yours, a coast tile (next to the sea), or flat land
@@ -416,6 +432,35 @@ export interface TradeRules {
   readonly tilesPerTick: number;
   /** Trade ships at sea in the whole game, at most (a Port's next ship waits otherwise). */
   readonly maxShips: number;
+}
+
+/**
+ * Warships (GAME_DESIGN.md §3.18.1, milestone 2B.6, D-031 — the user's choices): every Naval
+ * Base (Port III) keeps its warships patrolling the sea around it on their own (nobody steers
+ * them). They shoot at ships of players who are not their owner's friends (allies and
+ * teammates are safe) within their patrol area: troop boats first (one shell sinks one, the
+ * troops aboard are lost), then warships, then trade ships, which they capture.
+ */
+export interface WarshipRules {
+  /** false: no Naval Base and no warships (games play as in 2B.5). Needs boats and buildings. */
+  readonly enabled: boolean;
+  /** Sea tiles a warship sails per tick. */
+  readonly tilesPerTick: number;
+  /** Health; each shell from another warship takes `shellDamage`. */
+  readonly hp: number;
+  readonly shellDamage: number;
+  /** A warship hits (or boards) a ship within this many tiles of it… */
+  readonly gunRange: number;
+  /** …once every this many ticks. */
+  readonly reloadTicks: number;
+  /** A chase is re-planned this often (ticks): the prey moves. */
+  readonly repathTicks: number;
+  /** A sunk warship is back at its Naval Base after this many ticks. */
+  readonly rebuildTicks: number;
+  /** Health mended per tick while it has nothing to shoot at. */
+  readonly repairPerTick: number;
+  /** A warship's route search gives up after visiting this many sea tiles. */
+  readonly maxRouteNodes: number;
 }
 
 /** The kinds of map ping (GAME_DESIGN.md §3.20): "attack here", "defend here", "watch out". */
@@ -600,6 +645,12 @@ export interface BuildAiRules {
    * comes on top while a runaway leader stands — see AiRules.warheadLeaderShare).
    */
   readonly siloWorth: number;
+  /**
+   * Naval Base (2B.6): its warships are worth this share of capacity while a player who
+   * isn't a friend has a Port on the same sea (ships to take, boats to fear); nothing
+   * otherwise — the Base then pays only through its income and trade.
+   */
+  readonly navalBaseWorth: number;
 }
 
 export const PERSONALITIES = ["expander", "aggressor", "turtle", "opportunist"] as const;
@@ -830,6 +881,7 @@ export interface GameRules {
   readonly trade: TradeRules;
   readonly chat: ChatRules;
   readonly flights: FlightRules;
+  readonly warships: WarshipRules;
 }
 
 export const DEFAULT_RULES: GameRules = deepFreeze({
@@ -924,6 +976,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   },
   victory: {
     landShare: 0.7,
+    // Teams need more (2B.6 balance pass): at 70% two teams of four ended as the land race
+    // did (5.5 min on Islands, a level-III building in 3 of 30 games); at 85%: 9.3 min, 16 of 30.
+    teamLandShare: 0.85,
     // Anti-stall: almost every game ends by 16 min. After 15 min the requirement drops
     // 1% every 30 s, reaching 50% at 25 min — so two equal players who keep cancelling
     // each other's attacks (a 1% case in bot games, up to 60 min) can't stall forever.
@@ -1104,6 +1159,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       strikeWorth: 0.5,
       // Silos are the last investment: a nation reaches one only in long games.
       siloWorth: 0.4,
+      // A Naval Base guards a coast and preys on trade (2B.6). At 0.3 Islands nations built
+      // 4.1 a game and left Silos and Air Bases (0.4 Silos, no strikes); at 0.15: 2.7 Naval
+      // Bases, 0.7 Silos, 0.5 assaults and strikes — the mix of the game without warships.
+      navalBaseWorth: 0.15,
     },
   },
   tribe: {
@@ -1240,6 +1299,22 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             boatSlots: 2,
             boatLoss: 0.8,
             tradeEveryTicks: 100,
+          },
+          // Naval Base (2B.6, D-031): two warships guard the sea around it and its coast
+          // within 30 km is fortified like a Stone Wall — a coast that is hard to land on.
+          {
+            name: "Naval Base",
+            cost: 300_000,
+            buildTicks: 200,
+            income: 25,
+            boatSpeed: 2,
+            range: 30,
+            boatSlots: 2,
+            boatLoss: 0.8,
+            tradeEveryTicks: 70,
+            warships: 2,
+            patrolRange: 40,
+            coastFort: 2,
           },
         ],
       },
@@ -1470,6 +1545,22 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     scorchedTicks: 600,
     scorchedCost: 3,
   },
+  // Warships (2B.6, D-031): faster than trade ships and Port I boats, as fast as a Naval
+  // Port's, so they catch what sails through their patrol. Four shells sink a warship; a
+  // troop boat sinks with one, so a Naval Base turns back a stream of small landings but
+  // not a fleet launched at once (one shell every 2 s per warship).
+  warships: {
+    enabled: true,
+    tilesPerTick: 1.5,
+    hp: 1_000,
+    shellDamage: 250,
+    gunRange: 8,
+    reloadTicks: 20,
+    repathTicks: 10,
+    rebuildTicks: 600,
+    repairPerTick: 2,
+    maxRouteNodes: 30_000,
+  },
 });
 
 /** A copy of the default rules with some values overridden (tests, tuning experiments). */
@@ -1492,6 +1583,7 @@ export function makeRules(overrides: {
   trade?: Partial<TradeRules>;
   chat?: Partial<ChatRules>;
   flights?: Partial<FlightRules>;
+  warships?: Partial<WarshipRules>;
 }): GameRules {
   return deepFreeze({
     ...DEFAULT_RULES,
@@ -1513,6 +1605,7 @@ export function makeRules(overrides: {
     trade: { ...DEFAULT_RULES.trade, ...overrides.trade },
     chat: { ...DEFAULT_RULES.chat, ...overrides.chat },
     flights: { ...DEFAULT_RULES.flights, ...overrides.flights },
+    warships: { ...DEFAULT_RULES.warships, ...overrides.warships },
   });
 }
 

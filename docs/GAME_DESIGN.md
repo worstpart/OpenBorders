@@ -286,7 +286,8 @@ the one with the longest shared border, or the one actively attacking). Coasts a
 
 ### 3.10 Victory & defeat
 
-- **Victory:** control **≥ 70% of all land**, or be the last player standing.
+- **Victory:** control **≥ 70% of all land**, or be the last player standing. In team
+  games a team needs **85%** together (2B.6 balance pass, §3.15).
 - **Defeat:** your territory reaches zero. You may keep watching (spectate) or restart.
 - **Anti-stall** (pulled into Phase 1 at milestone 1.7): after **15 min** the land
   requirement drops **1% every 30 s**, down to **50%** at 25 min. The HUD shows the
@@ -528,7 +529,7 @@ written before building, with the user's answers of 2026-10-02; results below.
 | Tribes | **No team** — weak filler that every team eats, as in free-for-all (user) | Tribes are food; you may ally one early to grow safely next to it |
 | Teammates | permanently friendly: **can't attack each other**, never encircle each other's land (a piece enclosed only by teammates and allies is safe), can't be broken up | A team is a fixed side; same checks as an alliance (`areFriendly` = same team or allied) |
 | Alliances | **Exactly as in free-for-all** (§3.14), with anyone outside your team, tribes included — always requested, timed, renewable, betrayal makes a traitor. Asking a teammate is pointless and rejected (user) | Politics between teams stay possible; teams don't replace diplomacy |
-| Victory | a team wins when its members' **combined land** reaches the goal (70%, with the same anti-stall decline to 50%), or when **no other team has a player left** (leftover tribes don't block it — they can't win) | Shared victory is what teams are for. **Allied teams never win together**: alliances don't add land (user) |
+| Victory | a team wins when its members' **combined land** reaches the goal (**85%** since 2B.6 — was 70%; the same anti-stall decline to 50%), or when **no other team has a player left** (leftover tribes don't block it — they can't win) | Shared victory is what teams are for. **Allied teams never win together**: alliances don't add land (user) |
 | Last two sides allied | they must let the alliance run out — or break it and be a traitor; if they keep renewing, the game goes on (user). Nations count *sides* (teams) when deciding "only two contenders left", so they won't ally or renew then | Unchanged from §3.14, counted by team |
 | Eliminated but your team wins | you still win ("Victory — your team…") and can keep watching | Team play: your part counted |
 | Spawns | **unchanged**: nations are spread evenly at random, tribes scattered, you pick your own spot (your teammates' colours are visible while you choose) (user) | No team regions; the spawn phase stays the same in both modes |
@@ -564,6 +565,12 @@ teammate ever attacks another. 4 v 4 nations without tribes take a median 4.7 mi
 wins — each team starts with about half the land. Neither dropping the "gang up" weights
 nor an 80% team goal changed that much, so the goal stays 70%; the playtest decides. With
 two teams, nations don't ally across teams (two sides left).
+
+**2B.6 balance pass: the team goal is 85%.** With buildings, boats and air in the game, 4 v 4
+nations on Islands still ended as the land race did (median 5.5 min, a level-III building in
+3 of 30 games), so team games never reached Phase 2B's content. At 80%: 6.6 min, 8 of 30;
+at **85%: 9.3 min, 16 of 30** (Two lands: 5.9 → 8.1 min), both teams still winning about
+equally often. Free-for-all keeps 70%. The HUD's goal ("Win 85%") follows the mode.
 
 ### 3.16 Economy: gold, Mobilize, donations (milestone 2.4)
 
@@ -608,12 +615,12 @@ up) 11.6–12.1 min.
 - **Headless:** `--no-economy`; per game gold earned, mobilized, donated and looted, and
   the median gold income at minutes 1, 3 and 6.
 
-### 3.17 Buildings & strategic warfare — design (2026-10-02; partly built)
+### 3.17 Buildings & strategic warfare — design (2026-10-02; built 2.5 – 2B.6)
 
-> **Status (2026-10-12):** built so far — Housing, Factory (2.5, war production 2B.5), walls
+> **Status (2026-10-14):** all built — Housing, Factory (2.5, war production 2B.5), walls
 > (2.6), Port I–II (2.7), trade (2.8), flights (2B.0), Airport I–III (2B.1, 2B.3, 2B.4), SAM I–III
-> (2B.2; against missiles 2B.5), Missile Silo I–III (2B.5); rows marked ✅ in §3.17.10. Port III
-> is still the plan (2B.6).
+> (2B.2; against missiles 2B.5), Missile Silo I–III (2B.5), Port III Naval Base with warships
+> and coastal fortification (2B.6, §3.18.1); every row of §3.17.10 is marked ✅.
 > It is the design the user asked for on 2026-10-02 (seven buildings with three levels each, Border
 > Defense, SAMs, Missile Silos and Airports) — written *before* any code. The user's
 > answers of 2026-10-02: air & strategic warfare comes **before multiplayer** (Phase 2B,
@@ -974,9 +981,9 @@ appear only in long games: 0.9 a game, ~2 missiles, one warhead in 30 games, med
 - **Factory** — gold income and cheaper Mobilize (OpenFront's trains are replaced by a
   plain income number; the user's "military production" is the Mobilize discount and, at
   level III, faster reloads for nearby airports and silos — built in 2B.5).
-- **Port** ✅ I–II (2.7, §3.18) — boats launch from *any* coast; a Port makes them better.
-  Level III's warship patrol waits for the naval follow-up (only if boats prove fun); its
-  coastal fortification will be a coastal wall (§3.17.6).
+- **Port** ✅ I–III (2.7, 2B.6, §3.18) — boats launch from *any* coast; a Port makes them
+  better. Level III, the Naval Base, keeps two warships patrolling its sea and fortifies its
+  coast like a Stone Wall (§3.18.1, D-031).
 
 #### 3.17.10 The 21-tier matrix (proposed starting numbers)
 
@@ -993,7 +1000,7 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 | Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production** ✅ (2B.5): airports & silos within 60 km reload 25% faster | 60 | — | — | same — a prime target | hall + three chimneys |
 | Port ✅ | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port ✅ | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
-| Port | III Naval Base | +300k (470k) | 20 s | +60 gold/tick | **Coastal fortification** (a Stone Wall along its coast) and a **warship patrol** (later naval milestone) | 30 / 40 | — | — | strike, missile, airborne behind the coast | docks + grey hull |
+| Port ✅ | III Naval Base | +300k (470k) | 20 s | boats ×2, +2 boats, Marines; +25 gold/tick, a trade ship every 7 s (§3.19) | **Coastal fortification** ✅ (its owner's coast within 30 km counts as a Stone Wall) and a **warship patrol** ✅ (2 warships within 40 km, §3.18.1) | 30 / 40 | +2 boats | rebuild 60 s | strike, missile, enemy warships, airborne behind the coast | the pack's Modern port |
 | Wall ✅ (D-024) | I Palisade | 600/tile | 4 s + 0.1 s/tile | wall tiles hold 3 s, ×3 + 150 losses | drawn A, B, C … anywhere on your land | — | ≤ 80 tiles | — | go around, break through (a gap), airborne, strike, missile | brown stakes |
 | Wall ✅ | II Stone Wall | +1,500/tile | 8 s + 0.1 s/tile | 6 s, ×5 + 500 | — | — | — | — | same | grey blocks, towers |
 | Wall ✅ | III Fortress Wall | +4,000/tile | 15 s + 0.2 s/tile | 10 s, ×8 + 1,500 | **Flak** ✅ (2B.3: one plane per hostile flight that flies within 3 km) | — | — | — | same | thick stone, merlons, big towers |
@@ -1167,6 +1174,42 @@ mobilizes before a boat attack like before a land attack. Nations build one Port
 for its income plus 0.2 × capacity per unit of boat speed) and upgrade it. Tribes stay on
 land.
 
+#### 3.18.1 Naval Base & warships (milestone 2B.6 · as built · D-031)
+
+Port level III. The user's choices at the 2B.6 start (2026-10-14): warships **patrol on their
+own** (nobody steers them — no unit micromanagement, simple for multiplayer); they attack
+**troop boats, warships and trade ships** of players who aren't their owner's friends
+(OpenFront's order); the art is the user's to make from a prompt I wrote
+(`docs/art/WARSHIP_ART_PROMPT.md`) — until it arrives the map draws the Modern troop boat in
+grey, and the Port card says so.
+
+| Rule | Value | Why |
+|---|---|---|
+| Naval Base | Port III: +300k, 20 s; boats ×2, +2 boats, Marines (as the Naval Port), +25 gold/tick, a trade ship every 7 s | The last naval step; dearer than any economy upgrade |
+| Fleet | **2 warships** per Naval Base, launched the moment it is finished | One patrol to each side of the Base |
+| Patrol | each warship sails from one random point of its Base's sea within **40 km** to the next | Guards the water around the coast, not the whole ocean |
+| Targets | ships of players who are **not friends** of the owner (allies and teammates are safe) inside the patrol area: **troop boats first, then warships, then trade ships** — the nearest of the most urgent kind | A Base defends its coast first |
+| Peaceful trade | a trade ship **bound for a Port of the owner's or a friend's** is left alone — it comes to trade | Headless: seizing one's own trading partners took ~180 ships a game and starved everyone's trade (decided in 2B.6) |
+| Guns | within **8 km** the warship stops and fires once every **2 s**: one shell **sinks a troop boat** (everyone aboard is lost) or takes 250 of a warship's 1,000 health (four shells sink it) | A Base turns back a stream of small landings, not a fleet launched at once |
+| Capture | a trade ship within 8 km is boarded instead: it sails on (a new ship) for the captor's nearest working Port and **its cargo goes to that Port's owner**; with no such Port it is sunk. A prize can't be taken again | D-026: piracy pays |
+| Speed | 1.5 km per tick (15 km/s): faster than trade ships and Port I boats, as fast as a Naval Port's | They catch what sails through |
+| Sunk | rebuilt at its Base after **60 s** (only while the Base works); mends 2 health a tick while it has nothing to shoot | Losing a ship costs time, not gold |
+| Base captured | its warships are scuttled; the new owner's are built after 60 s. Base destroyed or down to level II (strikes, missiles): the warships are gone | Warships belong to their Base |
+| Coastal fortification | the owner's **coast within 30 km** of a working Naval Base counts as a **Stone Wall** (holds 6 s, ×5 losses + 500 troops a tile) — for landings and land attacks along that shore alike; drawn as a grey stone line on the coast | "A coast that is hard to land on" — the design's level III ability |
+| Spawn protection | warships don't fire | Like everything else |
+
+**Seen on the map.** Warships in the owner's colour like boats, bigger, with a health bar
+once damaged; a shell is a streak with a splash (a fireball when it sinks something). Toasts:
+"⚓ X's warship sank your boat — N troops lost", "⚓ Your warship captured X's trade ship —
+N gold aboard", "⚓ X sank your warship — a new one is being built" (and the matching good
+news). No new sounds (the user's preference: alerts stay rare). The Naval Base card lists
+"Warships: 2 of 2 at sea" and when the next one is ready.
+
+**Nations.** They value the Naval Base upgrade at its income and trade plus **0.15 ×
+capacity** while an unfriendly Port shares its sea, and keep their troop boats out of
+waters a non-friend's warships guard (its patrol area plus gun range) — so in bot games
+warships mostly deter: nations land elsewhere.
+
 ### 3.19 Trade ships (milestone 2.8 · the user's request at the 2.8 start)
 
 The user, after playing boats: *"we need ports to bring in income. Little ships should be
@@ -1196,8 +1239,11 @@ earn gold — the more sea it crossed, the more: 400 + 10 per route tile, at mos
 
 **Nations.** They value a Port's trade at what it would earn now (partner Ports on its sea ×
 the average trip), so Ports get more attractive once others have built them.
-**Later (2B.6):** warships capture non-allied trade ships (the ship sails to the captor's
-nearest Port and its cargo is theirs); allies' and teammates' ships are immune.
+**Warships (2B.6, §3.18.1):** a Naval Base's warships capture trade ships of players who
+aren't their owner's friends while they pass through its patrol area: the ship sails on for
+the captor's nearest Port and its cargo goes to that Port's owner. Allies' and teammates'
+ships are immune, and so is a ship bound for a Port of the warship's owner or a friend —
+it comes to trade.
 
 ### 3.20 Alerts, pings & emojis (milestone 2.9 · as built · D-027)
 

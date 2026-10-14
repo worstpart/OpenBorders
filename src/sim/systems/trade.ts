@@ -11,7 +11,8 @@
  *    is lost.
  *  - A player who is eliminated loses their trade ships.
  *
- * Warships (2B.6) will capture non-allied ships by changing `owner` and `toPort`.
+ * Warships (2B.6, warships.ts) capture non-friends' ships: a captured ship sails on as a new
+ * ship (`captured`) for the captor's Port, and only that Port's owner is paid — the cargo.
  */
 import type { GameMap } from "../map/gameMap.ts";
 import type { GameRules } from "../rules.ts";
@@ -137,6 +138,26 @@ function dockArrivals(world: World): void {
     const port = findBuilding(world, ship.toPort);
     const receiver: Player | undefined =
       port && port.level >= 1 ? getPlayer(world, port.owner) : undefined;
+    if (ship.captured) {
+      // A prize: its cargo goes to whoever holds the Port it sailed for.
+      const paid = receiver?.alive === true;
+      if (paid) {
+        receiver.gold += ship.gold;
+        receiver.tradeGold += ship.gold;
+      }
+      world.events.push({
+        type: "tradeDocked",
+        shipId: ship.id,
+        owner: ship.owner,
+        receiver: paid ? receiver.id : 0,
+        fromPort: ship.fromPort,
+        toPort: ship.toPort,
+        tile: ship.landingTile,
+        gold: paid ? ship.gold : 0,
+        captured: true,
+      });
+      continue;
+    }
     // Lost: the Port is gone; or no trade: it is the sender's own Port now.
     const paid = sender?.alive && receiver?.alive && receiver !== sender;
     if (paid) {

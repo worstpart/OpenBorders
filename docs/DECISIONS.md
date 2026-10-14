@@ -35,6 +35,8 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-027 | Sound = alert sounds only, synthesized in the browser; talking = emojis + map pings (no quick chat, no free text) | **Accepted** 2026-10-06 (user) |
 | D-028 | Art: the user's icon pack (WW1 → WW2 → Modern eras = levels I → III) becomes the building and vehicle art, in milestone 2B.0b | **Accepted** 2026-10-06 (user's request; placement mine) |
 | D-029 | Landed armies (airborne, boats) don't collide with counter-attacks; the pocket is taken tile by tile | **Accepted** 2026-10-12 (user's playtest of 2B.4) |
+| D-030 | Missiles hit enemies only; the warhead spares your and your teammates' land but hits allies; explosion particles | **Accepted** 2026-10-12 (mine, minor; particles the user's request) |
+| D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
 
 ---
 
@@ -625,3 +627,35 @@ explosion").
 
 **Alternatives.** A blast that hits the launcher too (OpenFront-like, but a trap for new players
 firing near their own border); interceptable-by-any-SAM missiles (would make SAM I enough).
+
+## D-031 — Naval Base warships, coastal fortification, and the 2B.6 balance pass · Accepted 2026-10-14
+
+**Context.** Port III (the Naval Base) was designed as "coastal fortification and a warship
+patrol" (GAME_DESIGN §3.17.10), with warships capturing non-allied trade ships (D-026). How
+warships are controlled and what they attack changes how naval play feels, so I asked at the
+2B.6 start. The milestone also carries the Phase 2B balance pass.
+
+**Decision.**
+- **The user (2026-10-14):** warships **patrol automatically** around their Naval Base (no
+  steering, no unit micromanagement — simpler HUD and multiplayer); they attack **troop boats,
+  warships and trade ships** of players who are not the owner's friends, in that order
+  (OpenFront's); the art: **I write an image prompt** for the tool the user made the icon pack
+  with (`docs/art/WARSHIP_ART_PROMPT.md`); until the sheet arrives the map draws the Modern troop
+  boat in grey, labelled as a stand-in on the Port card.
+- **Mine (minor — the user may revisit after playing):** 2 warships per Base, 40 km patrol, 8 km
+  guns, a shell every 2 s, one shell sinks a troop boat, four a warship, rebuilt after 60 s;
+  a captured trade ship sails for the captor's nearest Port and its cargo goes to that Port's
+  owner; **trade ships bound for a Port of the owner's or a friend's are left alone** (headless:
+  otherwise ~180 captures a game and everyone's trade starved); a captured Base's warships are
+  scuttled and the new owner's built after 60 s; the **coastal fortification** is the owner's
+  coast within 30 km counting as a Stone Wall (virtual — nothing is built, nothing breaks);
+  nations keep their boats out of guarded waters and value the Base at 0.15 × capacity while an
+  unfriendly Port shares its sea.
+- **Balance pass (mine):** team games need **85%** combined land (70% before): with two teams the
+  goal was reached as the land race ended, before any Phase 2B content. Free-for-all keeps 70%.
+
+**Alternatives.** Player-steered warships (OpenFront's box-select and move — more control, much
+more UI, and unit micromanagement the game otherwise avoids); trade-only warships (landings stay
+unstoppable at sea); a real wall built along the coast (would break tile by tile and need
+rebuilding — the virtual fortification follows the coast as it changes hands); an 80% team goal
+(too small a change: 5.5 → 6.6 min).

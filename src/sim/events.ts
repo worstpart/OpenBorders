@@ -239,6 +239,71 @@ export type SimEvent =
       /** The destination Port's tile. */
       readonly tile: number;
       readonly gold: number;
+      /** A captured ship (2B.6): only `receiver` was paid — the cargo. */
+      readonly captured?: boolean;
+    }
+  | {
+      /**
+       * A warship (GAME_DESIGN.md §3.18.1, 2B.6) put to sea from its Naval Base: new, rebuilt
+       * after sinking, or after the Base changed hands.
+       */
+      readonly type: "warshipLaunched";
+      readonly warshipId: number;
+      readonly owner: PlayerId;
+      readonly base: number;
+      readonly tile: number;
+    }
+  | {
+      /**
+       * A warship fired at (or boarded) a ship of `victim`'s: a troop boat "sunk", a warship
+       * "hit" or "sunk", a trade ship "captured".
+       */
+      readonly type: "warshipFired";
+      readonly warshipId: number;
+      readonly owner: PlayerId;
+      readonly victim: PlayerId;
+      readonly from: number;
+      readonly to: number;
+      readonly targetKind: "boat" | "warship" | "trade";
+      readonly targetId: number;
+      readonly result: "sunk" | "hit" | "captured";
+    }
+  | {
+      /**
+       * A warship went down: sunk by `by`'s warship, or scuttled when its Base was lost or
+       * changed hands (`by` 0). It is back at `readyTick` if its Base still stands (-1: never).
+       */
+      readonly type: "warshipSunk";
+      readonly warshipId: number;
+      readonly owner: PlayerId;
+      readonly by: PlayerId;
+      readonly tile: number;
+      readonly readyTick: number;
+    }
+  | {
+      /** A warship of `by`'s sank a troop boat: everyone aboard is lost. */
+      readonly type: "boatSunk";
+      readonly boatId: number;
+      readonly owner: PlayerId;
+      /** Whose coast it sailed for. */
+      readonly target: PlayerId;
+      readonly by: PlayerId;
+      readonly tile: number;
+      readonly troops: number;
+    }
+  | {
+      /**
+       * A warship of `by`'s captured a trade ship of `from`'s: it sails on as a new ship
+       * (`newShipId`) for `by`'s Port, cargo `gold`.
+       */
+      readonly type: "tradeCaptured";
+      readonly shipId: number;
+      readonly newShipId: number;
+      readonly from: PlayerId;
+      readonly by: PlayerId;
+      readonly tile: number;
+      readonly toPort: number;
+      readonly gold: number;
     }
   | {
       /** A flight took off (GAME_DESIGN.md §3.17.7); it is over its target at `arriveTick`. */

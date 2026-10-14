@@ -17,10 +17,13 @@ encircle, win or lose, with a full HUD. **Phase 2 — Gameplay depth: complete**
 nations with Easy/Medium/Hard); alliances (timed, renewable, traitors); teams; gold,
 Mobilize and gifts; buildings — Housing, Factory, Port, levels I–III; walls drawn point by
 point; islands, boats and beachhead landings; trade ships; map types Continent / Islands /
-Two lands in three sizes; alert sounds, map pings and emojis. **Next: Phase 2B — air &
-strategic warfare** (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
+Two lands in three sizes; alert sounds, map pings and emojis. **Phase 2B — air & strategic
+warfare: built, awaiting the playtest approval**: the user's icon-pack art; Airports I–III
+(airlifts, airborne assaults, air strikes), SAMs I–III, Missile Silos I–III (strike missiles,
+bunker busters, the strategic warhead), Port III Naval Base (warships, coastal fortification)
+and a balance pass. **Next: Phase 3 — multiplayer** (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
 A new working session starts by reading the latest handoff in `docs/handoffs/`
-(currently [PHASE_2_HANDOFF.md](docs/handoffs/PHASE_2_HANDOFF.md)).
+(currently [PHASE_2B_HANDOFF.md](docs/handoffs/PHASE_2B_HANDOFF.md)).
 
 ## Running it
 
@@ -50,7 +53,7 @@ npm install
 | Q / E, Shift + wheel | Send 5% less / more |
 | × on an attack chip | Retreat (troops return after 2 s, −20% against players) |
 | ↩ on a boat chip | Turn the boat back (its troops come home when it is back) |
-| Build bar (bottom) | Pick up Housing, Factory, Port (coast only) or the Wall tool; click your land to place; right-click / Esc puts it back |
+| Build bar (bottom) | Pick up Housing, Factory, Port (coast only), Airport, SAM Site, Missile Silo or the Wall tool; click your land to place; right-click / Esc puts it back |
 | M | Mobilize: turn gold into troops |
 | Play again (end card) | Back to the start screen for a new game |
 | Drag (any button) | Pan |

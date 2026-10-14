@@ -71,7 +71,8 @@ import { airportRange, ASSAULT_LEVEL, samInterceptors, STRIKE_LEVEL } from "../s
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { siloRange } from "../systems/missiles.ts";
 import { runawayLeader } from "./missile.ts";
-import { expectedTradePerTick } from "../systems/trade.ts";
+import { expectedTradePerTick, tradePartners } from "../systems/trade.ts";
+import { NAVAL_BASE_LEVEL } from "../systems/warships.ts";
 import { wallLevelsOwned, wallPlan, wallPrice } from "../systems/walls.ts";
 import {
   getPlayer,
@@ -168,14 +169,20 @@ function buildingGoal(world: World, bot: Player): Goal | null {
       }
       continue;
     }
+    // The Naval Base (2B.6): its warships count while an unfriendly Port shares its sea.
+    const fleet =
+      b.type === "port" && level === NAVAL_BASE_LEVEL && hostilePortOnSea(world, bot, b.tile)
+        ? ai.navalBaseWorth * bot.capacity
+        : 0;
     const value =
-      b.type === "sam"
+      fleet +
+      (b.type === "sam"
         ? air
           ? samValue(world, bot, air, b.tile, level, null) -
             samValue(world, bot, air, b.tile, b.level, null)
           : 0
         : worth(world, bot, levelRules(rules, b.type, level), b.tile) -
-          worth(world, bot, levelRules(rules, b.type, b.level), b.tile);
+          worth(world, bot, levelRules(rules, b.type, b.level), b.tile));
     consider(price, value, { ...none, upgrade: b.id });
   }
   if (mine.length < Math.floor(bot.tiles / ai.tilesPerBuilding)) {
@@ -433,6 +440,15 @@ function planWall(
     b = [Math.round((b[0] * 3 + cx) / 4), Math.round((b[1] * 3 + cy) / 4)];
   }
   return null;
+}
+
+/** A living non-friend's finished Port shares a sea with the bot's Port at `tile`. */
+function hostilePortOnSea(world: World, bot: Player, tile: number): boolean {
+  const alive = (id: number) => getPlayer(world, id)?.alive === true;
+  const probe = { id: -1, type: "port", owner: bot.id, tile, level: 1 };
+  return tradePartners(world.map, world.buildings, probe, alive).some(
+    (p) => !areFriendly(world, bot.id, p.owner),
+  );
 }
 
 /**

@@ -48,6 +48,8 @@ export interface PreviewContext {
   readonly teammates?: ReadonlySet<PlayerId>;
   /** Border Defense level per tile (no walls when left out). */
   readonly fort?: Uint8Array;
+  /** Coast a Naval Base fortifies (2B.6): tile → wall level. */
+  readonly coastForts?: ReadonlyMap<number, number>;
 }
 
 /** Seconds of spawn protection left (0 once attacks on players are allowed). */
@@ -88,7 +90,7 @@ export function previewClick(
       tiles: Math.floor(army / ctx.rules.expansion.costPerTile.plains),
     };
   }
-  const fortLevel = tile >= 0 ? (ctx.fort?.[tile] ?? 0) : 0;
+  const fortLevel = tile >= 0 ? Math.max(ctx.fort?.[tile] ?? 0, ctx.coastForts?.get(tile) ?? 0) : 0;
   return {
     kind: "attack",
     army,

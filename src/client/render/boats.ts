@@ -5,20 +5,31 @@
  * their route (dashed), boats sailing for your coast show theirs in red, and the crossing
  * under the mouse is previewed — route, landing ring and ETA.
  *
+ * Warships (2B.6) sail the same way, bigger, with a health bar once damaged. They have no art
+ * yet: the Modern troop boat drawn in grey stands in for it (labelled so in the docs and the
+ * Port card) until the user's warship sheet arrives.
+ *
  * Drawn with Canvas2D on the label overlay, like buildings and walls. Positions come from
  * the route and the tick alone (app/boats.ts), so boats glide smoothly between ticks.
  */
-import type { BoatSnapshot, BuildingSnapshot, TradeShipSnapshot } from "../../sim/frame.ts";
+import type {
+  BoatSnapshot,
+  BuildingSnapshot,
+  TradeShipSnapshot,
+  WarshipSnapshot,
+} from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
 import { boatLevel, boatPosition, boatSteps, type BoatPreview } from "../app/boats.ts";
 import { formatTroops } from "../format.ts";
-import { drawSprite, FACES_LEFT, spriteHeight, type SpriteKind } from "../sprites.ts";
+import { drawSprite, FACES_LEFT, hasSprite, spriteHeight, type SpriteKind } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
 export interface BoatDrawInput {
   readonly boats: readonly BoatSnapshot[];
   /** Trade ships (GAME_DESIGN.md §3.19): small hulls with a gold cargo dot, no labels. */
   readonly tradeShips: readonly TradeShipSnapshot[];
+  /** Warships (2B.6); those in their shipyard (sunk) are not drawn. */
+  readonly warships: readonly WarshipSnapshot[];
   readonly width: number;
   /** Tick with fraction (smooth movement). */
   readonly tick: number;
@@ -89,6 +100,23 @@ export class BoatLayer {
       }
       if (!this.ship("tradeShip", level, p.x, p.y, at.dx, tradeSize, input.colorOf(ship.owner))) {
         this.tradeHull(p.x, p.y, at.dx, at.dy, tradeSize * 0.5, input.colorOf(ship.owner));
+      }
+    }
+
+    const warSize = Math.max(20, Math.min(52, view.zoom * 6.5));
+    for (const ship of input.warships) {
+      if (ship.readyTick >= 0) continue;
+      const at = boatPosition(warshipVoyage(ship), input.width, input.tick);
+      const p = toScreen(at.x, at.y);
+      if (p.x < -50 || p.y < -50 || p.x > halfW * 2 + 50 || p.y > halfH * 2 + 50) continue;
+      const color = input.colorOf(ship.owner);
+      const drawn = hasSprite("warship", 3)
+        ? this.ship("warship", 3, p.x, p.y, at.dx, warSize, color)
+        : this.ship("boat", 3, p.x, p.y, at.dx, warSize, color, STAND_IN);
+      if (!drawn) this.hull(p.x, p.y, at.dx, at.dy, warSize * 0.5, color);
+      const hpShare = ship.hp / input.rules.warships.hp;
+      if (hpShare < 1) {
+        this.healthBar(p.x, p.y - spriteHeight("boat", 3, warSize) / 2 - 5, warSize * 0.7, hpShare);
       }
     }
 
@@ -197,6 +225,7 @@ export class BoatLayer {
     dx: number,
     width: number,
     color: string,
+    filter = "none",
   ): boolean {
     const ctx = this.context;
     const height = spriteHeight(kind, level, width);
@@ -212,7 +241,24 @@ export class BoatLayer {
     ctx.stroke();
     ctx.restore();
     const flip = FACES_LEFT[kind] ? dx > 0 : dx < 0;
-    return drawSprite(ctx, kind, level, x, y, width, flip);
+    if (filter === "none") return drawSprite(ctx, kind, level, x, y, width, flip);
+    ctx.save();
+    ctx.filter = filter;
+    const drawn = drawSprite(ctx, kind, level, x, y, width, flip);
+    ctx.restore();
+    return drawn;
+  }
+
+  /** A small health bar centred at (x, y): green to red by `share`. */
+  private healthBar(x: number, y: number, width: number, share: number): void {
+    const ctx = this.context;
+    const h = 4;
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 14, 20, 0.8)";
+    ctx.fillRect(x - width / 2 - 1, y - h / 2 - 1, width + 2, h + 2);
+    ctx.fillStyle = share > 0.5 ? "#7bd88f" : share > 0.25 ? "#ffd166" : "#ff6b5a";
+    ctx.fillRect(x - width / 2, y - h / 2, width * Math.max(0, share), h);
+    ctx.restore();
   }
 
   /** A small hull with a sail, pointing along (dx, dy). */
@@ -291,6 +337,20 @@ export class BoatLayer {
     ctx.fillText(text, x, y);
     ctx.restore();
   }
+}
+
+/** The stand-in for warship art (2B.6): the Modern troop boat, greyed like a warship. */
+const STAND_IN = "grayscale(1) brightness(0.8) contrast(1.25)";
+
+/** A warship's current leg as a voyage, so it is placed like a boat. */
+function warshipVoyage(ship: WarshipSnapshot) {
+  return {
+    route: ship.route,
+    launchTile: ship.fromTile,
+    landingTile: ship.toTile,
+    launchTick: ship.legTick,
+    tilesPerTick: ship.tilesPerTick,
+  };
 }
 
 /** Forgets the eras of ships no longer at sea. */

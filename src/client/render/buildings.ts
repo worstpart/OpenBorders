@@ -72,6 +72,8 @@ export interface BuildingDrawInput {
   readonly selectedId: number | null;
   /** Every wall, the one whose card is open, and the wall being drawn (if any). */
   readonly walls: readonly WallSnapshot[];
+  /** Coast a Naval Base fortifies (2B.6): tile → wall level, drawn as stone blocks. */
+  readonly coastForts: ReadonlyMap<number, number>;
   readonly selectedWall: number | null;
   readonly wallPreview: WallPreview | null;
   /** The building being placed, if any. */
@@ -132,6 +134,7 @@ export class BuildingLayer {
       if (at.x < -r || at.y < -r || at.x > width + r || at.y > height + r) continue;
       this.ring(at.x, at.y, r, ring);
     }
+    if (input.coastForts.size > 0) this.coastForts(input, toScreen, view.zoom, width, height);
     for (const wall of input.walls) {
       this.wall(wall, toScreen, view.zoom, input, width, height);
     }
@@ -262,6 +265,55 @@ export class BuildingLayer {
     ctx.arc(x, y, 1.3, 0, Math.PI * 2);
     ctx.fillStyle = "#ffd166";
     ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * A Naval Base's coastal fortification (2B.6): a grey stone line along the fortified coast
+   * (neighbouring fortified tiles joined), drawn like a Stone Wall without towers.
+   */
+  private coastForts(
+    input: BuildingDrawInput,
+    toScreen: (tile: number) => { x: number; y: number },
+    zoom: number,
+    width: number,
+    height: number,
+  ): void {
+    const ctx = this.context;
+    const w = input.width;
+    const s = Math.max(1.5, Math.min(zoom * 0.45, 7));
+    const margin = zoom + s;
+    const path = new Path2D();
+    for (const tile of input.coastForts.keys()) {
+      const p = toScreen(tile);
+      if (p.x < -margin || p.y < -margin || p.x > width + margin || p.y > height + margin) continue;
+      const x = tile % w;
+      // Join to the fortified neighbours after it (right, and the row below), so each
+      // segment is drawn once.
+      const next = [x < w - 1 ? tile + 1 : -1, x > 0 ? tile + w - 1 : -1, tile + w];
+      next.push(x < w - 1 ? tile + w + 1 : -1);
+      let joined = false;
+      for (const n of next) {
+        if (n < 0 || !input.coastForts.has(n)) continue;
+        const q = toScreen(n);
+        path.moveTo(p.x, p.y);
+        path.lineTo(q.x, q.y);
+        joined = true;
+      }
+      if (!joined) {
+        path.moveTo(p.x, p.y);
+        path.lineTo(p.x + 0.01, p.y);
+      }
+    }
+    ctx.save();
+    ctx.lineCap = "square";
+    ctx.lineJoin = "miter";
+    ctx.lineWidth = s + 2;
+    ctx.strokeStyle = "rgba(12, 14, 20, 0.8)";
+    ctx.stroke(path);
+    ctx.lineWidth = s;
+    ctx.strokeStyle = "#a9a49a";
+    ctx.stroke(path);
     ctx.restore();
   }
 
