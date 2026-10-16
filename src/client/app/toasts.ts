@@ -15,6 +15,7 @@ import type { FlightKind } from "../../sim/world.ts";
 import { FLIGHT_INFO } from "./flights.ts";
 
 const BUSTER_LEVELS = DEFAULT_RULES.flights.busterLevels;
+const MISSILE_LEVELS = DEFAULT_RULES.flights.missileLevels;
 
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
@@ -76,15 +77,18 @@ export function toastsForEvents(
         break;
       case "missileHit": {
         const info = FLIGHT_INFO[event.missile];
-        const levels = event.missile === "buster" ? BUSTER_LEVELS : 1;
+        const levels = event.missile === "buster" ? BUSTER_LEVELS : MISSILE_LEVELS;
+        // Missiles kill people too (after the 2B.6 playtest).
+        const killed = event.troops >= 1 ? ` · ${formatTroops(event.troops)} troops killed` : "";
         if (event.owner === me) {
           toasts.push({
             text:
-              event.buildings > 0
+              (event.buildings > 0
                 ? `${info.icon} Your ${info.name} hit ${event.buildings} building${event.buildings > 1 ? "s" : ""}: −${levels} level${levels > 1 ? "s" : ""} each`
                 : event.missile === "buster"
-                  ? `${info.icon} Your bunker buster found nothing to hit`
-                  : `${info.icon} Your strike missile hit — no buildings there; defences suppressed`,
+                  ? `${info.icon} Your bunker buster found no building`
+                  : `${info.icon} Your strike missile hit — no buildings there; defences suppressed`) +
+              killed,
             tone: "success",
             ...(event.victim ? { player: event.victim } : {}),
           });
@@ -92,8 +96,8 @@ export function toastsForEvents(
           toasts.push({
             text:
               mineHit > 0
-                ? `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit ${mineHit} of your buildings (−${levels} level${levels > 1 ? "s" : ""})`
-                : `${info.icon} ${nameOf(event.owner)}'s strike missile knocked out your defences there`,
+                ? `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit ${mineHit} of your buildings (−${levels} level${levels > 1 ? "s" : ""})${killed}`
+                : `${info.icon} ${nameOf(event.owner)}'s ${info.name} knocked out your defences there${killed}`,
             tone: "danger",
             player: event.owner,
           });
@@ -269,8 +273,12 @@ export function toastsForEvents(
         break;
       }
       case "suppressed": {
-        const seconds = (DEFAULT_RULES.flights.suppressionTicks * DEFAULT_RULES.tickMs) / 1000;
-        if (event.victim === me) {
+        // A strike missile suppresses too (2B.5): its own toast (missileHit) tells the victim.
+        const missile = arrived !== null && isMissile(arrived);
+        const f = DEFAULT_RULES.flights;
+        const ticks = missile ? f.missileSuppressionTicks : f.suppressionTicks;
+        const seconds = (ticks * DEFAULT_RULES.tickMs) / 1000;
+        if (event.victim === me && !missile) {
           toasts.push({
             text: `💥 ${nameOf(event.by)}'s air strike knocked out your defences within ${event.radius} km for ${seconds} s`,
             tone: "danger",
@@ -278,7 +286,7 @@ export function toastsForEvents(
           });
         } else if (event.by === me) {
           toasts.push({
-            text: `💥 Air strike: ${nameOf(event.victim)}'s walls there are down for ${seconds} s — attack now`,
+            text: `${missile ? "🚀 Strike missile" : "💥 Air strike"}: ${nameOf(event.victim)}'s walls there are down for ${seconds} s — attack now`,
             tone: "success",
             player: event.victim,
           });

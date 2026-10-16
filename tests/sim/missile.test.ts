@@ -142,22 +142,25 @@ describe("Missile Silo", () => {
     expect(w.buildings[0]!.reloads).toEqual([w.tick - 1 + 300]);
   });
 
-  it("every enemy building within 8 km loses a level; the land there is suppressed 30 s", () => {
+  it("enemy buildings within 8 km lose two levels, 10% of the victim's troops die, the land is suppressed 30 s", () => {
     const w = world();
     const near = building(w, "factory", 2, at(150, 22), 3);
     const edge = building(w, "housing", 2, at(158, 22), 2); // exactly 8 km
     const far = building(w, "housing", 2, at(159, 22), 2);
+    const before = w.players[1]!.homeTroops;
     const events = fireAndWait(w);
-    expect(near.level).toBe(2);
-    expect(edge.level).toBe(1);
+    expect(near.level).toBe(1);
+    expect(w.buildings.includes(edge)).toBe(false); // level II: destroyed
     expect(far.level).toBe(2);
     expect(struck(events)).toHaveLength(2);
-    expect(near.disabledUntil).toBe(w.tick - 1 + 200);
+    expect(near.disabledUntil).toBe(w.tick - 1 + 600);
     expect(events.find((e) => e.type === "missileHit")).toMatchObject({
       missile: "missile",
       victim: 2,
       buildings: 2,
+      troops: before * 0.1,
     });
+    expect(w.players[1]!.homeTroops).toBeCloseTo(before * 0.9, 6);
     expect(w.suppressions[0]).toMatchObject({ radius: 8, victim: 2, by: 1 });
     expect(isSuppressed(w, at(150, 30))).toBe(true);
     expect(isSuppressed(w, at(150, 31))).toBe(false);
@@ -181,7 +184,7 @@ describe("Missile Silo", () => {
     expect(rejection(step(w, [fire()]))).toBe("not enough gold");
   });
 
-  it("an Advanced Silo: two slots, 400 km, and bunker busters take two levels", () => {
+  it("an Advanced Silo: two slots, 400 km, and bunker busters destroy their target", () => {
     const w = world(2);
     const fort = building(w, "factory", 2, TARGET, 3);
     const neighbour = building(w, "housing", 2, at(152, 22), 2);
@@ -191,9 +194,12 @@ describe("Missile Silo", () => {
     const launch = step(w, [fire(TARGET, "buster"), fire(at(260, 22))]);
     expect(rejection(launch)).toBeNull();
     expect(w.flights.map((f) => f.kind)).toEqual(["buster", "missile"]);
-    run(w, missileTicks(w) + 1);
-    expect(fort.level).toBe(1);
+    const before = w.players[1]!.homeTroops;
+    const hits = run(w, missileTicks(w) + 1);
+    expect(w.buildings.includes(fort)).toBe(false); // even a level-III building
     expect(neighbour.level).toBe(2); // the buster hits only its target
+    const buster = hits.find((e) => e.type === "missileHit" && e.missile === "buster");
+    expect(buster).toMatchObject({ victim: 2, troops: before * 0.05 });
     // A level-II building hit by a buster is destroyed.
     const w2 = world(2);
     const house = building(w2, "housing", 2, TARGET, 2);
@@ -225,7 +231,7 @@ describe("Missile Silo", () => {
     const factory = building(w, "factory", 2, TARGET, 3);
     const events = [...step(w, [fire(), fire(), fire()]), ...run(w, missileTicks(w) + 1)];
     expect(events.filter((e) => e.type === "flightIntercepted")).toHaveLength(2);
-    expect(factory.level).toBe(2);
+    expect(factory.level).toBe(1); // one got through: −2 levels
   });
 
   it("Fortress Wall flak doesn't touch missiles", () => {

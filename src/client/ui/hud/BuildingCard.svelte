@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { busterText, strikeMissileText } from "../../app/flights.ts";
   /**
    * A building's card (GAME_DESIGN.md §3.17.13): opened by clicking its icon. Name, level
    * pips, what it gives; for your own: construction progress (with Cancel) and the next
@@ -40,8 +41,7 @@
     silo: "Missile Silo",
     wall: "Wall",
   } as const;
-  const MISSILE_KM = DEFAULT_RULES.flights.missileRadius;
-  const BUSTER_LEVELS = DEFAULT_RULES.flights.busterLevels;
+  const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
   const WARHEAD_KM = DEFAULT_RULES.flights.warheadRadius;
   let cardElement = $state<HTMLElement | null>(null);
   let height = $state(0);
@@ -188,8 +188,8 @@
         >
       </button>
       <div class="muted hint">
-        Every enemy building within {MISSILE_KM} km of the target loses a level; their walls there stop
-        working for a while. SAM II+ can shoot it down
+        {capitalize(strikeMissileText(DEFAULT_RULES))}; their walls there stop working for a while.
+        SAM II+ can shoot it down
       </div>
       {#if silo.buster}
         <button
@@ -203,7 +203,7 @@
             >{formatTroops(silo.missileCost)}</span
           >
         </button>
-        <div class="muted hint">One enemy building loses {BUSTER_LEVELS} levels</div>
+        <div class="muted hint">{capitalize(busterText(DEFAULT_RULES))}</div>
       {/if}
       {#if silo.warheadSecondsLeft !== null}
         <button

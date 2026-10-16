@@ -144,6 +144,8 @@ export interface WarshipSnapshot {
   readonly readyTick: number;
   /** What it is after ("" = patrolling). */
   readonly targetKind: "" | "boat" | "warship" | "trade";
+  /** Where its owner sent it (it patrols there); -1 = around its Base. */
+  readonly patrolTile: number;
 }
 
 /** A building (GAME_DESIGN.md §3.17). */
@@ -374,7 +376,8 @@ function snapshotWarship(ship: Warship, tilesPerTick: number): WarshipSnapshot {
     cached.hp === ship.hp &&
     cached.owner === ship.owner &&
     cached.readyTick === ship.readyTick &&
-    cached.targetKind === ship.targetKind
+    cached.targetKind === ship.targetKind &&
+    cached.patrolTile === ship.patrolTile
   )
     return cached;
   const snapshot: WarshipSnapshot = {
@@ -389,6 +392,7 @@ function snapshotWarship(ship: Warship, tilesPerTick: number): WarshipSnapshot {
     tilesPerTick,
     readyTick: ship.readyTick,
     targetKind: ship.targetKind,
+    patrolTile: ship.patrolTile,
   };
   warshipCache.set(ship, snapshot);
   return snapshot;

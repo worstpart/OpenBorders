@@ -4,7 +4,7 @@
 > [`PHASE_2B_AFTER_2B.5_HANDOFF.md`](PHASE_2B_AFTER_2B.5_HANDOFF.md). The **working agreements
 > (§4), environment facts (§5) and repository map (§6) of
 > [`PHASE_2_HANDOFF.md`](PHASE_2_HANDOFF.md) still apply** — read those sections too; §4–§5 below
-> only add to them. Written 2026-10-14. The repo docs are the source of truth, not chat history.
+> only add to them. Written 2026-10-14, updated 2026-10-15 after the user's 2B.6 playtest. The repo docs are the source of truth, not chat history.
 
 ---
 
@@ -15,9 +15,10 @@
 | Phase 1, Phase 2 | ✅ tags `phase-1`, `phase-2` |
 | 2B.0 – 2B.5 (flights, icon-pack art, Airport I–III, SAM I–III, flak, strikes, Missile Silo I–III, D-029, D-030, explosion particles) | ✅ |
 | **2B.6 Port III Naval Base + balance pass** | ✅ 169bee0 (ROADMAP "Milestone 2B.6 result", GAME_DESIGN §3.18.1, ARCHITECTURE §5.7 "Warships", D-031) |
+| 2B.6 playtest round (D-032) | ✅ the user's five requests after playing 2B.6 — warship orders, offshore patrols, harder missiles that kill troops, more aggressive nations (ROADMAP "2B.6 playtest round") |
 | **Phase 2B** | **Built — awaiting the user's playtest approval.** No `phase-2b` tag until they approve (Phase 2 was tagged after the user played it) |
 | Next | ⬜ Phase 2B playtest → tag `phase-2b` → **Phase 3 multiplayer** (starts with decision D-006) |
-| Tests | 489 passing, type check clean, Prettier clean, build OK |
+| Tests | 496 passing, type check clean, Prettier clean, build OK |
 
 ## 2. What happened this session (2B.6)
 
@@ -36,6 +37,12 @@
   their own trading partners); team games need **85%** (were ending with the land race);
   `navalBaseWorth` 0.15 (at 0.3 nations stopped building Silos/Air Bases).
 - Playtest of 2B.4 + 2B.5 was asked again at the start — **no answer yet**.
+- **2026-10-15, the user played 2B.6** and asked for: warships they can steer (click, then the
+  sea), warships farther from shore, missiles that destroy/suppress and kill troops, and nations
+  that use missiles and fight more. All done (D-032, ROADMAP "2B.6 playtest round"); nations
+  also blockade enemy Ports with a warship while at war (`ai/warship.ts`). Islands games at
+  Medium now take ~18.6 min with ~4 missiles. **Ask them to play again** — this is still the
+  Phase 2B approval playtest.
 
 ## 3. Start of the next session
 
@@ -78,7 +85,7 @@
 | Fact | Detail |
 |---|---|
 | Warship code | `systems/warships.ts`: `advanceWarships` (step 2a), `keepFleets`, `seaTargets`/`choosePrey`, `fire`, `capture`, `patrolTiles` (cached per map), `guardedWaters` (for the AI), `warshipTile`/`tradeShipTile`, `NAVAL_BASE_LEVEL` 3. Rules: `rules.warships`, Port level 3 `warships`/`patrolRange`/`coastFort`, `ai.build.navalBaseWorth`, `victory.teamLandShare` |
-| Hash | `world.warships` hashed only once `nextWarshipId > 1`; `captured` only when true. Warships-off free-for-all games replay 3ebaaaa (2B.5) exactly; team games differ by design (85%). The next regression baseline is 169bee0 |
+| Hash | `world.warships` hashed only once `nextWarshipId > 1`; `captured` only when true. Since D-032 the nation tuning and missile rules change every game; the next regression baseline is the D-032 commit |
 | Headless (final) | Islands 20.6 min, 2.7 Naval Bases, 2.8 captures, 0.7 Silos; Continent 8.8; Two lands 10.1; Islands 2 teams 9.3; 10 nations + 100 tribes 10.8. Nations rarely sink boats: they avoid guarded waters (warships deter) |
 | Browser test that worked | Islands, Easy, **0 tribes**, 7 nations; spawn at tile 41419 (`sendAs` alliance requests from nations 2–7, `send` the replies, an interval of `sendAs` gold donations + neutral attacks), Port → III at the nearest coast tile; `sendAs(8, boat → your coast)` to get a boat sunk. **Ally every nation but one** (allying only four got me eliminated once). Poll events at 0.5× speed every 20 ms, or frames are skipped and events missed. The map seed can change after a reload |
 | Hot reloads | Any edit under `src/sim` **or** `src/client/render` reloads the page and ends the test game — finish browser checks before editing |

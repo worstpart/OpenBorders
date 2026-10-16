@@ -37,6 +37,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-029 | Landed armies (airborne, boats) don't collide with counter-attacks; the pocket is taken tile by tile | **Accepted** 2026-10-12 (user's playtest of 2B.4) |
 | D-030 | Missiles hit enemies only; the warhead spares your and your teammates' land but hits allies; explosion particles | **Accepted** 2026-10-12 (mine, minor; particles the user's request) |
 | D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
+| D-032 | After the 2B.6 playtest: warships take orders (click, then the sea), patrol 4 km offshore; missiles take 2 levels / destroy and kill troops; nations fight more (missiles, blockades, bolder expanders/opportunists) | **Accepted** 2026-10-15 (user's requests; numbers mine) |
 
 ---
 
@@ -659,3 +660,30 @@ more UI, and unit micromanagement the game otherwise avoids); trade-only warship
 unstoppable at sea); a real wall built along the coast (would break tile by tile and need
 rebuilding — the virtual fortification follows the coast as it changes hands); an 80% team goal
 (too small a change: 5.5 → 6.6 min).
+
+## D-032 — Warship orders, harder missiles, more aggressive nations (after the 2B.6 playtest) · Accepted 2026-10-15
+
+**Context.** The user played 2B.6 and said: "Warships need to be controlled by players, when
+clicking on their warship you can move it around. Warships are too close to shore. Missiles
+should destroy bases or suppress them. Missile attacks kill population too. Bots don't use
+missiles or engage in much combat." All are changes to Phase 2B systems, made before the
+Phase 2B tag.
+
+**Decision** (the user's requests; the numbers and the details mine):
+- **Warship orders** replace D-031's "automatic only": click your warship, then the sea — it
+  sails there (shooting at what comes within gun range, chasing nothing) and patrols and fights
+  within 15 km of that spot until sent elsewhere; left alone it guards its Base as before.
+  Command `moveWarship` (tile -1 = home).
+- **Offshore:** patrol points keep 4 km of open water to the nearest land.
+- **Missiles:** strike missile −2 levels (I–II destroyed), 60 s out of action, 10% of the
+  victim's home troops killed; bunker buster destroys its building and kills 5%. I read
+  "destroy bases or suppress them" as: hit hard enough that a strike usually removes small
+  buildings and disables the rest for a minute, with the suppression kept.
+- **Nations:** missiles valued with the troops they kill and fired at 1.2× their price (was
+  2×), Silos worth more (0.6); at war a nation sends one warship to blockade the enemy's
+  nearest Port; expanders and opportunists attack sooner and with a smaller edge (turtles and
+  aggressors unchanged — making them bolder tipped Continent games to turtles).
+
+**Alternatives.** Free unit movement with box-select (more UI, little gain with two ships a
+Base); missiles that destroy every building in the blast (too swingy for 75k); higher
+difficulty instead of personality tuning (the user plays Medium).

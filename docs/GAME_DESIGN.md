@@ -925,8 +925,8 @@ the Fortress Wall, and the assault lands whole and takes the land. **Since the 2
 
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
 |---|---|---|---|---|---|---|
-| I | Missile Silo | 1 | 30 s | 250 km | 75k | **Strike missile**: at the target, every building within 8 km loses a level and fortification there is suppressed for 30 s (no land destroyed, no troops killed) |
-| II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target loses **two** levels; slots let you fire two at once (saturates SAMs) |
+| I | Missile Silo | 1 | 30 s | 250 km | 75k | **Strike missile**: at the target, every enemy building within 8 km loses **two** levels (I–II destroyed; since D-032 — was one), the rest are out of action 60 s, fortification there is suppressed for 30 s, and **10% of the victim's home troops die** (D-032); no land destroyed |
+| II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target is **destroyed** (since D-032 — was two levels) and 5% of its owner's home troops die; slots let you fire two at once (saturates SAMs) |
 | III | Strategic Missile Complex | 3 | 20 s | whole map | 75k / **500k** | **Strategic warhead** (own 90 s cooldown): 20 km radius — land becomes neutral *scorched* land (3× expansion cost for 60 s), buildings destroyed, owner loses home troops in proportion to land lost. Breaks an alliance if it hits the ally (like OpenFront). Only SAM III can intercept it |
 
 *As built (2B.5):* the table as written, with these details decided while building it (D-030).
@@ -973,6 +973,18 @@ leader's land, never on an ally's land and never into a SAM III. A hostile Silo 
 as an air threat for their SAMs. In headless games (30 Islands games, 8 nations) Silos
 appear only in long games: 0.9 a game, ~2 missiles, one warhead in 30 games, median length
 22.7 min (23.0 before); none on the Continent (9.0 min) or in team games (5.0 min).
+
+**After the 2B.6 playtest (2026-10-15, D-032).** The user: "Missiles should destroy bases or
+suppress them. Missile attacks kill population too. Bots don't use missiles." So: a strike
+missile costs every enemy building within 8 km **two levels** (levels I–II are destroyed),
+puts the survivors out of action for **60 s** (was 20 s), still suppresses the land for 30 s,
+and kills **10%** of the target player's home troops; a bunker buster **destroys** its
+building outright (three levels) and kills 5% of the owner's home troops. The aiming label
+says it ("🚀 2 buildings −2 levels · 10% of their troops · suppress 8 km for 30 s"), and so do
+the toasts ("🚀 Your strike missile hit 1 building: −2 levels each · 60.9K troops killed").
+Nations count the troops a missile kills (a gold a troop) and fire when the damage is worth
+**1.2×** the price (was 2×); a Silo is worth 0.6 × capacity to them (was 0.4). Islands at
+Medium: 4 missiles and 1.7 Silos a game (0.7 and 1.1 before).
 
 #### 3.17.9 Housing, Factory, Port
 
@@ -1176,8 +1188,10 @@ land.
 
 #### 3.18.1 Naval Base & warships (milestone 2B.6 · as built · D-031)
 
-Port level III. The user's choices at the 2B.6 start (2026-10-14): warships **patrol on their
-own** (nobody steers them — no unit micromanagement, simple for multiplayer); they attack
+Port level III. The user's choices at the 2B.6 start (2026-10-14): warships patrol on their
+own — **changed after the user played 2B.6 (2026-10-15, D-032): you can click your warship and
+then the sea to send it anywhere on its sea** (it patrols and fights there; left alone it
+guards its Base); they attack
 **troop boats, warships and trade ships** of players who aren't their owner's friends
 (OpenFront's order); the art is the user's to make from a prompt I wrote
 (`docs/art/WARSHIP_ART_PROMPT.md`) — until it arrives the map draws the Modern troop boat in
@@ -1187,7 +1201,8 @@ grey, and the Port card says so.
 |---|---|---|
 | Naval Base | Port III: +300k, 20 s; boats ×2, +2 boats, Marines (as the Naval Port), +25 gold/tick, a trade ship every 7 s | The last naval step; dearer than any economy upgrade |
 | Fleet | **2 warships** per Naval Base, launched the moment it is finished | One patrol to each side of the Base |
-| Patrol | each warship sails from one random point of its Base's sea within **40 km** to the next | Guards the water around the coast, not the whole ocean |
+| Patrol | each warship sails from one random point of its Base's sea within **40 km** to the next — always **open water, 4 km or more from land** (D-032: "too close to shore") | Guards the water around the coast, not the whole ocean |
+| Orders (D-032) | **click your warship, then the sea**: it sails there (firing at hostiles within gun range on the way, chasing nothing), then patrols and fights within **15 km** of that spot until sent elsewhere; Esc / right-click cancels the selection. The selected ship is ringed white with its route and patrol circle; an ⚓ marks where each of yours was sent | The user after playing 2B.6: "warships need to be controlled by players" |
 | Targets | ships of players who are **not friends** of the owner (allies and teammates are safe) inside the patrol area: **troop boats first, then warships, then trade ships** — the nearest of the most urgent kind | A Base defends its coast first |
 | Peaceful trade | a trade ship **bound for a Port of the owner's or a friend's** is left alone — it comes to trade | Headless: seizing one's own trading partners took ~180 ships a game and starved everyone's trade (decided in 2B.6) |
 | Guns | within **8 km** the warship stops and fires once every **2 s**: one shell **sinks a troop boat** (everyone aboard is lost) or takes 250 of a warship's 1,000 health (four shells sink it) | A Base turns back a stream of small landings, not a fleet launched at once |
@@ -1204,6 +1219,10 @@ once damaged; a shell is a streak with a splash (a fireball when it sinks someth
 N gold aboard", "⚓ X sank your warship — a new one is being built" (and the matching good
 news). No new sounds (the user's preference: alerts stay rare). The Naval Base card lists
 "Warships: 2 of 2 at sea" and when the next one is ready.
+
+**Nations (warship orders, D-032).** At war with someone who has a Port on the same sea, a nation
+sends its oldest warship to blockade the enemy Port nearest its Base (open water just off it);
+the other stays home; when the war ends, the blockader comes home.
 
 **Nations.** They value the Naval Base upgrade at its income and trade plus **0.15 ×
 capacity** while an unfriendly Port shares its sea, and keep their troop boats out of

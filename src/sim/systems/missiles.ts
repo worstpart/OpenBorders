@@ -6,10 +6,12 @@
  *    within the Silo's range (Silo III: anywhere) and pays its gold; it flies as a flight of
  *    one "plane" at missile speed (flights.ts), visible to everyone with its ETA.
  *  - Three missiles: the **strike missile** (Silo I) — every enemy building within
- *    `missileRadius` of the target loses `missileLevels` level(s) and is out of action for a
- *    while, and the target's land there is suppressed (suppression.ts, like an air strike on a
- *    point); the **bunker buster** (Silo II) — the enemy building on the tile loses
- *    `busterLevels` levels; the **strategic warhead** (Silo III, its own cooldown on mission
+ *    `missileRadius` of the target loses `missileLevels` levels (2: levels I–II are destroyed)
+ *    and is out of action for a while, the target's land there is suppressed (suppression.ts,
+ *    like an air strike on a point) and its owner loses `missileTroopShare` of their home
+ *    troops; the **bunker buster** (Silo II) — the enemy building on the tile loses
+ *    `busterLevels` levels (3: destroyed) and its owner `busterTroopShare` of their home
+ *    troops; the **strategic warhead** (Silo III, its own cooldown on mission
  *    slot 0) — everyone's land within `warheadRadius` of the target except the launcher's and
  *    their teammates' becomes neutral **scorched** land: its buildings are destroyed, each
  *    owner loses home troops in proportion to the share of their land lost, and expanding into
@@ -254,7 +256,7 @@ export function landMissile(world: World, flight: Flight): void {
   else if (flight.kind === "buster") landBuster(world, flight);
 }
 
-/** Strike missile: every enemy building nearby loses a level; the land there is suppressed. */
+/** Strike missile: enemy buildings nearby lose two levels; the land is suppressed; troops die. */
 function landStrikeMissile(world: World, flight: Flight): void {
   const f = world.rules.flights;
   const hit = world.buildings.filter(
@@ -266,6 +268,7 @@ function landStrikeMissile(world: World, flight: Flight): void {
     strikeBuilding(world, b, f.missileLevels, f.missileDisableTicks, flight.owner);
   const holder = world.owner[flight.toTile]!;
   const victim = isEnemy(world, flight.owner, holder) ? holder : NEUTRAL;
+  const troops = killTroops(world, victim, f.missileTroopShare, flight.owner);
   if (victim !== NEUTRAL) {
     suppress(
       world,
@@ -285,22 +288,37 @@ function landStrikeMissile(world: World, flight: Flight): void {
     tile: flight.toTile,
     victim,
     buildings: hit.length,
+    troops,
   });
 }
 
-/** Bunker buster: the enemy building on the tile loses two levels. */
+/** `victim` (an enemy; NEUTRAL = nobody) loses `share` of their home troops. Returns how many. */
+function killTroops(world: World, victim: PlayerId, share: number, by: PlayerId): number {
+  const player = victim === NEUTRAL ? undefined : getPlayer(world, victim);
+  if (!player || share <= 0) return 0;
+  const troops = player.homeTroops * share;
+  player.homeTroops -= troops;
+  player.lastLostTo = by;
+  return troops;
+}
+
+/** Bunker buster: the enemy building on the tile is destroyed (three levels); troops die. */
 function landBuster(world: World, flight: Flight): void {
   const f = world.rules.flights;
   const b = enemyBuildingAt(world, flight.owner, flight.toTile);
+  const holder = world.owner[flight.toTile]!;
+  const victim = b ? b.owner : isEnemy(world, flight.owner, holder) ? holder : NEUTRAL;
   if (b) strikeBuilding(world, b, f.busterLevels, f.missileDisableTicks, flight.owner);
+  const troops = killTroops(world, victim, f.busterTroopShare, flight.owner);
   world.events.push({
     type: "missileHit",
     flightId: flight.id,
     owner: flight.owner,
     missile: "buster",
     tile: flight.toTile,
-    victim: b ? b.owner : NEUTRAL,
+    victim,
     buildings: b ? 1 : 0,
+    troops,
   });
 }
 

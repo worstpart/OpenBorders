@@ -461,6 +461,14 @@ export interface WarshipRules {
   readonly repairPerTick: number;
   /** A warship's route search gives up after visiting this many sea tiles. */
   readonly maxRouteNodes: number;
+  /**
+   * Player orders (the user after playing 2B.6): a warship sent somewhere patrols and fights
+   * within `orderRange` tiles of that spot; on the way there it fires at what comes within
+   * gun range but chases nothing.
+   */
+  readonly orderRange: number;
+  /** Patrol points keep at least this many tiles of open water to the nearest land. */
+  readonly offshore: number;
 }
 
 /** The kinds of map ping (GAME_DESIGN.md §3.20): "attack here", "defend here", "watch out". */
@@ -560,6 +568,12 @@ export interface FlightRules {
   readonly busterLevels: number;
   /** …and a building a missile hits is out of action for this long. */
   readonly missileDisableTicks: number;
+  /**
+   * Missiles kill people too (the user after playing 2B.6): the player whose land a strike
+   * missile hits loses this share of their home troops; a bunker buster's victim this one.
+   */
+  readonly missileTroopShare: number;
+  readonly busterTroopShare: number;
   /**
    * The strategic warhead (Silo III) costs `warheadCost`: everyone's land within
    * `warheadRadius` of the target but the launcher's and their teammates' becomes neutral
@@ -1040,9 +1054,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     strikeAirportWeight: 1.5,
     suppressionWorth: 1,
     strikeMinValue: 30_000,
-    // Missiles cost gold: only when they take twice their price in enemy levels. The warhead
+    // Missiles cost gold: only when what they destroy (building levels, troops killed) is worth
+    // 1.2× their price (2× until the user found nations never fired, after 2B.6). The warhead
     // only at a player who holds a third of the owned land (a runaway leader).
-    missileValueFactor: 2,
+    missileValueFactor: 1.2,
     warheadLeaderShare: 0.33,
     counterAbove: 1.1,
     counterSize: 1.3,
@@ -1072,12 +1087,15 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // Every bot waits for its troops to regrow toward the 50% sweet spot before acting:
     // a player who keeps sending most of their pool barely grows.
     personalities: {
+      // After the 2B.6 playtest ("bots don't engage in much combat"): expanders and opportunists
+      // attack sooner and with a smaller edge (Islands, Medium: 375 player attacks a game, was
+      // 344; median 18.6 min, was 23). Bolder turtles and aggressors tipped Continent games.
       expander: {
         expandAt: 0.35,
         expandShare: 0.45,
-        attackAt: 0.65,
-        attackEdge: 1.5,
-        minLandGain: 0.3,
+        attackAt: 0.58,
+        attackEdge: 1.4,
+        minLandGain: 0.25,
         attackMaxShare: 0.7,
         attacksWhileExpanding: false,
         preferBusyTargets: 0,
@@ -1111,9 +1129,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       opportunist: {
         expandAt: 0.4,
         expandShare: 0.4,
-        attackAt: 0.55,
-        attackEdge: 1.3,
-        minLandGain: 0.25,
+        attackAt: 0.5,
+        attackEdge: 1.25,
+        minLandGain: 0.2,
         attackMaxShare: 0.75,
         attacksWhileExpanding: false,
         preferBusyTargets: 1,
@@ -1157,8 +1175,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       // (~1M gold with escalation) that only late leaders reach it: 0.2–0.3 Air Bases a game
       // on Islands whether this is 0.5 or 1.0 (2B.4 headless).
       strikeWorth: 0.5,
-      // Silos are the last investment: a nation reaches one only in long games.
-      siloWorth: 0.4,
+      // Silos are a late investment (0.4 until the 2B.6 playtest: nations hardly fired missiles;
+      // at 0.6, 1.7 Silos and 4 missiles an Islands game at Medium).
+      siloWorth: 0.6,
       // A Naval Base guards a coast and preys on trade (2B.6). At 0.3 Islands nations built
       // 4.1 a game and left Silos and Air Bases (0.4 Silos, no strikes); at 0.15: 2.7 Naval
       // Bases, 0.7 Silos, 0.5 assaults and strikes — the mix of the game without warships.
@@ -1534,12 +1553,18 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     suppressedLoss: 0.8,
     // A strike missile costs about a Developed Housing: worth it against a cluster of
     // buildings, not against one. The warhead is a once-a-game decision for most players.
+    // After the user's 2B.6 playtest ("missiles should destroy bases or suppress them, and
+    // kill population too"): a strike missile costs buildings two levels (levels I–II are
+    // destroyed) and puts the rest out of action for 60 s; a bunker buster destroys its target
+    // outright (three levels); both kill a share of the victim's home troops.
     missileCost: 75_000,
     missileRadius: 8,
-    missileLevels: 1,
+    missileLevels: 2,
     missileSuppressionTicks: 300,
-    busterLevels: 2,
-    missileDisableTicks: 200,
+    busterLevels: 3,
+    missileDisableTicks: 600,
+    missileTroopShare: 0.1,
+    busterTroopShare: 0.05,
     warheadCost: 500_000,
     warheadRadius: 20,
     scorchedTicks: 600,
@@ -1560,6 +1585,10 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     rebuildTicks: 600,
     repairPerTick: 2,
     maxRouteNodes: 30_000,
+    // The user after 2B.6: "warships need to be controlled by players" and "are too close to
+    // shore" — a sent warship guards 15 km around its spot; patrol points stay 4 km offshore.
+    orderRange: 15,
+    offshore: 4,
   },
 });
 

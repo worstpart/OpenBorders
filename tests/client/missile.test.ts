@@ -91,7 +91,7 @@ describe("aiming a missile", () => {
     expect(p.seconds).toBe(Math.ceil(40 / 3) / 10);
     expect(p.missile).toMatchObject({ kind: "missile", buildings: 2, radius: 8 });
     expect(missileEffectText(DEFAULT_RULES, p.missile!)).toBe(
-      "2 buildings −1 level · suppress 8 km for 30 s",
+      "2 buildings −2 levels · 10% of their troops · suppress 8 km for 30 s",
     );
   });
 
@@ -101,7 +101,9 @@ describe("aiming a missile", () => {
       "a bunker buster needs an enemy building to hit",
     );
     const hit = aim("buster", at(50, 25), [building("housing", 3, at(50, 25), 3)]);
-    expect(missileEffectText(DEFAULT_RULES, hit.missile!)).toBe("Metropolis → level I");
+    expect(missileEffectText(DEFAULT_RULES, hit.missile!)).toBe(
+      "destroy Metropolis · 5% of their troops",
+    );
     const warhead = aim("warhead", at(70, 25));
     // Radius 20 from x = 70: x 50..90; the ally's land from x = 80 is hit, ours (x < 20) isn't.
     expect(warhead.missile).toMatchObject({ kind: "warhead", allies: [2] });
@@ -171,13 +173,13 @@ describe("the Silo's card and texts", () => {
 
   it("names the levels: range, slots, bunker buster, warhead; Factory III's war production", () => {
     expect(effectLines(DEFAULT_RULES, "silo", 1)).toEqual([
-      "Strike missile (75K): every enemy building within 8 km loses a level",
+      "Strike missile (75K): every enemy building within 8 km loses 2 levels, and 10% of their troops die",
       "1 missile, each reloads in 30 s",
       "Range 250 km",
     ]);
     expect(upgradeLines(DEFAULT_RULES, "silo", 2)).toContain("Range: the whole map");
     expect(upgradeLines(DEFAULT_RULES, "silo", 1)).toContain(
-      "New: bunker buster — one building loses 2 levels",
+      "New: bunker buster — destroys one enemy building, and 5% of its owner's troops die",
     );
     expect(upgradeLines(DEFAULT_RULES, "factory", 2)).toContain(
       "New: war production — Airports and Silos within 60 km reload 25% faster",
@@ -223,15 +225,16 @@ describe("missile toasts and threats", () => {
       tile: at(50, 25),
       victim: 1,
       buildings: 1,
+      troops: 1_200,
     },
   ];
 
   it("one toast per missile, not one per building", () => {
     expect(toastsForEvents(hit(3), 1, nameOf).map((t) => t.text)).toEqual([
-      "🚀 P3's strike missile hit 1 of your buildings (−1 level)",
+      "🚀 P3's strike missile hit 1 of your buildings (−2 levels) · 1.2K troops killed",
     ]);
     expect(toastsForEvents(hit(1), 1, nameOf).map((t) => t.text)).toEqual([
-      "🚀 Your strike missile hit 1 building: −1 level each",
+      "🚀 Your strike missile hit 1 building: −2 levels each · 1.2K troops killed",
     ]);
   });
 

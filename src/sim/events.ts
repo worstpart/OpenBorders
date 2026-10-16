@@ -281,6 +281,13 @@ export type SimEvent =
       readonly readyTick: number;
     }
   | {
+      /** Its owner sent a warship to `tile` (moveWarship). */
+      readonly type: "warshipOrdered";
+      readonly warshipId: number;
+      readonly owner: PlayerId;
+      readonly tile: number;
+    }
+  | {
       /** A warship of `by`'s sank a troop boat: everyone aboard is lost. */
       readonly type: "boatSunk";
       readonly boatId: number;
@@ -424,6 +431,8 @@ export type SimEvent =
       readonly tile: number;
       readonly victim: PlayerId;
       readonly buildings: number;
+      /** Home troops `victim` lost (missiles kill people too, after the 2B.6 playtest). */
+      readonly troops: number;
     }
   | {
       /**

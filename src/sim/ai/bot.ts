@@ -82,6 +82,7 @@ import {
 import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
 import { decideMissiles } from "./missile.ts";
+import { decideWarships } from "./warship.ts";
 import { decideStrike } from "./strike.ts";
 import { working } from "../systems/buildings.ts";
 import { nationChatter, nationPing, pingIntel, pingPreference, type PingIntel } from "./chat.ts";
@@ -165,6 +166,12 @@ export function thinkBots(world: World): void {
     if (!tribe) {
       const mobilizing = [...gold.before, ...gold.after].some((c) => c.type === "mobilize");
       for (const command of decideMissiles(world, bot, actions, mobilizing)) {
+        world.pendingCommands.push({ playerId: bot.id, command });
+      }
+    }
+    // Warships (after the 2B.6 playtest): one blockades an enemy Port while at war.
+    if (!tribe) {
+      for (const command of decideWarships(world, bot, actions)) {
         world.pendingCommands.push({ playerId: bot.id, command });
       }
     }

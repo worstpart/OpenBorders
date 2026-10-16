@@ -26,7 +26,7 @@ import {
 } from "./chat.ts";
 import { incomingThreats, THREAT_ICON } from "./threats.ts";
 import type { PingKind } from "../../sim/rules.ts";
-import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat } from "./boats.ts";
+import { BOAT_PREVIEW_TEXT, boatPreview, needsBoat, warshipAtPoint, warshipSize } from "./boats.ts";
 import {
   airliftPreview,
   BLAST_MS,
@@ -63,6 +63,7 @@ import {
   type WallPreview,
   fortifiedCoast,
 } from "./buildings.ts";
+import { levelRules } from "../../sim/systems/buildings.ts";
 import { Camera } from "../camera/camera.ts";
 import { Controls, type KeyAction, type ScreenPoint } from "../input/controls.ts";
 import {
@@ -1033,6 +1034,15 @@ export class GameClient {
     ui.tradeShips = frame.tradeShips;
     ui.flights = frame.flights;
     ui.warships = frame.warships;
+    // A selected warship that sank (or changed hands) can't take orders.
+    if (
+      ui.selectedWarship !== null &&
+      !frame.warships.some(
+        (s) => s.id === ui.selectedWarship && s.readyTick < 0 && s.owner === ui.localPlayerId,
+      )
+    ) {
+      ui.selectedWarship = null;
+    }
     ui.coastForts =
       this.map && frame.buildings.some((b) => b.type === "port" && b.level >= 3)
         ? fortifiedCoast(DEFAULT_RULES, this.map, this.owner, frame.buildings, frame.tick)
@@ -1167,6 +1177,16 @@ export class GameClient {
       this.placeBuilding(index);
       return;
     }
+    // Warships (the user after 2B.6): click yours to select it, then the sea to send it there.
+    const ship = this.warshipUnder(at);
+    if (ship !== null) {
+      ui.selectedWarship = ship === ui.selectedWarship ? null : ship;
+      return;
+    }
+    if (ui.selectedWarship !== null) {
+      this.orderWarship(ui.selectedWarship, index);
+      return;
+    }
     // A click on a building icon opens its card instead of attacking (GAME_DESIGN.md §3.17).
     const hit = this.buildingUnder(at);
     if (hit !== null) {
@@ -1184,6 +1204,37 @@ export class GameClient {
     this.attackTile(index, ui.attackPercent);
   }
 
+  /** Your warship under this screen point (as drawn now), or null. */
+  private warshipUnder(at: ScreenPoint): number | null {
+    const map = this.map;
+    if (!map) return null;
+    const point = this.camera.screenToWorld(at);
+    const zoom = this.camera.zoom;
+    const radius = Math.max(1.5, (warshipSize(zoom) * 0.6) / zoom);
+    const ship = warshipAtPoint(
+      ui.warships,
+      ui.localPlayerId,
+      map.width,
+      this.currentTick(),
+      point.x,
+      point.y,
+      radius,
+    );
+    return ship?.id ?? null;
+  }
+
+  /** Sends warship `id` to the sea at `tile`; a click on land keeps it selected. */
+  private orderWarship(id: number, tile: number): void {
+    const map = this.map;
+    if (!map || !this.host) return;
+    if (isLand(map, tile)) {
+      this.toast({ text: "⚓ Warships sail on the sea — click the water", tone: "info" });
+      return;
+    }
+    this.host.send({ type: "moveWarship", warshipId: id, tile });
+    ui.selectedWarship = null;
+  }
+
   /** Places the building we're holding at `tile`, if it may go there. */
   private placeBuilding(tile: number): void {
     const type = ui.placing;
@@ -1199,6 +1250,10 @@ export class GameClient {
 
   /** Right click: the context menu for the land under the cursor (or put a building back). */
   private secondaryClick(at: ScreenPoint): void {
+    if (ui.selectedWarship !== null) {
+      ui.selectedWarship = null;
+      return;
+    }
     if (ui.airliftFrom !== null) {
       ui.airliftFrom = null;
       return;
@@ -1253,7 +1308,8 @@ export class GameClient {
         else this.confirmSpawn();
         break;
       case "escape":
-        if (ui.airliftFrom !== null) ui.airliftFrom = null;
+        if (ui.selectedWarship !== null) ui.selectedWarship = null;
+        else if (ui.airliftFrom !== null) ui.airliftFrom = null;
         else if (ui.placing) {
           ui.placing = null;
           ui.wallPoints = [];
@@ -1341,6 +1397,21 @@ export class GameClient {
         boats: ui.boats,
         tradeShips: ui.tradeShips,
         warships: ui.warships,
+        selectedWarship: ui.selectedWarship,
+        patrolOf: (ship) => {
+          const base = ui.buildings.find((b) => b.id === ship.base);
+          if (!base) return null;
+          const w = DEFAULT_RULES.warships;
+          return ship.patrolTile >= 0
+            ? { center: ship.patrolTile, range: w.orderRange }
+            : {
+                center: base.tile,
+                range:
+                  base.level >= 1
+                    ? (levelRules(DEFAULT_RULES, "port", base.level).patrolRange ?? 0)
+                    : 0,
+              };
+        },
         width: this.map.width,
         tick,
         localPlayerId: ui.localPlayerId,

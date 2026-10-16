@@ -10,6 +10,7 @@
   import BuildingIcon from "./BuildingIcon.svelte";
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { airliftTroops } from "../../../sim/systems/flights.ts";
+  import { strikeMissileText } from "../../app/flights.ts";
 
   interface Props {
     onPick: (type: Placeable) => void;
@@ -44,9 +45,13 @@
 {#if items.length > 0}
   <div class="build">
     <!-- Instructions get their own line (the row is full of buildings since 2B.2). -->
-    {#if placing || airlift}
+    {#if placing || airlift || ui.selectedWarship !== null}
       <span class="label">
-        {#if placing?.type === "wall"}
+        {#if ui.selectedWarship !== null}
+          ⚓ Warship selected — click the sea to send it there; it patrols and fights within {DEFAULT_RULES
+            .warships.orderRange} km of that spot
+          <span class="muted">· Esc or right-click to cancel</span>
+        {:else if placing?.type === "wall"}
           {#if ui.wallPoints.length === 0}
             Click your land to start a wall (point A)
           {:else if !draft}
@@ -57,8 +62,7 @@
           {/if}
           <span class="muted">· Esc to cancel</span>
         {:else if airlift?.mode === "missile"}
-          Click enemy land within range for a strike missile — its buildings within {DEFAULT_RULES
-            .flights.missileRadius} km lose a level
+          Click enemy land within range for a strike missile — {strikeMissileText(DEFAULT_RULES)}
           <span class="muted">· Esc or right-click to cancel</span>
         {:else if airlift?.mode === "buster"}
           Click an enemy building within range for a bunker buster

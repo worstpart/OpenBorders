@@ -138,7 +138,8 @@ export function hashWorld(world: World): number {
         .addInt(w.readyTick)
         .addInt(w.reloadTick)
         .addString(w.targetKind)
-        .addInt(w.targetId);
+        .addInt(w.targetId)
+        .addInt(w.patrolTile);
     }
   }
   // Flights (2B.0), hashed once the game has had one (so games without flights keep the

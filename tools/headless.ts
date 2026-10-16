@@ -118,6 +118,8 @@ export interface GameReport {
   leaderAt3Won: boolean | null;
   eliminations: number;
   attacks: number;
+  /** Attacks between nations or humans (not on neutral land or tribes): how much they fight. */
+  pvpAttacks: number;
   rejected: number;
   /** Rejected commands by reason (a bot sending commands the rules refuse is a bug). */
   rejectedReasons: Record<string, number>;
@@ -400,6 +402,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   let land90Tick: number | null = null;
   let eliminations = 0;
   let attacks = 0;
+  let pvpAttacks = 0;
   let rejected = 0;
   const rejectedReasons: Record<string, number> = {};
   let teammateAttacks = 0;
@@ -518,6 +521,8 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         if (event.type === "eliminated") eliminations++;
         else if (event.type === "attackStarted") {
           attacks++;
+          const victim = world.players[event.target - 1];
+          if (victim && victim.brain?.tier !== "tribe") pvpAttacks++;
           const team = world.players[event.attacker - 1]!.team;
           if (team > 0 && world.players[event.target - 1]?.team === team) teammateAttacks++;
         } else if (event.type === "commandRejected") {
@@ -703,6 +708,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
       leaderAt3 === 0 ? null : leaderAt3 === (options.teams > 0 ? world.winningTeam : world.winner),
     eliminations,
     attacks,
+    pvpAttacks,
     rejected,
     rejectedReasons,
     diplomacy,
@@ -813,6 +819,9 @@ function summarize(
           teammateAttacks: reports.reduce((s, r) => s + r.teammateAttacks, 0),
         }
       : {}),
+    pvpAttacksPerGame: round(
+      reports.reduce((s, r) => s + r.pvpAttacks, 0) / Math.max(1, reports.length),
+    ),
     rejectedCommands: reports.reduce((s, r) => s + r.rejected, 0),
     rejectedReasons: reports.reduce<Record<string, number>>((all, r) => {
       for (const [k, v] of Object.entries(r.rejectedReasons)) all[k] = (all[k] ?? 0) + v;

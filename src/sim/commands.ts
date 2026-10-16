@@ -121,6 +121,12 @@ export type Command =
       readonly tile: number;
       readonly missile: MissileKind;
     }
+  /**
+   * Warships (GAME_DESIGN.md §3.18.1, the user after playing 2B.6): send your warship
+   * `warshipId` to the sea at `tile`; it patrols and fights around there. `tile` -1 sends it
+   * back to patrol around its Naval Base.
+   */
+  | { readonly type: "moveWarship"; readonly warshipId: number; readonly tile: number }
   /** Drop a map ping on `tile` for your allies and teammates. */
   | { readonly type: "ping"; readonly tile: number; readonly kind: PingKind }
   /**

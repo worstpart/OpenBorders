@@ -772,6 +772,28 @@ note); the coast drawn as a grey stone line (first version: separate dots at hig
 joined into a line); no console errors. Tests: 489 (`tests/sim/warships.test.ts`, team goal
 in `tests/sim/teams.test.ts`).
 
+**2B.6 playtest round (2026-10-15, D-032)** — the user played 2B.6: "Warships need to be
+controlled by players … too close to shore. Missiles should destroy bases or suppress them.
+Missile attacks kill population too. Bots don't use missiles or engage in much combat." Placed
+in Phase 2B (changes to its own systems, before the tag) and done: **warship orders** (click
+your warship, then the sea: it sails there and patrols / fights within 15 km; `moveWarship`,
+tile -1 = home), patrols **4 km offshore**; **strike missile** −2 levels (I–II destroyed), 60 s
+out of action, 10% of the victim's troops killed; **bunker buster** destroys its building, 5%
+killed; **nations** value missiles with the troops they kill and fire at 1.2× the price (was
+2×), Silos worth 0.6 (was 0.4), one warship blockades the enemy's nearest Port while at war
+(`ai/warship.ts`), expanders and opportunists attack sooner. **Headless** (Medium = what the
+user plays; before in brackets): Islands (40) median 18.6 min [23.0], 369 player attacks a game
+[344], 4.2 missiles [0.7], 1.7 Silos [1.1], 19.5 trade ships taken and 0.6 warships sunk by
+blockades; Islands Hard 18.1 min [20.6], 4.1 missiles [0.2]; Continent Hard (60) 8.8 min, wins
+expander 16 · turtle 21 · opportunist 12 · aggressor 11; Islands 2 teams 8.5 min, teams 14 · 16.
+No errors or timeouts; warships ≤ 6 ms worst tick (the shore-distance field is computed while
+the game loads). **Browser** (own tab): a warship selected by clicking it (white ring, its
+dashed patrol circle, the banner "⚓ Warship selected — click the sea …"), sent by a click on
+open sea (the order event, the ship there 2 km from the spot), its 15 km circle; the other one
+patrolling offshore; a strike missile on an enemy Housing: destroyed, the enemy 612.9K → 548.9K
+troops, toast "🚀 Your strike missile hit 1 building: −2 levels each · 60.9K troops killed"; no
+console errors. Tests: 496.
+
 **Dependency map** (what must exist first):
 
 ```

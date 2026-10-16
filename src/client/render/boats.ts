@@ -19,7 +19,14 @@ import type {
   WarshipSnapshot,
 } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
-import { boatLevel, boatPosition, boatSteps, type BoatPreview } from "../app/boats.ts";
+import {
+  boatLevel,
+  boatPosition,
+  boatSteps,
+  warshipSize,
+  warshipVoyage,
+  type BoatPreview,
+} from "../app/boats.ts";
 import { formatTroops } from "../format.ts";
 import { drawSprite, FACES_LEFT, hasSprite, spriteHeight, type SpriteKind } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
@@ -30,6 +37,10 @@ export interface BoatDrawInput {
   readonly tradeShips: readonly TradeShipSnapshot[];
   /** Warships (2B.6); those in their shipyard (sunk) are not drawn. */
   readonly warships: readonly WarshipSnapshot[];
+  /** Your warship selected for orders (the user after 2B.6), or null. */
+  readonly selectedWarship: number | null;
+  /** Where your warships patrol: their Base's tile and patrol radius, by warship id. */
+  readonly patrolOf: (ship: WarshipSnapshot) => { center: number; range: number } | null;
   readonly width: number;
   /** Tick with fraction (smooth movement). */
   readonly tick: number;
@@ -47,6 +58,8 @@ const MINE = "rgba(246, 241, 228, 0.75)";
 const THREAT = "rgba(255, 110, 90, 0.85)";
 const OK = "rgba(140, 240, 190, 0.95)";
 const BAD = "rgba(255, 120, 100, 0.95)";
+/** The selected warship, its route and patrol area. */
+const SELECTED = "rgba(255, 255, 255, 0.9)";
 
 export class BoatLayer {
   private readonly canvas: HTMLCanvasElement;
@@ -103,11 +116,38 @@ export class BoatLayer {
       }
     }
 
-    const warSize = Math.max(20, Math.min(52, view.zoom * 6.5));
+    const warSize = warshipSize(view.zoom);
+    // Your warships' orders: an anchor where each was sent; the selected one also shows its
+    // patrol area and the way there.
+    for (const ship of input.warships) {
+      if (ship.readyTick >= 0 || ship.owner !== input.localPlayerId) continue;
+      const selected = ship.id === input.selectedWarship;
+      if (selected) {
+        const area = input.patrolOf(ship);
+        if (area) {
+          const c = tileScreen(area.center);
+          this.dashedCircle(c.x, c.y, area.range * view.zoom, SELECTED);
+        }
+        const here = boatPosition(warshipVoyage(ship), input.width, input.tick);
+        const done = Math.floor(boatSteps(warshipVoyage(ship), input.tick));
+        const ahead: number[] = [];
+        for (let k = Math.max(1, done + 1); k <= ship.route.length; k++)
+          ahead.push(ship.route[k - 1]!);
+        ahead.push(ship.toTile);
+        this.route([toScreen(here.x, here.y), ...ahead.map(tileScreen)], SELECTED, 1.5);
+      }
+      if (ship.patrolTile >= 0) {
+        const a = tileScreen(ship.patrolTile);
+        this.label(a.x, a.y, "⚓");
+      }
+    }
     for (const ship of input.warships) {
       if (ship.readyTick >= 0) continue;
       const at = boatPosition(warshipVoyage(ship), input.width, input.tick);
       const p = toScreen(at.x, at.y);
+      if (ship.id === input.selectedWarship) {
+        this.ring(p.x, p.y + warSize * 0.1, warSize * 0.68, SELECTED);
+      }
       if (p.x < -50 || p.y < -50 || p.x > halfW * 2 + 50 || p.y > halfH * 2 + 50) continue;
       const color = input.colorOf(ship.owner);
       const drawn = hasSprite("warship", 3)
@@ -200,6 +240,19 @@ export class BoatLayer {
     // Every other point is plenty: routes are drawn at map scale, a tile is a few pixels.
     for (let k = 1; k < points.length - 1; k += 2) ctx.lineTo(points[k]!.x, points[k]!.y);
     ctx.lineTo(points.at(-1)!.x, points.at(-1)!.y);
+  }
+
+  private dashedCircle(x: number, y: number, radius: number, color: string): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private ring(x: number, y: number, radius: number, color: string): void {
@@ -341,17 +394,6 @@ export class BoatLayer {
 
 /** The stand-in for warship art (2B.6): the Modern troop boat, greyed like a warship. */
 const STAND_IN = "grayscale(1) brightness(0.8) contrast(1.25)";
-
-/** A warship's current leg as a voyage, so it is placed like a boat. */
-function warshipVoyage(ship: WarshipSnapshot) {
-  return {
-    route: ship.route,
-    launchTile: ship.fromTile,
-    landingTile: ship.toTile,
-    launchTick: ship.legTick,
-    tilesPerTick: ship.tilesPerTick,
-  };
-}
 
 /** Forgets the eras of ships no longer at sea. */
 function prune(levels: Map<number, number>, ships: readonly { readonly id: number }[]): void {

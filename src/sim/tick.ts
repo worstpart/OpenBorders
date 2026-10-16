@@ -28,7 +28,7 @@ import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { advanceTrade } from "./systems/trade.ts";
-import { advanceWarships } from "./systems/warships.ts";
+import { advanceWarships, applyMoveWarship } from "./systems/warships.ts";
 import {
   advanceFlights,
   applyAirlift,
@@ -213,6 +213,8 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyAirStrike(world, player, command.buildingId, command.tile);
     case "launchMissile":
       return applyLaunchMissile(world, player, command.buildingId, command.tile, command.missile);
+    case "moveWarship":
+      return applyMoveWarship(world, player, command.warshipId, command.tile);
     case "testFlight":
       return applyTestFlight(world, player, command.from, command.to);
     default:

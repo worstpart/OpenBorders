@@ -11,7 +11,8 @@
  *  - otherwise a **strike missile** or, from a Silo II+, a **bunker buster** at an enemy it is
  *    at war with (armies either way, or one it sends this think): the target is worth the gold
  *    of the levels the enemies' buildings there would lose (SAMs ×`strikeSamWeight`, Airports
- *    ×`strikeAirportWeight`, as for air strikes), and it fires only when that is at least
+ *    ×`strikeAirportWeight`, as for air strikes) plus the troops it kills (a gold a troop),
+ *    and it fires only when that is at least
  *    `missileValueFactor`× what the launch costs. SAM II+ on the route shoot missiles down one
  *    by one, so it fires one more missile than the interceptors ready there (saturation) — if
  *    its Silo has them, and the value covers them all.
@@ -189,8 +190,17 @@ function decideConventional(
         around += levelsWorth(other, f.missileLevels);
       }
     }
-    const options: { kind: MissileKind; value: number }[] = [{ kind: "missile", value: around }];
-    if (silo.level >= 2) options.push({ kind: "buster", value: levelsWorth(b, f.busterLevels) });
+    // People killed count too, at a gold a troop (rules.economy.goldPerTroop).
+    const home = getPlayer(world, b.owner)!.homeTroops * rules.economy.goldPerTroop;
+    const options: { kind: MissileKind; value: number }[] = [
+      { kind: "missile", value: around + home * f.missileTroopShare },
+    ];
+    if (silo.level >= 2) {
+      options.push({
+        kind: "buster",
+        value: levelsWorth(b, f.busterLevels) + home * f.busterTroopShare,
+      });
+    }
     for (const option of options) {
       if (best && option.value <= best.value) continue;
       if (option.value < ai.missileValueFactor * cost) continue;

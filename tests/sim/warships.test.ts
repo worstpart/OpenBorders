@@ -6,7 +6,7 @@ import { makeRules, type GameRules } from "../../src/sim/rules.ts";
 import { hashWorld } from "../../src/sim/stateHash.ts";
 import { tileCost } from "../../src/sim/systems/attacks.ts";
 import { coastFortLevel, maxLevel } from "../../src/sim/systems/buildings.ts";
-import { patrolTiles, warshipTile } from "../../src/sim/systems/warships.ts";
+import { patrolTiles, shoreDistance, warshipTile } from "../../src/sim/systems/warships.ts";
 import { runTick } from "../../src/sim/tick.ts";
 import { Terrain } from "../../src/sim/map/gameMap.ts";
 import { setOwner, type Attack, type Building, type World } from "../../src/sim/world.ts";
@@ -288,6 +288,81 @@ describe("warships", () => {
     const h = hashWorld(a);
     a.warships[0]!.hp -= 1;
     expect(hashWorld(a)).not.toBe(h);
+  });
+});
+
+describe("warships under orders (the user after playing 2B.6)", () => {
+  const order = (w: World, playerId: number, warshipId: number, tile: number) =>
+    step(w, [{ playerId, command: { type: "moveWarship", warshipId, tile } }]);
+  const rejection = (events: SimEvent[]) =>
+    events.find((e) => e.type === "commandRejected")?.reason ?? null;
+
+  it("keep to open water: patrol points lie at least 4 km from land", () => {
+    const w = world();
+    port(w, 1, BASE_1, 3);
+    const shore = shoreDistance(w.map);
+    let legs = 0;
+    for (let k = 0; k < 60; k++) {
+      run(w, 10);
+      for (const ship of w.warships) {
+        if (ship.route.length === 0) continue;
+        legs++;
+        expect(shore[ship.toTile]).toBeGreaterThanOrEqual(RULES.warships.offshore);
+      }
+    }
+    expect(legs).toBeGreaterThan(0);
+  });
+
+  it("sail where their owner sends them and patrol around that spot", () => {
+    const w = world();
+    port(w, 1, BASE_1, 3);
+    step(w);
+    const ship = w.warships[0]!;
+    const spot = at(44, 10);
+    const events = order(w, 1, ship.id, spot);
+    expect(rejection(events)).toBeNull();
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "warshipOrdered", warshipId: ship.id, tile: spot }),
+    );
+    expect(ship.patrolTile).toBe(spot);
+    const r = RULES.warships.orderRange;
+    const near = (tile: number) => {
+      const dx = (tile % WIDTH) - 44;
+      const dy = Math.floor(tile / WIDTH) - 10;
+      return dx * dx + dy * dy <= r * r;
+    };
+    run(w, 60); // 36 km at 1.5 km a tick
+    expect(near(warshipTile(ship, SPEED, w.tick))).toBe(true);
+    // From then on it patrols there, not around its Base.
+    for (let k = 0; k < 30; k++) {
+      run(w, 10);
+      expect(near(ship.toTile)).toBe(true);
+    }
+    // Home again: back to its Base's waters.
+    expect(rejection(order(w, 1, ship.id, -1))).toBeNull();
+    expect(ship.patrolTile).toBe(-1);
+  });
+
+  it("only your own warship, only on the sea", () => {
+    const w = world();
+    port(w, 1, BASE_1, 3);
+    step(w);
+    const ship = w.warships[0]!;
+    expect(rejection(order(w, 2, ship.id, at(30, 10)))).toBe("no such warship");
+    expect(rejection(order(w, 1, ship.id, at(4, 5)))).toBe("warships sail on the sea");
+    expect(rejection(order(w, 1, 999, at(30, 10)))).toBe("no such warship");
+    expect(ship.patrolTile).toBe(-1);
+  });
+
+  it("fight where they are sent: a hostile boat there is sunk", () => {
+    const w = world();
+    port(w, 1, BASE_1, 3);
+    step(w);
+    // Both warships to the east: the boat from player 2 to player 4 passes them.
+    for (const ship of w.warships) order(w, 1, ship.id, at(45, 9));
+    run(w, 60);
+    const events = [...step(w, [{ playerId: 2, command: boat(4, at(6, 18)) }]), ...run(w, 40)];
+    expect(ofType(events, "boatSunk").map((e) => e.owner)).toEqual([2]);
   });
 });
 

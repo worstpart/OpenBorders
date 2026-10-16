@@ -768,7 +768,7 @@ a trade ship is replaced by a new one (`captured`, bound for the captor's neares
 Port — new id, so frames, the worker protocol and the client see a new ship). Otherwise it
 sails: a new `seaRoute` (budget `maxRouteNodes`) every `repathTicks` during a chase, or
 to a random tile of the Base's patrol area (`patrolTiles`, cached per map, picked with
-`world.rng`) when idle. Coastal fortification is virtual: `coastFortLevel`
+`world.rng`) when idle. **Orders (D-032, after the user played 2B.6):** `moveWarship {warshipId, tile}` sets `patrolTile` (hashed; -1 = around the Base); `patrolOf` gives the centre and radius (`orderRange` 15 for an order, the Base's 40 otherwise). Farther than that from its centre the ship is in transit: it sails there (route budget `naval.maxRouteNodes`), fires at prey within gun range and chases nothing; an unreachable order falls back to the Base. Patrol points come from `patrolTiles(map, centre, range, offshore)`, filtered by `shoreDistance` (a per-map BFS from land, capped at 255) to open water ≥ `offshore` (4) tiles out. Nations order warships in `ai/warship.ts` (one blockader at war). The client selects a warship by clicking it (`app/boats.ts` `warshipAtPoint`, `ui.selectedWarship`) and orders it with the next click on the sea. Coastal fortification is virtual: `coastFortLevel`
 (buildings.ts, shared with the HUD) gives a coast tile of the Base's owner within its range
 a wall level, and `walls.ts` `workingFort` takes the higher of it and a drawn wall — so
 every wall hook (losses, break troops, hold time, suppression) applies unchanged. Events:

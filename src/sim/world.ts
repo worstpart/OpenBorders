@@ -17,6 +17,7 @@ import {
 } from "./rules.ts";
 import { ownerTileHash } from "./stateHash.ts";
 import { breakWallTile } from "./systems/walls.ts";
+import { shoreDistance } from "./systems/warships.ts";
 import type { TileQueue } from "./systems/tileQueue.ts";
 
 /** 1..n for players; 0 means neutral (unowned). */
@@ -271,6 +272,8 @@ export interface Warship {
   /** What it is after: a boat, a warship or a trade ship (by id); "" = patrolling. */
   targetKind: "" | "boat" | "warship" | "trade";
   targetId: number;
+  /** Where its owner sent it (a sea tile) — it patrols around there; -1 = around its Base. */
+  patrolTile: number;
 }
 
 /**
@@ -536,6 +539,10 @@ export function createWorld(setup: GameSetup): World {
     }
   }
   const rng = new Rng(setup.seed);
+  const rules = setup.rules ?? DEFAULT_RULES;
+  // Warships (2B.6) need each water tile's distance to land; it is derived from the map once
+  // (~17 ms on the reference map) — here, while the game loads, not in the middle of a tick.
+  if (rules.warships.enabled && rules.naval.enabled) shoreDistance(setup.map);
   const players = setup.players.map((p, index): Player => ({
     id: index + 1,
     name: p.name,
@@ -568,7 +575,7 @@ export function createWorld(setup: GameSetup): World {
     tick: 0,
     phase: "spawn",
     playStartTick: -1,
-    rules: setup.rules ?? DEFAULT_RULES,
+    rules,
     map: setup.map,
     owner: new Uint16Array(setup.map.width * setup.map.height),
     players,

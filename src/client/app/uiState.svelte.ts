@@ -130,6 +130,8 @@ class UiState {
    */
   airliftFrom = $state<number | null>(null);
   liftMode = $state<LiftMode>("airlift");
+  /** Your warship selected for orders: the next click on the sea sends it there (or null). */
+  selectedWarship = $state<number | null>(null);
   /** The air defence view (GAME_DESIGN.md §3.17.7, key V): every SAM's ring on the map. */
   airDefense = $state(false);
   /** The wall being drawn: the corner points placed so far (GAME_DESIGN.md §3.17.6). */
@@ -191,6 +193,7 @@ class UiState {
     this.boatPreview = null;
     this.placing = null;
     this.airliftFrom = null;
+    this.selectedWarship = null;
     this.wallPoints = [];
     this.myRequests = new Map();
     this.myDonations = new Map();

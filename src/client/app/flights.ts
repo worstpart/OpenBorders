@@ -85,8 +85,8 @@ export function flightSprite(
 
 /**
  * What a missile aimed at a tile would do (2B.5): a strike missile — the enemy buildings within
- * its radius each lose a level, and the land there is suppressed; a bunker buster — the
- * building there loses two levels; the warhead — the land it would scorch, and the allies it
+ * its radius each lose two levels, troops die, and the land there is suppressed; a bunker
+ * buster — the building there is destroyed and troops die; the warhead — the land it would scorch, and the allies it
  * would hit (their alliance breaks).
  */
 export type MissileEffect =
@@ -382,20 +382,41 @@ function missileEffect(
   return { kind, radius: r, tiles, allies: [...allies].sort((a, b) => a - b) };
 }
 
+/** "10%": a share as a whole percent. */
+const percent = (share: number) => `${Math.round(share * 100)}%`;
+
+/** What a strike missile does, in a few words (cards, the aiming banner). */
+export function strikeMissileText(rules: GameRules): string {
+  const f = rules.flights;
+  return `every enemy building within ${f.missileRadius} km loses ${f.missileLevels} level${f.missileLevels > 1 ? "s" : ""}, and ${percent(f.missileTroopShare)} of their troops die`;
+}
+
+/** What a bunker buster does, in a few words. */
+export function busterText(rules: GameRules): string {
+  const f = rules.flights;
+  const hit =
+    f.busterLevels >= 3
+      ? "destroys one enemy building"
+      : `one building loses ${f.busterLevels} levels`;
+  return `${hit}, and ${percent(f.busterTroopShare)} of its owner's troops die`;
+}
+
 /** A missile's effect in a few words, for the aiming label. */
 export function missileEffectText(rules: GameRules, effect: MissileEffect): string {
+  const f = rules.flights;
   if (effect.kind === "missile") {
     const hit =
       effect.buildings > 0
-        ? `${effect.buildings} building${effect.buildings > 1 ? "s" : ""} −1 level · `
+        ? `${effect.buildings} building${effect.buildings > 1 ? "s" : ""} −${f.missileLevels} levels · `
         : "";
-    return `${hit}suppress ${effect.radius} km for ${effect.seconds} s`;
+    return `${hit}${percent(f.missileTroopShare)} of their troops · suppress ${effect.radius} km for ${effect.seconds} s`;
   }
   if (effect.kind === "buster") {
     const name = levelRules(rules, effect.buildingType, Math.max(1, effect.level)).name;
+    const troops = ` · ${percent(f.busterTroopShare)} of their troops`;
     return effect.levelAfter === 0
-      ? `destroy ${name}`
-      : `${name} → level ${ROMAN[effect.levelAfter]}`;
+      ? `destroy ${name}${troops}`
+      : `${name} → level ${ROMAN[effect.levelAfter]}${troops}`;
   }
   return `scorch ${effect.tiles.toLocaleString("en-US")} tiles of land`;
 }

@@ -51,6 +51,7 @@ import {
   warheadCooldownLeft,
 } from "../../sim/systems/missiles.ts";
 import { formatTroops } from "../format.ts";
+import { busterText, strikeMissileText } from "./flights.ts";
 
 /** What the build bar can pick up: a building, or the wall tool (D-024). */
 export type Placeable = BuildingType | "wall";
@@ -163,14 +164,12 @@ function siloLines(rules: GameRules, level: number): string[] {
   const f = rules.flights;
   const slots = effect.missileSlots ?? 0;
   const lines = [
-    `Strike missile (${formatTroops(f.missileCost)}): every enemy building within ${f.missileRadius} km loses a level`,
+    `Strike missile (${formatTroops(f.missileCost)}): ${strikeMissileText(rules)}`,
     `${slots} missile${slots > 1 ? "s" : ""}, each reloads in ${seconds(rules, effect.reloadTicks ?? 0)} s`,
     effect.wholeMap ? "Range: the whole map" : `Range ${effect.range ?? 0} km`,
   ];
   if (effect.bunkerBuster) {
-    lines.push(
-      `Bunker buster (${formatTroops(f.missileCost)}): one building loses ${f.busterLevels} levels`,
-    );
+    lines.push(`Bunker buster (${formatTroops(f.missileCost)}): ${busterText(rules)}`);
   }
   if (effect.warheadCooldownTicks) {
     lines.push(
@@ -272,7 +271,7 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
     );
     lines.push(next.wholeMap ? "Range: the whole map" : `Range ${next.range ?? 0} km`);
     if (next.bunkerBuster && !now.bunkerBuster) {
-      lines.push(`New: bunker buster — one building loses ${f.busterLevels} levels`);
+      lines.push(`New: bunker buster — ${busterText(rules)}`);
     }
     if (next.warheadCooldownTicks) {
       lines.push(
@@ -683,6 +682,9 @@ function fleetLines(ctx: BuildContext, building: BuildingSnapshot): string[] {
     lines.push(
       `Next warship ready in ${Math.ceil(seconds(ctx.rules, Math.max(0, next - ctx.tick)))} s`,
     );
+  }
+  if (building.owner === ctx.me?.id) {
+    lines.push("Click a warship, then the sea, to send it somewhere");
   }
   lines.push("(Warship art is a stand-in until your warship sheet arrives)");
   return lines;

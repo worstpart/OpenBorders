@@ -4,7 +4,12 @@
  * (route, landing, ETA). Pure functions over frame snapshots; routes and landing rules come
  * from the simulation (naval.ts), so the preview shows exactly what a click will do.
  */
-import type { BoatSnapshot, BuildingSnapshot, PlayerSnapshot } from "../../sim/frame.ts";
+import type {
+  BoatSnapshot,
+  BuildingSnapshot,
+  PlayerSnapshot,
+  WarshipSnapshot,
+} from "../../sim/frame.ts";
 import { isLand, type GameMap } from "../../sim/map/gameMap.ts";
 import type { GameRules } from "../../sim/rules.ts";
 import {
@@ -217,3 +222,46 @@ export const BOAT_PREVIEW_TEXT: Record<BoatProblem | "noBoat", string> = {
   ...BOAT_PROBLEM_TEXT,
   noBoat: "all your boats are at sea",
 };
+
+/** A warship's current leg as a voyage, so it is placed like a boat (2B.6). */
+export function warshipVoyage(ship: WarshipSnapshot): Voyage {
+  return {
+    route: ship.route,
+    launchTile: ship.fromTile,
+    landingTile: ship.toTile,
+    launchTick: ship.legTick,
+    tilesPerTick: ship.tilesPerTick,
+  };
+}
+
+/** A warship's drawn width in CSS px at a zoom level (render/boats.ts). */
+export function warshipSize(zoom: number): number {
+  return Math.max(20, Math.min(52, zoom * 6.5));
+}
+
+/**
+ * The local player's warship at sea drawn under the map point (x, y) (tile units), or null:
+ * the nearest within its drawn half-width (`radius`, tile units).
+ */
+export function warshipAtPoint(
+  ships: readonly WarshipSnapshot[],
+  me: number,
+  width: number,
+  tick: number,
+  x: number,
+  y: number,
+  radius: number,
+): WarshipSnapshot | null {
+  let best: WarshipSnapshot | null = null;
+  let bestD = radius * radius;
+  for (const ship of ships) {
+    if (ship.owner !== me || ship.readyTick >= 0) continue;
+    const at = boatPosition(warshipVoyage(ship), width, tick);
+    const d = (at.x - x) ** 2 + (at.y - y) ** 2;
+    if (d <= bestD) {
+      bestD = d;
+      best = ship;
+    }
+  }
+  return best;
+}

@@ -1,9 +1,12 @@
 /**
  * Warships (GAME_DESIGN.md §3.18.1, milestone 2B.6, D-031 — the user's choices).
  *
- *  - Every Naval Base (Port III) keeps `warships` of them at sea. Nobody steers them: they
- *    patrol the sea within `patrolRange` tiles of their Base, sailing from one random point
- *    of it to the next.
+ *  - Every Naval Base (Port III) keeps `warships` of them at sea. Left alone they patrol the
+ *    sea within `patrolRange` tiles of their Base, sailing from one random point of it to the
+ *    next — always open water, `offshore` tiles or more from land. Their owner can send one
+ *    anywhere on its sea (`moveWarship`, the user after playing 2B.6): it sails there, firing
+ *    at what comes within gun range on the way, then patrols and fights within `orderRange`
+ *    of that spot until sent elsewhere (or home: tile -1).
  *  - They go after ships of players who are not their owner's friends (allies and teammates
  *    are safe) while those are inside the patrol area: troop boats first, then warships,
  *    then trade ships (not those bound for a Port of the owner's or a friend's: they come to
@@ -27,6 +30,7 @@ import {
   getPlayer,
   type Boat,
   type Building,
+  type Player,
   type PlayerId,
   type TradeShip,
   type Warship,
@@ -112,24 +116,66 @@ export function dockTile(map: GameMap, portTile: number): number {
   return best;
 }
 
-/** Patrol areas by map, then by "tile:range": the water of the Port's seas within range. */
+/** Each water tile's distance to the nearest land (4-connected steps, capped at 255). */
+const shoreCache = new WeakMap<GameMap, Uint8Array>();
+
+export function shoreDistance(map: GameMap): Uint8Array {
+  let dist = shoreCache.get(map);
+  if (dist) return dist;
+  const { width, terrain } = map;
+  dist = new Uint8Array(terrain.length).fill(255);
+  const queue = new Int32Array(terrain.length);
+  let head = 0;
+  let tail = 0;
+  for (let t = 0; t < terrain.length; t++) {
+    if (terrain[t] !== Terrain.Water) {
+      dist[t] = 0;
+      queue[tail++] = t;
+    }
+  }
+  while (head < tail) {
+    const t = queue[head++]!;
+    const next = dist[t]! + 1;
+    if (next >= 255) continue;
+    const x = t % width;
+    const visit = (n: number) => {
+      if (dist[n]! > next) {
+        dist[n] = next;
+        queue[tail++] = n;
+      }
+    };
+    if (t >= width) visit(t - width);
+    if (t + width < terrain.length) visit(t + width);
+    if (x > 0) visit(t - 1);
+    if (x < width - 1) visit(t + 1);
+  }
+  shoreCache.set(map, dist);
+  return dist;
+}
+
+/** Patrol areas by map, then by "tile:range:offshore". */
 const patrolCache = new WeakMap<GameMap, Map<string, Int32Array>>();
 
-/** The sea tiles a Naval Base at `portTile` patrols (ascending; static per map). */
-export function patrolTiles(map: GameMap, portTile: number, range: number): Int32Array {
+/**
+ * The sea tiles a warship patrols around `center` (a Naval Base's coast tile, or a sea tile
+ * it was sent to): the water of the same sea within `range`, at least `offshore` tiles from
+ * land — or, if there is no such open water there (a strait), all of it. Ascending; static.
+ */
+export function patrolTiles(map: GameMap, center: number, range: number, offshore = 0): Int32Array {
   let byBase = patrolCache.get(map);
   if (!byBase) {
     byBase = new Map();
     patrolCache.set(map, byBase);
   }
-  const key = `${portTile}:${range}`;
+  const key = `${center}:${range}:${offshore}`;
   let tiles = byBase.get(key);
   if (tiles) return tiles;
   const { body } = seasOf(map);
-  const seas = seasAt(map, body, portTile);
+  const seas = body[center]! !== 0 ? [body[center]!] : seasAt(map, body, center);
+  const shore = shoreDistance(map);
   const { width, height } = map;
-  const cx = portTile % width;
-  const cy = Math.floor(portTile / width);
+  const cx = center % width;
+  const cy = Math.floor(center / width);
   const list: number[] = [];
   for (let y = Math.max(0, cy - range); y <= Math.min(height - 1, cy + range); y++) {
     for (let x = Math.max(0, cx - range); x <= Math.min(width - 1, cx + range); x++) {
@@ -140,7 +186,8 @@ export function patrolTiles(map: GameMap, portTile: number, range: number): Int3
       if (body[tile]! !== 0 && seas.includes(body[tile]!)) list.push(tile);
     }
   }
-  tiles = Int32Array.from(list);
+  const open = list.filter((t) => shore[t]! >= offshore);
+  tiles = Int32Array.from(open.length > 0 ? open : list);
   byBase.set(key, tiles);
   return tiles;
 }
@@ -161,11 +208,66 @@ export function guardedWaters(
     if (ship.readyTick >= 0 || ship.owner === playerId) continue;
     if (areFriendly(world, ship.owner, playerId)) continue;
     const base = findBuilding(world, ship.base);
-    if (!base || guarded.some((g) => g.tile === base.tile)) continue;
-    const r = fleetOf(world, base.level).patrol + gun;
-    guarded.push({ tile: base.tile, rangeSq: r * r });
+    if (!base) continue;
+    const { center, range } = patrolOf(world, ship, base);
+    if (guarded.some((g) => g.tile === center)) continue;
+    const r = range + gun;
+    guarded.push({ tile: center, rangeSq: r * r });
   }
   return guarded;
+}
+
+/** Where a warship patrols: around the spot its owner sent it to, or around its Base. */
+export function patrolOf(
+  world: World,
+  ship: { readonly patrolTile: number },
+  base: { readonly tile: number; readonly level: number },
+): { center: number; range: number } {
+  return ship.patrolTile >= 0
+    ? { center: ship.patrolTile, range: world.rules.warships.orderRange }
+    : { center: base.tile, range: fleetOf(world, base.level).patrol };
+}
+
+/**
+ * Handles `moveWarship`: your warship at sea sails to the sea at `tile` (on its own sea, with
+ * a route there) and patrols around it; `tile` -1 sends it back to its Base's waters.
+ */
+export function applyMoveWarship(
+  world: World,
+  player: Player,
+  warshipId: number,
+  tile: number,
+): string | null {
+  if (!warshipsEnabled(world.rules)) return "there are no warships in this game";
+  const ship = findWarship(world, warshipId);
+  if (!ship || ship.owner !== player.id) return "no such warship";
+  if (ship.readyTick >= 0) return "that warship is being rebuilt";
+  const here = warshipTile(ship, world.rules.warships.tilesPerTick, world.tick);
+  if (tile === -1) {
+    ship.patrolTile = -1;
+    ship.targetKind = "";
+    ship.targetId = 0;
+    holdAt(ship, here, world.tick); // a patrol point around the Base is picked next tick
+    return null;
+  }
+  const { map } = world;
+  if (!Number.isInteger(tile) || tile < 0 || tile >= map.terrain.length) return "not a sea tile";
+  if (map.terrain[tile] !== Terrain.Water) return "warships sail on the sea";
+  const { body } = seasOf(map);
+  if (body[tile] !== body[here]) return "that sea can't be reached from here";
+  const route = seaRoute(map, here, tile, world.rules.naval.maxRouteNodes);
+  if (!route && here !== tile) return "no sea route there";
+  ship.patrolTile = tile;
+  ship.targetKind = "";
+  ship.targetId = 0;
+  if (route) {
+    ship.fromTile = here;
+    ship.route = route;
+    ship.toTile = tile;
+    ship.legTick = world.tick;
+  } else holdAt(ship, here, world.tick);
+  world.events.push({ type: "warshipOrdered", warshipId: ship.id, owner: player.id, tile });
+  return null;
 }
 
 /** Something a warship can go after this tick. */
@@ -201,15 +303,27 @@ export function advanceWarships(world: World): void {
   for (const ship of world.warships) {
     if (ship.readyTick >= 0) continue; // in the shipyard (perhaps sunk earlier this tick)
     const base = findBuilding(world, ship.base)!;
-    const patrol = fleetOf(world, base.level).patrol;
+    const { center, range } = patrolOf(world, ship, base);
     const here = warshipTile(ship, rules.tilesPerTick, tick);
-    const target = choosePrey(world, ship, base.tile, patrol, here, prey);
+    const legDone = legSteps(ship, rules.tilesPerTick, tick) >= ship.route.length + 1;
+    if (ship.patrolTile >= 0 && distanceSq(world.map, here, center) > range * range) {
+      // On its way to where it was sent: shoot what comes within gun range, chase nothing.
+      ship.targetKind = "";
+      ship.targetId = 0;
+      const near = choosePrey(world, ship, here, rules.gunRange, here, prey);
+      if (near && tick >= ship.reloadTick) fire(world, ship, here, near);
+      if ((legDone || ship.toTile !== center) && !sail(world, ship, here, center)) {
+        ship.patrolTile = -1; // no way there any more: back to its Base's waters
+      }
+      continue;
+    }
+    const target = choosePrey(world, ship, center, range, here, prey);
     if (!target) {
       ship.targetKind = "";
       ship.targetId = 0;
       ship.hp = Math.min(rules.hp, ship.hp + rules.repairPerTick);
-      if (legSteps(ship, rules.tilesPerTick, tick) >= ship.route.length + 1) {
-        const area = patrolTiles(world.map, base.tile, patrol);
+      if (legDone) {
+        const area = patrolTiles(world.map, center, range, rules.offshore);
         if (area.length > 0) sail(world, ship, here, area[world.rng.nextInt(area.length)]!);
       }
       continue;
@@ -253,6 +367,7 @@ function keepFleets(world: World, bases: readonly Building[]): void {
       ship.owner = base.owner;
       ship.targetKind = "";
       ship.targetId = 0;
+      ship.patrolTile = -1;
       continue;
     }
     if (ship.readyTick >= 0 && tick >= ship.readyTick && working(base, tick)) {
@@ -278,6 +393,7 @@ function keepFleets(world: World, bases: readonly Building[]): void {
         reloadTick: tick,
         targetKind: "",
         targetId: 0,
+        patrolTile: -1,
       };
       world.warships.push(ship);
       // A new Naval Base launches at once — unless it is struck (it waits).
@@ -301,6 +417,7 @@ function launch(world: World, ship: Warship, base: Building): void {
   ship.readyTick = -1;
   ship.hp = world.rules.warships.hp;
   ship.reloadTick = world.tick;
+  ship.patrolTile = -1;
   ship.targetKind = "";
   ship.targetId = 0;
   holdAt(ship, dock, world.tick);
@@ -336,16 +453,29 @@ function holdAt(ship: Warship, tile: number, tick: number): void {
   ship.legTick = tick;
 }
 
-/** Starts a leg from `from` toward `to` (a sea tile, or a ship's coast tile). */
-function sail(world: World, ship: Warship, from: number, to: number): void {
-  if (from === to) return holdAt(ship, from, world.tick);
-  const route = seaRoute(world.map, from, to, world.rules.warships.maxRouteNodes);
-  if (!route || route.length === 0) return holdAt(ship, from, world.tick);
+/**
+ * Starts a leg from `from` toward `to` (a sea tile, or a ship's coast tile). False if there
+ * is no route (the warship then lies still).
+ */
+function sail(world: World, ship: Warship, from: number, to: number): boolean {
+  if (from === to) {
+    holdAt(ship, from, world.tick);
+    return true;
+  }
+  // Orders may cross the whole sea; patrols and chases stay local.
+  const budget =
+    to === ship.patrolTile ? world.rules.naval.maxRouteNodes : world.rules.warships.maxRouteNodes;
+  const route = seaRoute(world.map, from, to, budget);
+  if (!route || route.length === 0) {
+    holdAt(ship, from, world.tick);
+    return false;
+  }
   ship.fromTile = from;
   ship.route = route;
   // Never onto land: a boat on its landing coast is chased to the water next to it.
   ship.toTile = world.map.terrain[to] === Terrain.Water ? to : route[route.length - 1]!;
   ship.legTick = world.tick;
+  return true;
 }
 
 /** Every ship at sea a warship might go after, in a fixed order. */
