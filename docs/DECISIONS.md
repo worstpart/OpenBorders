@@ -11,7 +11,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-003 | Custom WebGL2 renderer for the map | Accepted |
 | D-004 | Deterministic, fixed-tick (10 Hz) simulation | Accepted |
 | D-005 | Command → turn → simulation pipeline from Phase 1 (local host) | Accepted |
-| D-006 | Multiplayer model: hybrid authoritative lockstep | **Proposed** (needed by Phase 3) |
+| D-006 | Multiplayer model: hybrid authoritative lockstep | **Accepted** 2026-10-16 (user) |
 | D-007 | Svelte 5 + plain CSS design tokens for UI | Accepted |
 | D-008 | Vite + Vitest; single package with enforced folder boundaries | Accepted |
 | D-009 | Procedurally generated map for Phase 1 | **Accepted** 2026-10-01 |
@@ -39,6 +39,9 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
 | D-033 | After the Phase 2B playtest: Mobilize removed and Housing 2.5× (land −⅓); strike-missile crater, bunker-buster splash, missiles 60 km/s, a missile launcher; keys 1–7 build; type badges and level dots; clearer hover card; 80% to win; richer early trade | **Accepted** 2026-10-16 (user's requests and answers; details mine) |
 | D-032 | After the 2B.6 playtest: warships take orders (click, then the sea), patrol 4 km offshore; missiles take 2 levels / destroy and kill troops; nations fight more (missiles, blockades, bolder expanders/opportunists) | **Accepted** 2026-10-15 (user's requests; numbers mine) |
+| D-034 | Phase 3 server on a cloud host from the start: one Node service (client + WebSocket), provider chosen at 3.1 | **Accepted** 2026-10-16 (user: cloud from the start; details mine) |
+| D-035 | Joining: lobby links **and** public lobbies in the first online version; just a name, no accounts | **Accepted** 2026-10-16 (user: both; names mine, as proposed) |
+| D-036 | Nations and tribes fill empty slots in online games, computed inside the simulation (no network cost) | **Accepted** 2026-10-16 (user) |
 
 ---
 
@@ -107,13 +110,14 @@ counts; the simulation validates everything.
 
 ---
 
-## D-006 — Hybrid authoritative lockstep for multiplayer · Proposed
+## D-006 — Hybrid authoritative lockstep for multiplayer · Accepted 2026-10-16
 
 **Context.** OpenFront's relay-only lockstep is extremely cheap but leaves outcomes to
 client votes and makes reconnects slow. A pure authoritative-state server is simple to
 reason about but bandwidth-heavy for this genre (thousands of tile changes per tick).
 
-**Decision (proposed).** The server runs the same deterministic simulation, validates
+**Decision** (the user chose option C of A relay / B state deltas / C hybrid, 2026-10-16,
+at the start of Phase 3). The server runs the same deterministic simulation, validates
 and stamps commands before relaying them as turns, compares client hashes to its own,
 resyncs diverging clients with snapshots, serves snapshots for reconnect/spectate, and
 decides outcomes. Clients simulate locally for rendering.
@@ -741,3 +745,66 @@ Phase 2B tag.
 **Alternatives.** Free unit movement with box-select (more UI, little gain with two ships a
 Base); missiles that destroy every building in the blast (too swingy for 75k); higher
 difficulty instead of personality tuning (the user plays Medium).
+
+---
+
+## D-034 — A cloud host from the start of Phase 3 · Accepted 2026-10-16
+
+**Context.** I had recommended testing on the user's own computer first (two tabs / home
+network) and choosing hosting at the end of Phase 3. The user chose a cloud host from the
+start, so friends elsewhere can join as soon as there is something to join.
+
+**Decision.** The server goes online in milestone 3.1, right after it first runs two tabs
+locally. Shape: **one Node service** that serves the built client and the game WebSocket
+from the same address (no separate static host, no cross-origin setup), one game per
+worker thread. It needs a host with **always-on processes and WebSockets** — serverless
+platforms that stop between requests don't fit. The provider is chosen at the start of
+3.1: I present two or three options with their current prices and limits as WHAT / WHY /
+OPTIONS / RECOMMENDATION; the user creates the account and enters any payment details
+themself (I never do). Deploys go from the GitHub repo `worstpart/OpenBorders`. Local
+development still runs the server on this computer first; the cloud build is the same code.
+
+**Consequences.** The game is reachable on the internet before validation and public
+lobbies exist, so until milestone 3.3 only games behind an unguessable link exist (no list
+of games), with basic connection and message-size limits from 3.1. A monthly cost may
+start in 3.1 instead of at the end of the phase. Real-network latency is tested from the
+first online milestone, which is a gain.
+
+**Alternatives.** Own computer first (my recommendation: free, fastest to iterate); a
+tunnel from the user's computer (fragile, the computer must stay on).
+
+---
+
+## D-035 — Lobby links and public lobbies; just a name · Accepted 2026-10-16
+
+**Context.** I recommended lobby links only for the first online version. The user chose
+both links and public lobbies.
+
+**Decision.** **Links** (milestone 3.2): the creator picks the settings (mode, map, size,
+nations, tribes, difficulty), shares a link, players enter a name and press Ready, the
+creator starts. **Public lobbies** (milestone 3.4, after validation and rate limits in 3.3,
+because strangers join them): a list of open games on the start screen, joinable with one
+click; public games start on a countdown once enough players are in. **Names, no
+accounts** (accounts are Phase 5): 1–16 characters, trimmed, letters, digits, spaces and
+basic punctuation, made unique per game ("Name (2)"); public lobbies also apply a small
+blocklist of offensive words. No chat beyond emojis and pings (D-027 already keeps chat
+out of reach of abuse).
+
+**Consequences.** Public lobbies need a lobby list on the server, a start countdown and
+the name rules above; moderation beyond that (reports, bans) is Phase 5.
+
+**Alternatives.** Links only (less work, fewer strangers); matchmaking queues (not needed
+until there are many players).
+
+---
+
+## D-036 — Bots fill empty slots online · Accepted 2026-10-16
+
+**Decision.** Online games keep the solo game's nations and tribes; they fill every slot no
+human takes, so even two players get a full map. Bot brains already run **inside the
+simulation** (`tick.ts` → `thinkBots`), deterministically, so every client and the server
+compute the same bot moves — bots cost no network traffic and need no server-side special
+case. A player who leaves mid-game keeps their land; their country stops acting (it is not
+handed to a bot), and they can rejoin it (milestone 3.5).
+
+**Alternatives.** Humans only (empty maps with few players).

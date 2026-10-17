@@ -855,7 +855,7 @@ asks and new renewal cards, any betrayal) picks each tick. Dev hook:
 
 ---
 
-## 7. Multiplayer plan (Phase 3) — *Proposed* (D-006)
+## 7. Multiplayer plan (Phase 3) — *Accepted* 2026-10-16 (D-006: option C; hosting D-034, joining D-035, bots D-036)
 
 ### 7.1 Options
 
