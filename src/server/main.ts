@@ -38,7 +38,13 @@ const MAX_CONNECTIONS = 2_000;
  * last entry it adds to X-Forwarded-For. Only trusted there (elsewhere a client could write it).
  */
 const BEHIND_PROXY =
-  process.env["RAILWAY_ENVIRONMENT"] !== undefined || process.env["TRUST_PROXY"] === "1";
+  process.env["TRUST_PROXY"] === "1" ||
+  [
+    "RAILWAY_ENVIRONMENT",
+    "RAILWAY_ENVIRONMENT_NAME",
+    "RAILWAY_PROJECT_ID",
+    "RAILWAY_SERVICE_ID",
+  ].some((name) => process.env[name] !== undefined);
 
 const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
 
@@ -105,7 +111,10 @@ async function serveFile(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") {
-    res.writeHead(200, { "content-type": "text/plain" }).end(`ok ${lobbies.gameCount} games\n`);
+    const proxy = BEHIND_PROXY ? ", behind proxy" : "";
+    res
+      .writeHead(200, { "content-type": "text/plain" })
+      .end(`ok ${lobbies.gameCount} games, ${connectionCount} connections${proxy}\n`);
     return;
   }
   let path = normalize(join(DIST, decodeURIComponent(url.pathname)));
