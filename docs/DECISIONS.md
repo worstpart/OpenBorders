@@ -39,7 +39,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
 | D-033 | After the Phase 2B playtest: Mobilize removed and Housing 2.5× (land −⅓); strike-missile crater, bunker-buster splash, missiles 60 km/s, a missile launcher; keys 1–7 build; type badges and level dots; clearer hover card; 80% to win; richer early trade | **Accepted** 2026-10-16 (user's requests and answers; details mine) |
 | D-032 | After the 2B.6 playtest: warships take orders (click, then the sea), patrol 4 km offshore; missiles take 2 levels / destroy and kill troops; nations fight more (missiles, blockades, bolder expanders/opportunists) | **Accepted** 2026-10-15 (user's requests; numbers mine) |
-| D-034 | Phase 3 server on a cloud host from the start: one Node service (client + WebSocket), provider chosen at 3.1 | **Accepted** 2026-10-16 (user: cloud from the start; details mine) |
+| D-034 | Phase 3 server on a cloud host from the start: one Node service (client + WebSocket) on **Railway**, US East; the `ws` package | **Accepted** 2026-10-16 (user: cloud from the start, Railway, North America, ws; details mine) |
 | D-035 | Joining: lobby links **and** public lobbies in the first online version; just a name, no accounts | **Accepted** 2026-10-16 (user: both; names mine, as proposed) |
 | D-036 | Nations and tribes fill empty slots in online games, computed inside the simulation (no network cost) | **Accepted** 2026-10-16 (user) |
 
@@ -769,6 +769,13 @@ lobbies exist, so until milestone 3.3 only games behind an unguessable link exis
 of games), with basic connection and message-size limits from 3.1. A monthly cost may
 start in 3.1 instead of at the end of the phase. Real-network latency is tested from the
 first online milestone, which is a gain.
+
+**Provider (the user's choice at the start of 3.1, 2026-10-16): Railway**, Hobby plan ($5 a month
+including $5 of usage; egress $0.05/GB — from railway.com/pricing that day), auto-deploying
+from GitHub on every push; region **US East** (most players in North America); **one replica**
+(games live in the server's memory). Options shown: Render (~$7, 5 GB egress then $0.15/GB),
+Fly.io (~$2–4, more technical). Package: **`ws`** (server only; the browser has WebSocket
+built in). `railway.json` sets build, start and the `/health` check.
 
 **Alternatives.** Own computer first (my recommendation: free, fastest to iterate); a
 tunnel from the user's computer (fragile, the computer must stay on).

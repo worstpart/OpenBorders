@@ -17,10 +17,12 @@
 
   interface Props {
     onPlay: () => void;
+    /** Create an online game with these choices (Phase 3) and open its lobby. */
+    onPlayOnline: () => void;
     onSelectMap: (choice: MapChoice) => void;
   }
 
-  let { onPlay, onSelectMap }: Props = $props();
+  let { onPlay, onPlayOnline, onSelectMap }: Props = $props();
   let starting = $state(false);
   const opponents = $derived(ui.nations + ui.tribes);
   const perPlayer = $derived(landPerPlayer(ui.landTiles, opponents));
@@ -187,6 +189,9 @@
   <button type="button" class="play" onclick={play} disabled={starting || ui.mapLoading}>
     {starting ? "Starting…" : ui.mapLoading ? "Generating map…" : "Play"}
   </button>
+  <button type="button" class="online" onclick={onPlayOnline} disabled={starting || ui.mapLoading}>
+    Play online with friends
+  </button>
   <p class="note">Phase 2 prototype</p>
 </section>
 
@@ -347,6 +352,23 @@
     transition:
       filter var(--duration-fast) var(--ease-out),
       transform var(--duration-fast) var(--ease-out);
+  }
+
+  .online {
+    width: 100%;
+    height: 38px;
+    margin-top: var(--space-2);
+    border: 1px solid var(--surface-hairline);
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .online:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .play:hover:not(:disabled) {

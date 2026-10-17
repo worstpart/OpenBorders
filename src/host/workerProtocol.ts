@@ -5,7 +5,7 @@
  * and walls only when they changed. WorkerHost puts them back, so listeners see ordinary
  * TickFrames.
  */
-import type { Command } from "../sim/commands.ts";
+import type { Command, Turn } from "../sim/commands.ts";
 import type { BoatSnapshot, TickFrame, TradeShipSnapshot, WallSnapshot } from "../sim/frame.ts";
 import type { GameRules } from "../sim/rules.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
@@ -33,7 +33,11 @@ export type ToWorker =
       readonly height: number;
       readonly terrain: Uint8Array;
       readonly relief: Uint8Array;
+      /** Online games: no timer — the worker runs the "turn" messages it is given. */
+      readonly turns?: boolean;
     }
+  /** Online games: the next turn from the server. */
+  | { readonly type: "turn"; readonly turn: Turn }
   /** A command from the local player (`playerId` null) or, in dev checks, another player. */
   | { readonly type: "send"; readonly playerId: PlayerId | null; readonly command: Command }
   | { readonly type: "pause" }

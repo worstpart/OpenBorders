@@ -41,26 +41,30 @@
 {#if open}
   <div class="backdrop">
     <div class="card" role="dialog" aria-modal="true" aria-labelledby="pause-title">
-      <h1 id="pause-title">Paused</h1>
+      <h1 id="pause-title">{ui.online ? "Menu" : "Paused"}</h1>
 
       <button type="button" class="primary" bind:this={resumeButton} onclick={onResume}>
         Resume <kbd>Esc</kbd>
       </button>
 
-      <div class="row">
-        <span class="label" id="speed-label">Game speed</span>
-        <div class="speeds" role="radiogroup" aria-labelledby="speed-label">
-          {#each GAME_SPEEDS as speed (speed)}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={ui.speed === speed}
-              class:active={ui.speed === speed}
-              onclick={() => onSpeed(speed)}>{speed}×</button
-            >
-          {/each}
+      {#if !ui.online}
+        <div class="row">
+          <span class="label" id="speed-label">Game speed</span>
+          <div class="speeds" role="radiogroup" aria-labelledby="speed-label">
+            {#each GAME_SPEEDS as speed (speed)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={ui.speed === speed}
+                class:active={ui.speed === speed}
+                onclick={() => onSpeed(speed)}>{speed}×</button
+              >
+            {/each}
+          </div>
         </div>
-      </div>
+      {:else}
+        <p class="online-note">Online game — it keeps running while this menu is open.</p>
+      {/if}
 
       <div class="row">
         <span class="label" id="sound-label">Alert sounds</span>
@@ -109,6 +113,12 @@
 {/if}
 
 <style>
+  .online-note {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
   .backdrop {
     position: absolute;
     inset: 0;

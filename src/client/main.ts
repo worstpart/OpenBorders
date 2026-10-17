@@ -46,6 +46,19 @@ mount(App, {
             teams: ui.teams,
           })
           .catch(reportFatal),
+      playOnline: () =>
+        client?.playOnline({
+          nations: ui.nations,
+          tribes: ui.tribes,
+          difficulty: ui.difficulty,
+          mode: ui.mode,
+          teams: ui.teams,
+        }),
+      startOnline: () => client?.startOnline(),
+      leaveOnline: () => {
+        history.replaceState(null, "", location.pathname);
+        client?.leaveOnline();
+      },
       selectMap: (choice) => {
         if (!choice.newSeed && (choice.size ?? ui.mapSize) === ui.mapSize) {
           if ((choice.style ?? ui.mapStyle) === ui.mapStyle) return;
@@ -100,3 +113,7 @@ function loadMap(): void {
 }
 
 loadMap();
+
+// A shared online-game link (Phase 3): ?game=<id> opens that game's lobby.
+const gameId = new URLSearchParams(location.search).get("game");
+if (gameId) client?.joinOnline(gameId);

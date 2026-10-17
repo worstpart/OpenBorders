@@ -16,11 +16,13 @@
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "headless": "node tools/headless.ts"
+    "headless": "node tools/headless.ts",
+    "start": "node src/server/main.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.2",
     "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.57.1",
@@ -28,5 +30,8 @@
     "typescript": "~6.0.3",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

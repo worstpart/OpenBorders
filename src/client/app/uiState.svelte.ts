@@ -41,7 +41,21 @@ import {
 import { DEFAULT_TEAMS, type GameMode } from "./teams.ts";
 import type { Toast } from "./toasts.ts";
 
-export type Screen = "loading" | "start" | "game";
+export type Screen = "loading" | "start" | "lobby" | "game";
+
+/** An online game (Phase 3): the lobby and the connection, shown by the lobby screen. */
+export interface OnlineState {
+  readonly status: "connecting" | "lobby" | "playing" | "error";
+  readonly gameId: string;
+  readonly players: readonly { readonly name: string; readonly connected: boolean }[];
+  /** Your place in `players`. */
+  readonly you: number;
+  /** You created the game and may start it. */
+  readonly creator: boolean;
+  readonly error: string;
+  /** This browser's game drifted from the server's (repair comes in 3.5). */
+  readonly outOfSync: boolean;
+}
 
 /** Game speeds offered in the pause menu (solo games only). */
 export const GAME_SPEEDS = [1, 2, 4] as const;
@@ -174,6 +188,8 @@ class UiState {
   /** Game speed multiplier (solo games). */
   speed = $state(1);
   hover = $state.raw<HoverInfo | null>(null);
+  /** Set while in an online lobby or game; null in solo games. */
+  online = $state.raw<OnlineState | null>(null);
   toasts = $state.raw<readonly Toast[]>([]);
   hint = $state<HintId | null>(null);
 

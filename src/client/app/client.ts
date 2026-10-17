@@ -4,6 +4,10 @@
  */
 import { LocalHost } from "../../host/localHost.ts";
 import { generateMapOffThread } from "../../host/mapGeneration.ts";
+import { NetworkHost } from "../../host/networkHost.ts";
+import type { GameConfig, OnlineSettings } from "../../shared/protocol.ts";
+import type { GameSetup } from "../../sim/world.ts";
+import { OnlineSession } from "./online.ts";
 import { WorkerHost } from "../../host/workerHost.ts";
 import type { FrameTiming } from "../../host/host.ts";
 import type { Command } from "../../sim/commands.ts";
@@ -165,7 +169,9 @@ export class GameClient {
 
   private map: GameMap | null = null;
   /** The simulation: in a Web Worker (2.8), or on this thread where workers are missing. */
-  private host: LocalHost | WorkerHost | null = null;
+  private host: LocalHost | WorkerHost | NetworkHost | null = null;
+  /** The connection to the game server while in an online lobby or game (Phase 3). */
+  private online: OnlineSession | null = null;
   /** Client-side copy of tile ownership, updated from tick frames. */
   private owner = new Uint16Array(0);
   private placements = new Map<number, LabelPlacement>();
@@ -249,7 +255,8 @@ export class GameClient {
     this.placements.clear();
     ui.landTiles = map.landTiles;
     ui.mapLoading = false;
-    ui.screen = "start";
+    // The map behind the start screen; an online lobby opened meanwhile stays up.
+    if (ui.screen === "loading" || ui.screen === "start") ui.screen = "start";
   }
 
   /**
@@ -284,18 +291,11 @@ export class GameClient {
         tier: "tribe" as const,
       })),
     ];
-    const tiers = players.map((p) => (p.kind === "human" ? "human" : (p.tier ?? "nation")));
-    const colors =
-      teams > 0
-        ? teamPlayerColors(players.map((p, k) => ({ tier: tiers[k]!, team: p.team ?? 0 })))
-        : playerColors(tiers);
     const host =
       typeof Worker === "undefined"
         ? new LocalHost({ localPlayerId: LOCAL_PLAYER_ID })
         : new WorkerHost({ localPlayerId: LOCAL_PLAYER_ID, onError: (m) => this.onSimError(m) });
-    this.host = host;
-    host.onFrame((frame, timing) => this.onFrame(frame, timing));
-    const initial = await host.start({
+    await this.launch(host, {
       seed: Math.floor(random() * 2 ** 32),
       map,
       players,
@@ -303,6 +303,101 @@ export class GameClient {
       // rules are otherwise the defaults.
       rules: import.meta.env.DEV ? makeRules({ flights: { testFlights: true } }) : undefined,
     });
+  }
+
+  /**
+   * Creates an online game (Phase 3) with the start screen's choices and opens its lobby;
+   * nations and tribes fill the places no human takes (D-036).
+   */
+  playOnline(lobby: {
+    nations: number;
+    tribes: number;
+    difficulty: Difficulty;
+    mode: GameMode;
+    teams: number;
+  }): void {
+    const random = () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
+    const { width, height } = MAP_SIZES[ui.mapSize];
+    const settings: OnlineSettings = {
+      map: { seed: ui.mapSeed, width, height, style: ui.mapStyle },
+      mode: lobby.mode,
+      teams: lobby.mode === "teams" ? lobby.teams : 0,
+      difficulty: lobby.difficulty,
+      nations: pickNationNames(lobby.nations, random),
+      tribes: pickBotNames(lobby.tribes, random),
+    };
+    this.online?.close();
+    this.online = OnlineSession.create(settings, this.onlineHandlers());
+    ui.screen = "lobby";
+  }
+
+  /** Joins the online game behind a shared link. */
+  joinOnline(gameId: string): void {
+    this.online?.close();
+    this.online = OnlineSession.join(gameId, this.onlineHandlers());
+    ui.screen = "lobby";
+  }
+
+  /** The creator starts the online game for everyone in the lobby. */
+  startOnline(): void {
+    this.online?.start();
+  }
+
+  /** Leaves the online lobby or game, back to the start screen. */
+  leaveOnline(): void {
+    this.backToStart();
+  }
+
+  private onlineHandlers() {
+    return {
+      start: (config: GameConfig, playerId: number) => {
+        this.beginOnlineGame(config, playerId).catch((error: unknown) => {
+          this.onSimError(error instanceof Error ? error.message : String(error));
+        });
+      },
+    };
+  }
+
+  /** The server started the game: build the same world and run the server's turns. */
+  private async beginOnlineGame(config: GameConfig, playerId: number): Promise<void> {
+    const session = this.online;
+    if (!session) return;
+    const key = `${config.map.style}:${config.map.seed}:${config.map.width}x${config.map.height}`;
+    const map = this.map && this.mapKey === key ? this.map : await generateMapOffThread(config.map);
+    if (this.online !== session) return; // left meanwhile
+    this.map = map;
+    this.mapKey = key;
+    seasOf(map);
+    coastTiles(map);
+    landmassesOf(map);
+    this.host?.dispose();
+    const host = new NetworkHost({
+      localPlayerId: playerId,
+      sendCommand: (command) => session.command(command),
+      onDesync: (tick) => {
+        console.warn(`online game: this browser drifted from the server at tick ${tick}`);
+        if (ui.online) ui.online = { ...ui.online, outOfSync: true };
+      },
+      onError: (m) => this.onSimError(m),
+    });
+    session.attach((turn) => host.receiveTurn(turn));
+    await this.launch(host, { seed: config.seed, map, players: config.players });
+  }
+
+  /** Starts a game on `host` (solo or online) and shows it. */
+  private async launch(
+    host: LocalHost | WorkerHost | NetworkHost,
+    setup: GameSetup,
+  ): Promise<void> {
+    const { players } = setup;
+    const teams = players.some((p) => (p.team ?? 0) > 0);
+    const tiers = players.map((p) => (p.kind === "human" ? "human" : (p.tier ?? "nation")));
+    const colors = teams
+      ? teamPlayerColors(players.map((p, k) => ({ tier: tiers[k]!, team: p.team ?? 0 })))
+      : playerColors(tiers);
+    this.host = host;
+    host.onFrame((frame, timing) => this.onFrame(frame, timing));
+    const initial = await host.start(setup);
 
     this.owner = initial.owner.slice();
     ui.map = initial.map;
@@ -865,8 +960,11 @@ export class GameClient {
   /** Opens the pause menu and stops the clock (solo games). */
   pause(): void {
     if (ui.screen !== "game") return;
-    this.host?.pause();
-    ui.paused = true;
+    // Online the menu opens but the game goes on: the server keeps time for everyone.
+    if (!this.online) {
+      this.host?.pause();
+      ui.paused = true;
+    }
     ui.menu = { kind: "pause" };
   }
 
@@ -892,6 +990,9 @@ export class GameClient {
   backToStart(): void {
     this.host?.dispose();
     this.host = null;
+    const wasOnline = this.online !== null;
+    this.online?.close();
+    this.online = null;
     this.latestFrame = null;
     if (this.map) {
       this.owner = new Uint16Array(this.map.width * this.map.height);
@@ -913,6 +1014,12 @@ export class GameClient {
     this.baseFlags = new Uint8Array(1);
     ui.reset();
     ui.screen = "start";
+    // An online game's map may not be the one chosen on the start screen: bring that back.
+    if (wasOnline) {
+      this.loadMap({ size: ui.mapSize, style: ui.mapStyle, seed: ui.mapSeed }).catch(
+        (error: unknown) => console.error(error),
+      );
+    }
   }
 
   confirmSpawn(): void {

@@ -30,7 +30,10 @@ scope.onmessage = (event) => {
       case "start": {
         if (host) throw new Error("the simulation worker was started twice");
         const map = createMap(message.width, message.height, message.terrain, message.relief);
-        host = new LocalHost({ localPlayerId: message.localPlayerId });
+        host = new LocalHost({
+          localPlayerId: message.localPlayerId,
+          clock: message.turns ? "manual" : "realtime",
+        });
         host.onFrame((frame, timing) => {
           try {
             const { wire, transfer } = slimmer.slim(frame);
@@ -50,6 +53,9 @@ scope.onmessage = (event) => {
           }, fail);
         break;
       }
+      case "turn":
+        host?.applyTurn(message.turn);
+        break;
       case "send":
         if (message.playerId === null) host?.send(message.command);
         else host?.sendAs(message.playerId, message.command);

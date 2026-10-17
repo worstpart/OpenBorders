@@ -855,7 +855,7 @@ bots-only games must not change):
 | | Milestone | What it delivers | Proves |
 |---|---|---|---|
 | 3.0 ✅ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
-| 3.1 ⬜ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
+| 3.1 🟡 | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
 | 3.2 ⬜ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ⬜ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ⬜ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
@@ -890,6 +890,25 @@ snapshot text in Node 24 and the browser (Chromium 152), and each resumed from i
 the same digest. Firefox/Safari not checked yet (would need a browser test runner — a package,
 ask first; the user's friends' browsers are the real test in 3.7). Bots-only games identical to
 `4d597f7` (`tools/hashDigest.mjs`, Continent / Islands / Two-lands teams, seeds 1–2). Tests: 501.
+
+**3.1 progress** *(2026-10-16)*. Provider **Railway**, US East, `ws` (D-034). Built:
+`src/shared/protocol.ts` (messages, settings check, `gamePlayers`), `src/server/` — `main.ts`
+(one Node process: `dist/` with path guard and cache headers, `/health`, WebSocket `/ws` with an
+8 KB message cap, 40 messages/s, ping every 25 s), `lobbies.ts` (create / join by an
+unguessable 12-character id / creator starts / leaving; up to 16 humans, 20 games), `game.ts`
+(`ServerGame`: queue → stamp with the connection's player → tick → turn + hash; `commandProblem`
+shape check, `testFlight` never accepted online), `gameWorker.ts` (one game per worker thread,
+drift-free 100 ms schedule); `src/host/networkHost.ts` (the worker simulation runs the server's
+turns — `LocalHost.applyTurn`, `WorkerHost` `turns` mode — and compares every tick's hash with
+the server's); client `online.ts` + `LobbyScreen.svelte` (link + Copy, players, Start, Leave),
+"Play online with friends" on the start screen, `?game=<id>` links, the pause menu doesn't
+pause online and has no speed buttons; `railway.json`; `npm start`. **Checked:**
+`tools/onlineSmoke.ts` — two scripted players over real WebSockets, 300 turns each, **0 hash
+mismatches**, both expanding; two browser tabs (dev page and the production build served by
+the server) — lobby by link, Start, both spawned and expanded, in sync, no console errors; the
+solo game unchanged. Tests: 508 (7 new: lobbies, stamping, refusals, leaving, `ServerGame`,
+shape checks, team dealing). **Left for 3.1:** the deploy — the user creates the Railway
+account and connects the GitHub repo; then two browsers anywhere play one game.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

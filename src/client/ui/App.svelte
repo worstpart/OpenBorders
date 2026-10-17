@@ -10,6 +10,10 @@
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
     play: () => void;
+    /** Online (Phase 3): create a game from the start screen's choices, start it, leave it. */
+    playOnline: () => void;
+    startOnline: () => void;
+    leaveOnline: () => void;
     /** Change the map's size or type, or roll a new one (shows the loading screen meanwhile). */
     selectMap: (choice: MapChoice) => void;
     confirmSpawn: () => void;
@@ -76,6 +80,7 @@
   import EndCard from "./screens/EndCard.svelte";
   import PauseMenu from "./screens/PauseMenu.svelte";
   import StartScreen from "./screens/StartScreen.svelte";
+  import LobbyScreen from "./screens/LobbyScreen.svelte";
 
   interface Props {
     actions: AppActions;
@@ -97,7 +102,15 @@
   </main>
 {:else if ui.screen === "start"}
   <main class="center">
-    <StartScreen onPlay={actions.play} onSelectMap={actions.selectMap} />
+    <StartScreen
+      onPlay={actions.play}
+      onPlayOnline={actions.playOnline}
+      onSelectMap={actions.selectMap}
+    />
+  </main>
+{:else if ui.screen === "lobby"}
+  <main class="center">
+    <LobbyScreen onStart={actions.startOnline} onLeave={actions.leaveOnline} />
   </main>
 {:else}
   <YouChip />

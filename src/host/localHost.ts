@@ -3,7 +3,7 @@
  * turn scheduler a server will be in Phase 3: commands are collected, stamped with the
  * local player's id, and delivered as the next turn every tick (100 ms).
  */
-import type { Command, StampedCommand } from "../sim/commands.ts";
+import type { Command, StampedCommand, Turn } from "../sim/commands.ts";
 import { buildFrame, type TickFrame } from "../sim/frame.ts";
 import { runTick } from "../sim/tick.ts";
 import { createWorld, type GameSetup, type PlayerId, type World } from "../sim/world.ts";
@@ -102,6 +102,23 @@ export class LocalHost implements SimHost {
     let frame: TickFrame | null = null;
     for (let k = 0; k < ticks; k++) frame = this.runOneTick();
     if (!frame) throw new Error("step() needs at least one tick");
+    return frame;
+  }
+
+  /**
+   * Runs one turn decided elsewhere (online games, D-006: the server's turns) — manual clock
+   * only. Commands sent through send() are not added; the server already stamped and ordered
+   * everyone's commands into `turn`.
+   */
+  applyTurn(turn: Turn): TickFrame {
+    const world = this.world;
+    if (!world) throw new Error("LocalHost is not running");
+    if (this.clock !== "manual") throw new Error("applyTurn() needs the manual clock");
+    const startedAt = performance.now();
+    const frame = runTick(world, turn);
+    const tickMs = performance.now() - startedAt;
+    this.lastFrameAt = performance.now();
+    for (const listener of this.listeners) listener(frame, { tickMs });
     return frame;
   }
 
