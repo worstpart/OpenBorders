@@ -979,7 +979,9 @@ used by the server and every browser) with a **60 s spawn phase**; at the timeou
 humans keep the spot they clicked or get a random one, and the match starts; the spawn prompt
 shows the seconds left ("Waiting for the other players… N s" once confirmed). Protocol v4.
 Checked: 3 sim tests; a lone online game left alone started itself at tick 600 with a random
-49-tile spawn; bots-only games identical to `4d597f7`. Tests: 528.
+49-tile spawn; bots-only games identical to `4d597f7`. Tests: 528. Deployed after the user's game
+(e4cb1ae): live smoke 700 turns (past the 60 s spawn timeout) with `ONLINE_RULES` on both sides,
+0 mismatches. **Milestone 3.4 done.**
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

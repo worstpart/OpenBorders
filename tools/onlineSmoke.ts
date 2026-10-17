@@ -11,6 +11,7 @@ import { generateMap, MAP_DIMENSIONS } from "../src/sim/map/generate.ts";
 import { runTick } from "../src/sim/tick.ts";
 import { createWorld, type World } from "../src/sim/world.ts";
 import {
+  ONLINE_RULES,
   PROTOCOL_VERSION,
   type ClientMessage,
   type OnlineSettings,
@@ -73,6 +74,7 @@ function connect(
         seed: m.config.seed,
         map: generateMap(m.config.map),
         players: m.config.players,
+        rules: ONLINE_RULES,
       });
       resolveStarted();
     }
