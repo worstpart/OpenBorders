@@ -946,6 +946,14 @@ builds and missiles) thrown at a real Islands game from two players — every ti
 same garbage gives the same hashes. `tools/onlineAbuse.ts` against the server: a 300-command
 flood closed, 30 junk commands closed, the 9th connection refused (429), a 20 KB message refused;
 an honest game alongside: 0 mismatches. Tests: 519.
+**On Railway** (deploys are manual — the user presses update after each push): the first live
+check showed the per-address limits not applying (every connection looked like the proxy).
+Fixed in two steps (1ec075d: Railway detected by its documented variables; 74b1343: the
+client's address from the edge's `X-Real-IP`, which Railway overwrites — a faked header is
+ignored; the last `X-Forwarded-For` entry was an intermediate hop). `/debug/address` shows a
+caller their own address headers; `/health` reports games, connections and proxy trust. Live
+`tools/onlineAbuse.ts`: flood closed, junk closed, **9th connection refused (429)**, 20 KB
+refused; honest smoke 100 turns, 0 mismatches. **Milestone 3.3 done.**
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
