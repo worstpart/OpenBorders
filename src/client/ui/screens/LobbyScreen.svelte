@@ -1,22 +1,46 @@
 <script lang="ts">
   /**
-   * The online lobby (Phase 3, milestones 3.1–3.2): the link to share, who has joined, and
-   * Start for the game's creator. Nations and tribes fill every place no human takes.
+   * The online lobby (Phase 3, milestones 3.1–3.2): your name, the link to share, the game's
+   * settings, who has joined and who is ready, and Start for the game's creator. Nations and
+   * tribes fill every place no human takes (D-036).
    */
+  import { MAP_SIZE_NAMES, MAP_DIMENSIONS } from "../../../sim/map/generate.ts";
+  import { MAX_NAME_LENGTH } from "../../../shared/protocol.ts";
   import { gameLink } from "../../app/online.ts";
+  import { MAP_SIZES, MAP_STYLE_LABELS } from "../../app/setup.ts";
   import { ui } from "../../app/uiState.svelte.ts";
 
   interface Props {
     onStart: () => void;
     onLeave: () => void;
+    onRename: (name: string) => void;
+    onReady: (ready: boolean) => void;
   }
 
-  let { onStart, onLeave }: Props = $props();
+  let { onStart, onLeave, onRename, onReady }: Props = $props();
   let copied = $state(false);
   let starting = $state(false);
+  /** The name being typed (null = show the server's). */
+  let draft = $state<string | null>(null);
 
   const online = $derived(ui.online);
   const link = $derived(online?.gameId ? gameLink(online.gameId, location) : "");
+  const me = $derived(online?.players[online.you]);
+  const notReady = $derived(online ? online.players.filter((p) => !p.ready).length : 0);
+  const summary = $derived.by(() => {
+    const s = online?.summary;
+    if (!s) return "";
+    const size = MAP_SIZE_NAMES.find(
+      (n) => MAP_DIMENSIONS[n].width === s.map.width && MAP_DIMENSIONS[n].height === s.map.height,
+    );
+    const mode = s.mode === "teams" ? `${s.teams} teams` : "Free-for-all";
+    const difficulty = s.difficulty[0]!.toUpperCase() + s.difficulty.slice(1);
+    return [
+      `${MAP_STYLE_LABELS[s.map.style]} · ${size ? MAP_SIZES[size].label : "?"}`,
+      mode,
+      `${s.nations} nations (${difficulty}) · ${s.tribes} tribes`,
+    ].join(" · ");
+  });
 
   async function copy(): Promise<void> {
     try {
@@ -26,6 +50,13 @@
     } catch {
       copied = false;
     }
+  }
+
+  function commitName(): void {
+    if (draft === null) return;
+    const name = draft.trim();
+    draft = null;
+    if (name && name !== me?.name) onRename(name);
   }
 
   function start(): void {
@@ -42,20 +73,38 @@
     <p class="status" role="status">Connecting to the game server…</p>
   {:else if online.status === "error"}
     <p class="error" role="alert">{online.error}</p>
+  {:else if online.status === "playing"}
+    <p class="status" role="status">Starting… preparing the map</p>
   {:else}
+    <label class="label" for="lobby-name">Your name</label>
+    <input
+      id="lobby-name"
+      maxlength={MAX_NAME_LENGTH}
+      autocomplete="nickname"
+      value={draft ?? me?.name ?? ""}
+      oninput={(e) => (draft = e.currentTarget.value)}
+      onblur={commitName}
+      onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
+
     <label class="label" for="lobby-link">Invite friends with this link</label>
     <div class="link-row">
       <input id="lobby-link" readonly value={link} onfocus={(e) => e.currentTarget.select()} />
       <button type="button" class="secondary" onclick={copy}>{copied ? "Copied" : "Copy"}</button>
     </div>
 
+    {#if summary}<p class="note">{summary}</p>{/if}
+
     <h2 class="label">Players ({online.players.length})</h2>
     <ul class="players">
       {#each online.players as player, k (k)}
         <li>
-          <span>{player.name}</span>
+          <span class="name">{player.name}</span>
           {#if k === online.you}<span class="tag">you</span>{/if}
           {#if k === 0}<span class="tag">creator</span>{/if}
+          <span class="state" class:ready={player.ready}
+            >{player.ready ? "Ready" : "Not ready"}</span
+          >
         </li>
       {/each}
     </ul>
@@ -65,11 +114,22 @@
 
     {#if online.creator}
       <button type="button" class="play" onclick={start} disabled={starting}>
-        {starting ? "Starting…" : "Start game"}
+        {starting
+          ? "Starting…"
+          : notReady > 0
+            ? `Start anyway — ${notReady} not ready`
+            : "Start game"}
       </button>
     {:else}
+      <button
+        type="button"
+        class={me?.ready ? "secondary" : "play"}
+        onclick={() => onReady(!me?.ready)}
+      >
+        {me?.ready ? "Not ready after all" : "I'm ready"}
+      </button>
       <p class="status" role="status">
-        Waiting for {online.players[0]?.name ?? "the creator"} to start…
+        {online.players[0]?.name ?? "The creator"} starts the game.
       </p>
     {/if}
   {/if}
@@ -113,9 +173,11 @@
   }
 
   input {
-    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
     min-width: 0;
     height: 36px;
+    flex-shrink: 0;
     padding: 0 var(--space-3);
     border: 1px solid var(--surface-hairline);
     border-radius: var(--radius-control);
@@ -125,6 +187,10 @@
     font-size: var(--text-sm);
   }
 
+  .link-row input {
+    flex: 1;
+  }
+
   .players {
     list-style: none;
     margin: 0;
@@ -132,6 +198,23 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+  }
+
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .state {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .state.ready {
+    color: var(--color-success);
   }
 
   .players li {

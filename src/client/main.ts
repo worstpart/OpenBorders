@@ -55,6 +55,8 @@ mount(App, {
           teams: ui.teams,
         }),
       startOnline: () => client?.startOnline(),
+      renameOnline: (name) => client?.renameOnline(name),
+      readyOnline: (ready) => client?.readyOnline(ready),
       leaveOnline: () => {
         history.replaceState(null, "", location.pathname);
         client?.leaveOnline();

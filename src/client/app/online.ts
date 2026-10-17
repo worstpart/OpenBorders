@@ -22,6 +22,25 @@ export function serverUrl(location: { protocol: string; host: string; hostname: 
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${SOCKET_PATH}`;
 }
 
+const NAME_KEY = "openborder.name";
+
+/** The name this browser last played under online (D-035), or "" the first time. */
+export function savedName(): string {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveName(name: string): void {
+  try {
+    localStorage.setItem(NAME_KEY, name);
+  } catch {
+    // Private windows may refuse; the name just isn't remembered.
+  }
+}
+
 /** The link that joins game `gameId` (shared by its creator). */
 export function gameLink(gameId: string, location: { origin: string; pathname: string }): string {
   return `${location.origin}${location.pathname}?game=${encodeURIComponent(gameId)}`;
@@ -49,6 +68,7 @@ export class OnlineSession {
       creator: false,
       error: "",
       outOfSync: false,
+      summary: null,
     };
     this.socket = new WebSocket(url);
     this.socket.onopen = () => {
@@ -71,11 +91,29 @@ export class OnlineSession {
   }
 
   static create(settings: OnlineSettings, handlers: OnlineHandlers): OnlineSession {
-    return new OnlineSession(serverUrl(location), { t: "create", settings }, handlers);
+    return new OnlineSession(
+      serverUrl(location),
+      { t: "create", settings, name: savedName() },
+      handlers,
+    );
   }
 
   static join(gameId: string, handlers: OnlineHandlers): OnlineSession {
-    return new OnlineSession(serverUrl(location), { t: "join", gameId }, handlers);
+    return new OnlineSession(
+      serverUrl(location),
+      { t: "join", gameId, name: savedName() },
+      handlers,
+    );
+  }
+
+  /** A new name in the lobby (the server cleans it and makes it unique; remembered here). */
+  rename(name: string): void {
+    saveName(name);
+    this.post({ t: "name", name });
+  }
+
+  setReady(ready: boolean): void {
+    this.post({ t: "ready", ready });
   }
 
   /** The creator starts the game for everyone in the lobby. */
@@ -117,6 +155,7 @@ export class OnlineSession {
           players: message.players,
           you: message.you,
           creator: message.creator,
+          summary: message.summary,
           error: "",
         };
         break;

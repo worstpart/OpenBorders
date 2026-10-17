@@ -5,7 +5,10 @@
  */
 import type { Command } from "../sim/commands.ts";
 import {
+  cleanName,
   gamePlayers,
+  lobbySummary,
+  uniqueName,
   MAX_HUMANS,
   PROTOCOL_VERSION,
   settingsProblem,
@@ -49,7 +52,10 @@ export interface LobbyOptions {
 
 interface Member {
   peer: Peer | null;
-  readonly name: string;
+  /** Cleaned and unique in the game (D-035). */
+  name: string;
+  /** Pressed Ready in the lobby (the creator needs not). */
+  ready: boolean;
   /** Set when the game starts: 1.. in join order. */
   playerId: number;
 }
@@ -122,7 +128,7 @@ export class Lobbies {
               started: false,
             };
             this.rooms.set(room.id, room);
-            member = this.addMember(room, peer);
+            member = this.addMember(room, peer, message.name);
             this.log(`game ${room.id} created`);
             this.sendLobby(room);
             return;
@@ -135,7 +141,22 @@ export class Lobbies {
             if (target.started) return fail("That game has already started.");
             if (target.members.length >= MAX_HUMANS) return fail("That game is full.");
             room = target;
-            member = this.addMember(room, peer);
+            member = this.addMember(room, peer, message.name);
+            this.sendLobby(room);
+            return;
+          }
+          case "name": {
+            if (!room || !member || room.started) return;
+            const name = cleanName(message.name);
+            if (!name) return fail("Names need a letter or a digit.");
+            const others = room.members.filter((m) => m !== member);
+            member.name = uniqueName(name, this.takenNames(room, others));
+            this.sendLobby(room);
+            return;
+          }
+          case "ready": {
+            if (!room || !member || room.started) return;
+            member.ready = message.ready === true;
             this.sendLobby(room);
             return;
           }
@@ -175,19 +196,37 @@ export class Lobbies {
     };
   }
 
-  private addMember(room: Room, peer: Peer): Member {
-    const taken = new Set(room.members.map((m) => m.name));
-    let n = room.members.length + 1;
-    while (taken.has(`Player ${n}`)) n++;
-    const member: Member = { peer, name: `Player ${n}`, playerId: 0 };
+  private addMember(room: Room, peer: Peer, requested: unknown): Member {
+    const taken = this.takenNames(room, room.members);
+    let name = cleanName(requested);
+    if (!name) {
+      let n = room.members.length + 1;
+      while (taken.has(`Player ${n}`)) n++;
+      name = `Player ${n}`;
+    }
+    const member: Member = { peer, name: uniqueName(name, taken), ready: false, playerId: 0 };
     room.members.push(member);
     return member;
   }
 
+  /** Names a new or renamed player can't take: the other humans' and the bots'. */
+  private takenNames(room: Room, members: readonly Member[]): Set<string> {
+    return new Set([
+      ...members.map((m) => m.name),
+      ...room.settings.nations,
+      ...room.settings.tribes,
+    ]);
+  }
+
   private sendLobby(room: Room): void {
-    const players = room.members.map((m) => ({ name: m.name, connected: m.peer !== null }));
+    const players = room.members.map((m, k) => ({
+      name: m.name,
+      connected: m.peer !== null,
+      ready: k === 0 || m.ready,
+    }));
+    const summary = lobbySummary(room.settings);
     room.members.forEach((m, you) => {
-      m.peer?.send({ t: "lobby", gameId: room.id, players, you, creator: you === 0 });
+      m.peer?.send({ t: "lobby", gameId: room.id, players, you, creator: you === 0, summary });
     });
   }
 

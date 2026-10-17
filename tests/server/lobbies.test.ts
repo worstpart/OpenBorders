@@ -5,12 +5,14 @@ import { MAP_DIMENSIONS } from "../../src/sim/map/generate.ts";
 import { commandProblem, ServerGame } from "../../src/server/game.ts";
 import { Lobbies, type GameEvents, type Peer } from "../../src/server/lobbies.ts";
 import {
+  cleanName,
   gamePlayers,
   PROTOCOL_VERSION,
   settingsProblem,
   type GameConfig,
   type OnlineSettings,
   type ServerMessage,
+  uniqueName,
 } from "../../src/shared/protocol.ts";
 
 const SETTINGS: OnlineSettings = {
@@ -201,5 +203,65 @@ describe("the server's game", () => {
   it("teams: humans and nations are dealt round-robin, tribes stay teamless", () => {
     const players = gamePlayers({ ...SETTINGS, mode: "teams", teams: 2 }, ["A", "B", "C"]);
     expect(players.map((p) => p.team ?? 0)).toEqual([1, 2, 1, 2, 1, 0]);
+  });
+});
+
+describe("names and ready (3.2, D-035)", () => {
+  it("cleans names: trimmed, collapsed, safe characters only, at most 16", () => {
+    expect(cleanName("  Sam   the  Bold ")).toBe("Sam the Bold");
+    expect(cleanName("<b>Zoë</b>")).toBe("bZoëb");
+    expect(cleanName("Ünïcødé-Name_1\u0000\n")).toBe("Ünïcødé-Name_1"); // control characters go
+    expect(cleanName("a".repeat(30))).toBe("a".repeat(16));
+    expect(cleanName("   ")).toBeNull();
+    expect(cleanName("<<>>")).toBeNull();
+    expect(cleanName(42)).toBeNull();
+    expect(uniqueName("Sam", new Set(["Sam"]))).toBe("Sam (2)");
+    expect(uniqueName("Sam", new Set(["Sam", "Sam (2)"]))).toBe("Sam (3)");
+    expect(uniqueName("abcdefghijklmnop", new Set(["abcdefghijklmnop"]))).toBe("abcdefghijkl (2)");
+  });
+
+  it("joining with a name, renaming, duplicates and bot names, ready flags, the summary", () => {
+    const { join } = setup();
+    const a = join();
+    a.connection.receive({ t: "create", settings: SETTINGS, name: "  Sam " });
+    const b = join();
+    b.connection.receive({ t: "join", gameId: "game1", name: "Sam" });
+    const lobby = () => {
+      const m = last(a.peer);
+      if (m?.t !== "lobby") throw new Error("no lobby");
+      return m;
+    };
+    expect(lobby().players.map((p) => p.name)).toEqual(["Sam", "Sam (2)"]);
+    expect(lobby().players.map((p) => p.ready)).toEqual([true, false]); // the creator counts as ready
+    expect(lobby().summary).toEqual({
+      map: SETTINGS.map,
+      mode: "ffa",
+      teams: 0,
+      difficulty: "medium",
+      nations: 2,
+      tribes: 1,
+    });
+    b.connection.receive({ t: "name", name: "Avalon" }); // a nation's name
+    expect(lobby().players[1]!.name).toBe("Avalon (2)");
+    b.connection.receive({ t: "name", name: "!!" });
+    expect(lobby().players[1]!.name).toBe("!!");
+    b.connection.receive({ t: "name", name: "<>" });
+    expect(last(b.peer)).toMatchObject({ t: "error" });
+    b.connection.receive({ t: "ready", ready: true });
+    expect(lobby().players.map((p) => p.ready)).toEqual([true, true]);
+    b.connection.receive({ t: "ready", ready: "yes" });
+    expect(lobby().players[1]!.ready).toBe(false); // only `true` counts
+  });
+
+  it("the creator may start with players not ready; names reach the game", () => {
+    const { join, runners } = setup();
+    const a = join();
+    a.connection.receive({ t: "create", settings: SETTINGS, name: "Host" });
+    const b = join();
+    b.connection.receive({ t: "join", gameId: "game1", name: "Guest" });
+    a.connection.receive({ t: "start" });
+    expect(runners[0]!.config.players.slice(0, 2).map((p) => p.name)).toEqual(["Host", "Guest"]);
+    b.connection.receive({ t: "name", name: "Late" }); // ignored once started
+    expect(runners[0]!.config.players[1]!.name).toBe("Guest");
   });
 });

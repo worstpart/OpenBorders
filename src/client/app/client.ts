@@ -343,6 +343,15 @@ export class GameClient {
     this.online?.start();
   }
 
+  /** Lobby: your name, and whether you're ready. */
+  renameOnline(name: string): void {
+    this.online?.rename(name);
+  }
+
+  readyOnline(ready: boolean): void {
+    this.online?.setReady(ready);
+  }
+
   /** Leaves the online lobby or game, back to the start screen. */
   leaveOnline(): void {
     this.backToStart();

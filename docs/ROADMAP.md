@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app); 3.2 next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅; 3.3 next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -856,7 +856,7 @@ bots-only games must not change):
 |---|---|---|---|
 | 3.0 ✅ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
 | 3.1 ✅ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
-| 3.2 ⬜ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
+| 3.2 ✅ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ⬜ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ⬜ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
@@ -915,6 +915,20 @@ turns/s; two browser tabs on the public address (production build, no debug hook
 clicks) — lobby by link, Start, spawn, expand, no drift warnings, no console errors; **click →
 visible on the map in ~155 ms** (spawn, both tabs); the server closed the game when both left.
 **Milestone 3.1 done.**
+
+**3.2 result** *(2026-10-17)*. Protocol v2 (an older page is told to reload). **Names** (D-035):
+`cleanName` — trimmed and collapsed, letters of any alphabet, digits, spaces and `._'!?&()-`
+only, at most 16; `uniqueName` — "Sam (2)" against the other humans **and the bots' names**;
+typed in the lobby (Enter or leaving the field sends it), remembered in this browser
+(`openborder.name`), the server always re-cleans. **Ready**: joiners press "I'm ready" / "Not
+ready after all"; the creator always counts as ready and **may start any time** — the button says
+"Start anyway — N not ready" (mine: one absent friend can't block a game). The lobby shows the
+game's settings ("Continent · Normal · Free-for-all · 7 nations (Medium) · 25 tribes") and
+joiners see "Starting… preparing the map". Checked: `tools/onlineSmoke.ts` with names and ready
+(0 mismatches); two tabs — rename to Alice, the second tab joined as "Alice (2)", renamed to Bob,
+ready / not ready, "Start anyway — 1 not ready", Alice and Bob in the game's player list, no
+console errors; a squashed name field fixed. Tests: 511 (names, duplicates against bots, ready
+flags, the summary, start with players not ready, renames ignored after the start).
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

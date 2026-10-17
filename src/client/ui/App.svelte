@@ -14,6 +14,8 @@
     playOnline: () => void;
     startOnline: () => void;
     leaveOnline: () => void;
+    renameOnline: (name: string) => void;
+    readyOnline: (ready: boolean) => void;
     /** Change the map's size or type, or roll a new one (shows the loading screen meanwhile). */
     selectMap: (choice: MapChoice) => void;
     confirmSpawn: () => void;
@@ -110,7 +112,12 @@
   </main>
 {:else if ui.screen === "lobby"}
   <main class="center">
-    <LobbyScreen onStart={actions.startOnline} onLeave={actions.leaveOnline} />
+    <LobbyScreen
+      onStart={actions.startOnline}
+      onLeave={actions.leaveOnline}
+      onRename={actions.renameOnline}
+      onReady={actions.readyOnline}
+    />
   </main>
 {:else}
   <YouChip />

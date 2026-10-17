@@ -40,7 +40,10 @@ interface Bot {
   done: Promise<void>;
 }
 
-function connect(name: string, onLobby: (gameId: string, bot: Bot) => void): Bot {
+function connect(
+  name: string,
+  onLobby: (lobby: Extract<ServerMessage, { t: "lobby" }>, bot: Bot) => void,
+): Bot {
   const ws = new WebSocket(url);
   let resolveStarted!: () => void;
   let resolveDone!: () => void;
@@ -63,7 +66,7 @@ function connect(name: string, onLobby: (gameId: string, bot: Bot) => void): Bot
   ws.on("message", (data) => {
     const m = JSON.parse(data.toString()) as ServerMessage;
     if (m.t === "error") rejectDone(new Error(`${name}: ${m.message}`));
-    if (m.t === "lobby") onLobby(m.gameId, bot);
+    if (m.t === "lobby") onLobby(m, bot);
     if (m.t === "start") {
       bot.playerId = m.playerId;
       bot.world = createWorld({
@@ -107,19 +110,31 @@ function script(world: World, me: number): Command[] {
 
 const start = performance.now();
 let joiner: Bot | null = null;
-const creator = connect("creator", (gameId, bot) => {
+// The joiner presses Ready on joining; the creator starts once it sees everyone ready.
+let started = false;
+const creator = connect("creator", (lobby, bot) => {
   if (!joiner) {
-    console.log(`created game ${gameId}`);
-    joiner = connect("joiner", (_id, j) => {
-      if (j === joiner) bot.ws.send(JSON.stringify({ t: "start" } satisfies ClientMessage));
+    const gameId = lobby.gameId;
+    console.log(`created game ${gameId} as "${lobby.players[0]?.name}"`);
+    joiner = connect("joiner", (_lobby, j) => {
+      if (!j.playerId)
+        j.ws.send(JSON.stringify({ t: "ready", ready: true } satisfies ClientMessage));
     });
     joiner.ws.on("open", () =>
-      joiner!.ws.send(JSON.stringify({ t: "join", gameId } satisfies ClientMessage)),
+      joiner!.ws.send(
+        JSON.stringify({ t: "join", gameId, name: "Smoke Joiner" } satisfies ClientMessage),
+      ),
     );
+  } else if (!started && lobby.players.length === 2 && lobby.players.every((p) => p.ready)) {
+    started = true;
+    console.log(`lobby: ${lobby.players.map((p) => p.name).join(", ")} — all ready, starting`);
+    bot.ws.send(JSON.stringify({ t: "start" } satisfies ClientMessage));
   }
 });
 creator.ws.on("open", () =>
-  creator.ws.send(JSON.stringify({ t: "create", settings } satisfies ClientMessage)),
+  creator.ws.send(
+    JSON.stringify({ t: "create", settings, name: "Smoke Creator" } satisfies ClientMessage),
+  ),
 );
 
 const timeout = setTimeout(() => {
