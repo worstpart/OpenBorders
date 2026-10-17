@@ -7,22 +7,44 @@
 
   let { onConfirm }: Props = $props();
   const me = $derived(ui.me);
+  /** Online games: seconds until the match starts anyway (3.4). */
+  const secondsLeft = $derived(
+    ui.spawnTimeoutTicks > 0 ? Math.max(0, Math.ceil((ui.spawnTimeoutTicks - ui.tick) / 10)) : null,
+  );
 </script>
 
 {#if me && !me.ready}
   <div class="prompt" role="status">
     {#if !me.spawned}
-      <p><strong>Choose your start.</strong> Click anywhere on the land.</p>
+      <p>
+        <strong>Choose your start.</strong> Click anywhere on the land.{#if secondsLeft !== null}
+          <span class="timer">{secondsLeft} s</span>{/if}
+      </p>
     {:else}
-      <p>Good spot? Click elsewhere to move.</p>
+      <p>
+        Good spot? Click elsewhere to move.{#if secondsLeft !== null}
+          <span class="timer">{secondsLeft} s</span>{/if}
+      </p>
       <button type="button" onclick={onConfirm}>Start here <kbd>Enter</kbd></button>
     {/if}
   </div>
 {:else if me?.ready && ui.phase === "spawn"}
-  <div class="prompt" role="status"><p>Starting…</p></div>
+  <div class="prompt" role="status">
+    <p>
+      {#if secondsLeft !== null}Waiting for the other players… <span class="timer"
+          >{secondsLeft} s</span
+        >{:else}Starting…{/if}
+    </p>
+  </div>
 {/if}
 
 <style>
+  .timer {
+    margin-left: var(--space-2);
+    font-weight: 650;
+    color: var(--color-warning);
+  }
+
   .prompt {
     pointer-events: auto;
     position: absolute;

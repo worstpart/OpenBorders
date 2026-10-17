@@ -5,7 +5,7 @@
 import { LocalHost } from "../../host/localHost.ts";
 import { generateMapOffThread } from "../../host/mapGeneration.ts";
 import { NetworkHost } from "../../host/networkHost.ts";
-import type { GameConfig, OnlineSettings } from "../../shared/protocol.ts";
+import { ONLINE_RULES, type GameConfig, type OnlineSettings } from "../../shared/protocol.ts";
 import type { GameSetup } from "../../sim/world.ts";
 import { OnlineSession } from "./online.ts";
 import { WorkerHost } from "../../host/workerHost.ts";
@@ -395,7 +395,12 @@ export class GameClient {
       onError: (m) => this.onSimError(m),
     });
     session.attach((turn) => host.receiveTurn(turn));
-    await this.launch(host, { seed: config.seed, map, players: config.players });
+    await this.launch(host, {
+      seed: config.seed,
+      map,
+      players: config.players,
+      rules: ONLINE_RULES,
+    });
   }
 
   /** Starts a game on `host` (solo or online) and shows it. */
@@ -427,6 +432,7 @@ export class GameClient {
     ui.reset();
     ui.colors = colors;
     ui.localPlayerId = initial.localPlayerId;
+    ui.spawnTimeoutTicks = setup.rules?.spawn.timeoutTicks ?? 0;
     this.publish(initial.frame);
     ui.screen = "game";
   }

@@ -27,6 +27,12 @@ export interface SpawnRules {
   readonly radius: number;
   /** No player-vs-player attacks for this many ticks after the match starts (5 s). */
   readonly protectionTicks: number;
+  /**
+   * The spawn phase ends at this tick even if some humans haven't confirmed: they keep the
+   * spot they picked, or get a random one (online games, so one absent player can't hold
+   * everyone up — 3.4). 0 = wait for every human (solo games).
+   */
+  readonly timeoutTicks: number;
   /** Preferred minimum distance (tiles) between random spawns; relaxed if the map is crowded. */
   readonly randomMinDistance: number;
   /**
@@ -923,6 +929,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   spawn: {
     radius: 4,
     protectionTicks: 50,
+    timeoutTicks: 0,
     // On the ~1100×700 reference map each of 8 players has ~50k land tiles (radius ~125),
     // so 70 keeps random spawns apart without failing on crowded maps.
     randomMinDistance: 70,

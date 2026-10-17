@@ -116,6 +116,8 @@ class UiState {
   phase = $state<Phase>("spawn");
   tick = $state(0);
   playStartTick = $state(-1);
+  /** Online games: the spawn phase ends at this tick (0 = it waits for every human). */
+  spawnTimeoutTicks = $state(0);
   localPlayerId = $state<PlayerId>(0);
   /** Total land tiles on the map (for land %). */
   landTiles = $state(1);

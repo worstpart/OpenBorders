@@ -4,8 +4,9 @@
  * - Bots are placed automatically at the start, at random spots kept apart from
  *   everyone else.
  * - Humans pick a tile with the `spawn` command (re-picking moves them) and lock it in
- *   with `confirmSpawn`. The match starts when every human has confirmed; anyone
- *   still without a spawn then gets a random one.
+ *   with `confirmSpawn`. The match starts when every human has confirmed — or, with
+ *   `rules.spawn.timeoutTicks` (online games), when time is up; anyone still without a
+ *   spawn then gets a random one.
  * - A spawn claims the neutral land within `rules.spawn.radius` that is connected to the
  *   chosen tile (so a disc never jumps across water).
  */
@@ -48,7 +49,10 @@ export function updateSpawnPhase(world: World): void {
     }
   }
   const waitingForHumans = world.players.some((p) => p.kind === "human" && p.alive && !p.ready);
-  if (waitingForHumans) return;
+  const timeout = world.rules.spawn.timeoutTicks;
+  if (waitingForHumans && !(timeout > 0 && world.tick >= timeout)) return;
+  // Time's up (online): whoever hasn't confirmed keeps their spot, or gets one below.
+  for (const player of world.players) if (player.kind === "human") player.ready = true;
 
   for (const player of world.players) {
     if (player.spawnTile < 0 && player.alive) spawnRandomly(world, player);

@@ -8,7 +8,7 @@ import type { Command, StampedCommand } from "../sim/commands.ts";
 import { generateMap } from "../sim/map/generate.ts";
 import { runTick } from "../sim/tick.ts";
 import { createWorld, type PlayerId, type World } from "../sim/world.ts";
-import type { GameConfig, ServerMessage } from "../shared/protocol.ts";
+import { ONLINE_RULES, type GameConfig, type ServerMessage } from "../shared/protocol.ts";
 
 export type TurnMessage = Extract<ServerMessage, { t: "turn" }>;
 
@@ -18,7 +18,12 @@ export class ServerGame {
 
   constructor(config: GameConfig) {
     const map = generateMap(config.map);
-    this.world = createWorld({ seed: config.seed, map, players: config.players });
+    this.world = createWorld({
+      seed: config.seed,
+      map,
+      players: config.players,
+      rules: ONLINE_RULES,
+    });
   }
 
   get ended(): boolean {

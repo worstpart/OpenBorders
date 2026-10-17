@@ -9,11 +9,18 @@
  */
 import type { Command, StampedCommand } from "../sim/commands.ts";
 import { MAP_DIMENSIONS, MAP_SIZE_NAMES, MAP_STYLES, type MapSpec } from "../sim/map/generate.ts";
-import type { Difficulty } from "../sim/rules.ts";
+import { makeRules, type Difficulty } from "../sim/rules.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
 
 /** Bumped when the messages change; a client and server of different versions refuse each other. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
+
+/**
+ * The rules of every online game — the server and each browser build the world with exactly
+ * these. The default rules, plus a 60 s spawn phase so a player who never picks a spot
+ * can't hold everyone up (3.4).
+ */
+export const ONLINE_RULES = makeRules({ spawn: { timeoutTicks: 600 } });
 
 /** Where the game server listens for WebSockets (same origin as the page in production). */
 export const SOCKET_PATH = "/ws";

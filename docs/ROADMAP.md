@@ -970,6 +970,16 @@ refused; chosen to spare ordinary names (Bassist, Grapes, Nazir, Cucumber, Kysha
 Checked: two tabs — public switch, the game on the other tab's list, Join, "Starts by itself in
 29 s" counting down in both, the game started by itself, the list empty again; no new console
 errors. Tests: 525.
+**Live (2026-10-17):** on Railway the public switch, the list and the countdown worked — and the
+user joined the test game from their own start screen, so a real player went through public
+lobby → countdown → start. It exposed a bug: the spawn phase waited for **every** human to
+confirm, so one absent player could hold a game in the spawn phase forever. Fix (mine; solo
+unchanged): `rules.spawn.timeoutTicks` (0 = wait, the default) and `ONLINE_RULES` (shared,
+used by the server and every browser) with a **60 s spawn phase**; at the timeout, unconfirmed
+humans keep the spot they clicked or get a random one, and the match starts; the spawn prompt
+shows the seconds left ("Waiting for the other players… N s" once confirmed). Protocol v4.
+Checked: 3 sim tests; a lone online game left alone started itself at tick 600 with a random
+49-tile spawn; bots-only games identical to `4d597f7`. Tests: 528.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
