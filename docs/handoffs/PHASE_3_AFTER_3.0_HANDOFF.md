@@ -1,5 +1,8 @@
 # Phase 3 handoff after milestone 3.0 — next: 3.1 server skeleton + first deploy
 
+> **Superseded as the entry point by [`PHASE_3_AFTER_3.4_HANDOFF.md`](PHASE_3_AFTER_3.4_HANDOFF.md)**
+> (2026-10-17).
+
 > **For the next session: read this file first.** It replaces
 > [`PHASE_2B_HANDOFF.md`](PHASE_2B_HANDOFF.md) as the entry point, but **§4 (how the user
 > wants us to work), §5 (things to know) and §6 (repository map) of PHASE_2B_HANDOFF, and §4–§6

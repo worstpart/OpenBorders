@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅; 3.5 resync / reconnect next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅; 3.5 resync / reconnect next — handoff `PHASE_3_AFTER_3.4_HANDOFF.md` |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -861,7 +861,8 @@ bots-only games must not change):
 | 3.4 ✅ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
 | 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
-| 3.7 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host; logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
+| 3.7 ⬜ | **Accounts & profiles** *(added 2026-10-17 at the user's request)* | **optional** sign-in — **Google** and/or an email + password account; guests keep playing with just a name (D-035). A profile: display name (the lobby name rules + blocklist), games played, wins, join date; signed-in names are reserved. Needs: a database (Railway Postgres add-on — a small monthly cost, ask first), a Google Cloud OAuth client (the user creates it, like the Railway account), sessions in secure cookies, password hashing (a vetted package, ask first), a short privacy note. Decision D-037 at the start: sign-in methods, what a profile holds and shows, data kept and how to delete it | people can keep a name and a record |
+| 3.8 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host (signing in too); logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
 
 **3.0 result** *(done 2026-10-16)*. `src/sim/snapshot.ts`: `serializeWorld` / `deserializeWorld`
 save the **whole** World generically (every field of every game object, so a field added later
@@ -888,7 +889,7 @@ Continent Medium with 40 tribes, Two lands 2 teams; a scripted human in each) an
 12,000-tick Islands Hard game gave **identical** per-tick digests, checkpoints and halfway
 snapshot text in Node 24 and the browser (Chromium 152), and each resumed from its snapshot to
 the same digest. Firefox/Safari not checked yet (would need a browser test runner — a package,
-ask first; the user's friends' browsers are the real test in 3.7). Bots-only games identical to
+ask first; the user's friends' browsers are the real test in the 3.8 playtest). Bots-only games identical to
 `4d597f7` (`tools/hashDigest.mjs`, Continent / Islands / Two-lands teams, seeds 1–2). Tests: 501.
 
 **3.1 progress** *(2026-10-16)*. Provider **Railway**, US East, `ws` (D-034). Built:
@@ -1012,7 +1013,7 @@ primary interface; nothing permanent is added to the screen.
 
 ## Phase 5 — Production
 
-Accounts, persistent profiles, match history, leaderboards, friends/parties (if
+Match history and leaderboards (built on the 3.7 accounts and profiles), friends/parties (if
 wanted), deployment architecture (CDN, game servers, database), analytics, moderation,
 monitoring & alerting, production security review, scaling tests.
 

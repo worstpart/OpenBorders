@@ -797,6 +797,11 @@ basic punctuation, made unique per game ("Name (2)"); public lobbies also apply 
 blocklist of offensive words. No chat beyond emojis and pings (D-027 already keeps chat
 out of reach of abuse).
 
+**Amended 2026-10-17:** the user asked for profiles with Google sign-in or own accounts
+"somewhere in these milestones" — placed as **milestone 3.7** (optional sign-in; guests stay),
+before the final multiplayer playtest; details become D-037 at its start. Match history and
+leaderboards stay in Phase 5.
+
 **Consequences.** Public lobbies need a lobby list on the server, a start countdown and
 the name rules above; moderation beyond that (reports, bans) is Phase 5.
 
