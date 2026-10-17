@@ -1,5 +1,6 @@
 /**
- * Lobbies and running games (milestones 3.1–3.2): who is in which game, the lobby → start →
+ * Lobbies and running games (milestones 3.1–3.4): who is in which game, public listing, the
+ * lobby → (countdown →) start →
  * turns flow, and what happens when people leave. Sockets and threads stay outside (Peer,
  * GameRunner), so this logic is tested without either.
  */
@@ -11,12 +12,16 @@ import {
   uniqueName,
   MAX_HUMANS,
   PROTOCOL_VERSION,
+  PUBLIC_COUNTDOWN_MS,
+  PUBLIC_MIN_PLAYERS,
   settingsProblem,
   type ClientMessage,
   type GameConfig,
+  type OpenGame,
   type OnlineSettings,
   type ServerMessage,
 } from "../shared/protocol.ts";
+import { isBlockedName } from "../shared/nameFilter.ts";
 import type { TurnMessage } from "./game.ts";
 import { CommandBudget, commandProblem } from "./validate.ts";
 
@@ -42,7 +47,7 @@ export type RunnerFactory = (config: GameConfig, events: GameEvents) => GameRunn
 
 export interface LobbyOptions {
   readonly startRunner: RunnerFactory;
-  /** An unguessable game id (until 3.4 the link is the only way in). */
+  /** An unguessable game id (a private game's link is the only way in). */
   readonly newGameId: () => string;
   /** A game seed. */
   readonly newSeed: () => number;
@@ -50,8 +55,10 @@ export interface LobbyOptions {
   readonly maxGames?: number;
   /** Games one address may have created and not yet finished (3.3). */
   readonly maxGamesPerAddress?: number;
-  /** The clock for sending budgets (ms); Date.now by default. */
+  /** The clock for sending budgets and countdowns (ms); Date.now by default. */
   readonly now?: () => number;
+  /** Runs `fn` after `ms`; returns a cancel function (setTimeout by default). */
+  readonly schedule?: (fn: () => void, ms: number) => () => void;
   readonly log?: (line: string) => void;
 }
 
@@ -73,6 +80,11 @@ interface Room {
   started: boolean;
   /** Where its creator connected from (games per address, 3.3). */
   readonly address: string;
+  /** Listed on everyone's start screen (3.4). */
+  public: boolean;
+  /** When a public game starts by itself (ms on the server clock), or null. */
+  startsAt: number | null;
+  cancelCountdown: (() => void) | null;
 }
 
 /** What a connection does with the messages its browser sends. */
@@ -85,8 +97,35 @@ export class Lobbies {
   private readonly rooms = new Map<string, Room>();
   private readonly options: LobbyOptions;
 
+  private readonly now: () => number;
+  private readonly schedule: (fn: () => void, ms: number) => () => void;
+
   constructor(options: LobbyOptions) {
     this.options = options;
+    this.now = options.now ?? Date.now;
+    this.schedule =
+      options.schedule ??
+      ((fn, ms) => {
+        const timer = setTimeout(fn, ms);
+        return () => clearTimeout(timer);
+      });
+  }
+
+  /** The open public games for the start screen (3.4): fullest first, at most 20. */
+  openGames(): OpenGame[] {
+    const now = this.now();
+    return [...this.rooms.values()]
+      .filter((r) => r.public && !r.started && r.members.length < MAX_HUMANS)
+      .sort((a, b) => b.members.length - a.members.length)
+      .slice(0, 20)
+      .map((r) => ({
+        gameId: r.id,
+        creator: r.members[0]?.name ?? "",
+        players: r.members.length,
+        maxPlayers: MAX_HUMANS,
+        summary: lobbySummary(r.settings),
+        startsIn: r.startsAt === null ? null : Math.max(0, r.startsAt - now),
+      }));
   }
 
   get gameCount(): number {
@@ -96,7 +135,7 @@ export class Lobbies {
   /** A new browser connection, from `address` (its IP, as the server sees it). */
   connect(peer: Peer, address = ""): Connection {
     let greeted = false;
-    const budget = new CommandBudget(this.options.now ?? Date.now);
+    const budget = new CommandBudget(this.now);
     let room: Room | null = null;
     let member: Member | null = null;
     const fail = (message: string) => peer.send({ t: "error", message });
@@ -147,6 +186,9 @@ export class Lobbies {
               runner: null,
               started: false,
               address,
+              public: false,
+              startsAt: null,
+              cancelCountdown: null,
             };
             this.rooms.set(room.id, room);
             member = this.addMember(room, peer, message.name);
@@ -163,6 +205,7 @@ export class Lobbies {
             if (target.members.length >= MAX_HUMANS) return fail("That game is full.");
             room = target;
             member = this.addMember(room, peer, message.name);
+            this.updateCountdown(room);
             this.sendLobby(room);
             return;
           }
@@ -170,8 +213,18 @@ export class Lobbies {
             if (!room || !member || room.started) return;
             const name = cleanName(message.name);
             if (!name) return fail("Names need a letter or a digit.");
+            if (isBlockedName(name)) return fail("Please pick another name.");
             const others = room.members.filter((m) => m !== member);
             member.name = uniqueName(name, this.takenNames(room, others));
+            this.sendLobby(room);
+            return;
+          }
+          case "visibility": {
+            if (!room || !member || room.started) return;
+            if (room.members[0] !== member) return fail("Only the game's creator can do that.");
+            room.public = message.public === true;
+            this.log(`game ${room.id} is ${room.public ? "public" : "private"}`);
+            this.updateCountdown(room);
             this.sendLobby(room);
             return;
           }
@@ -208,7 +261,10 @@ export class Lobbies {
           // Leaving a lobby frees the place; the next in line becomes the creator.
           left.members = left.members.filter((m) => m !== member);
           if (left.members.length === 0) this.close(left);
-          else this.sendLobby(left);
+          else {
+            this.updateCountdown(left);
+            this.sendLobby(left);
+          }
         } else if (!left.members.some((m) => m.peer)) {
           // Nobody left to play for: stop the simulation. (A player who leaves keeps their
           // land and stops acting, D-036; rejoining comes in 3.5.)
@@ -223,6 +279,7 @@ export class Lobbies {
   private addMember(room: Room, peer: Peer, requested: unknown): Member {
     const taken = this.takenNames(room, room.members);
     let name = cleanName(requested);
+    if (name && isBlockedName(name)) name = null;
     if (!name) {
       let n = room.members.length + 1;
       while (taken.has(`Player ${n}`)) n++;
@@ -249,13 +306,45 @@ export class Lobbies {
       ready: k === 0 || m.ready,
     }));
     const summary = lobbySummary(room.settings);
+    const startsIn = room.startsAt === null ? null : Math.max(0, room.startsAt - this.now());
     room.members.forEach((m, you) => {
-      m.peer?.send({ t: "lobby", gameId: room.id, players, you, creator: you === 0, summary });
+      m.peer?.send({
+        t: "lobby",
+        gameId: room.id,
+        players,
+        you,
+        creator: you === 0,
+        summary,
+        public: room.public,
+        startsIn,
+      });
     });
+  }
+
+  /**
+   * A public game with enough players counts down and then starts by itself (3.4), so
+   * strangers never wait on a creator who walked away; fewer players stop the clock.
+   */
+  private updateCountdown(room: Room): void {
+    const due = room.public && !room.started && room.members.length >= PUBLIC_MIN_PLAYERS;
+    if (due && room.startsAt === null) {
+      room.startsAt = this.now() + PUBLIC_COUNTDOWN_MS;
+      room.cancelCountdown = this.schedule(() => {
+        room.cancelCountdown = null;
+        if (!room.started && this.rooms.get(room.id) === room) this.start(room);
+      }, PUBLIC_COUNTDOWN_MS);
+    } else if (!due && room.startsAt !== null) {
+      room.cancelCountdown?.();
+      room.cancelCountdown = null;
+      room.startsAt = null;
+    }
   }
 
   private start(room: Room): void {
     room.started = true;
+    room.cancelCountdown?.();
+    room.cancelCountdown = null;
+    room.startsAt = null;
     room.members.forEach((m, k) => (m.playerId = k + 1));
     const config: GameConfig = {
       map: room.settings.map,
@@ -286,6 +375,8 @@ export class Lobbies {
   }
 
   private close(room: Room): void {
+    room.cancelCountdown?.();
+    room.cancelCountdown = null;
     room.runner?.stop();
     room.runner = null;
     this.rooms.delete(room.id);

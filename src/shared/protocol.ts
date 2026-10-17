@@ -13,7 +13,7 @@ import type { Difficulty } from "../sim/rules.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
 
 /** Bumped when the messages change; a client and server of different versions refuse each other. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Where the game server listens for WebSockets (same origin as the page in production). */
 export const SOCKET_PATH = "/ws";
@@ -110,6 +110,8 @@ export type ClientMessage =
   /** In the lobby: change your name, or say you're (not) ready. */
   | { readonly t: "name"; readonly name: string }
   | { readonly t: "ready"; readonly ready: boolean }
+  /** The creator lists the game for strangers (public) or keeps it to the link (3.4). */
+  | { readonly t: "visibility"; readonly public: boolean }
   | { readonly t: "start" }
   | { readonly t: "command"; readonly command: Command };
 
@@ -122,6 +124,10 @@ export type ServerMessage =
       readonly you: number;
       readonly creator: boolean;
       readonly summary: LobbySummary;
+      /** Listed on everyone's start screen (3.4). */
+      readonly public: boolean;
+      /** A public game starts by itself this many ms from now; null = no countdown. */
+      readonly startsIn: number | null;
     }
   | { readonly t: "start"; readonly config: GameConfig; readonly playerId: PlayerId }
   /** Tick `tick`'s commands, and the server's state hash after running it. */
@@ -192,4 +198,24 @@ function isNameList(value: unknown, max: number): boolean {
     value.length <= max &&
     value.every((name) => typeof name === "string" && name.length >= 1 && name.length <= 24)
   );
+}
+
+/** Where the start screen reads the open public games (3.4). */
+export const OPEN_GAMES_PATH = "/api/games";
+
+/** Seconds a public game waits once it has two players, then starts by itself (3.4). */
+export const PUBLIC_COUNTDOWN_MS = 30_000;
+
+/** Humans needed before a public game's countdown runs. */
+export const PUBLIC_MIN_PLAYERS = 2;
+
+/** One open public game on the start screen's list. */
+export interface OpenGame {
+  readonly gameId: string;
+  /** The creator's name. */
+  readonly creator: string;
+  readonly players: number;
+  readonly maxPlayers: number;
+  readonly summary: LobbySummary;
+  readonly startsIn: number | null;
 }

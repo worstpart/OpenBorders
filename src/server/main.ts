@@ -17,6 +17,7 @@ import { Worker } from "node:worker_threads";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
   MAX_CLIENT_MESSAGE_BYTES,
+  OPEN_GAMES_PATH,
   SOCKET_PATH,
   type GameConfig,
   type ServerMessage,
@@ -115,6 +116,17 @@ async function serveFile(req: IncomingMessage, res: ServerResponse): Promise<voi
     res
       .writeHead(200, { "content-type": "text/plain" })
       .end(`ok ${lobbies.gameCount} games, ${connectionCount} connections${proxy}\n`);
+    return;
+  }
+  if (url.pathname === OPEN_GAMES_PATH) {
+    // The start screen's list of open public games (3.4); readable from the dev page too.
+    res
+      .writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": "*",
+      })
+      .end(JSON.stringify({ games: lobbies.openGames() }));
     return;
   }
   if (url.pathname === "/debug/address") {

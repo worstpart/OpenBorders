@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅; 3.4 public lobbies next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅; 3.5 resync / reconnect next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -858,7 +858,7 @@ bots-only games must not change):
 | 3.1 ✅ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
 | 3.2 ✅ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ✅ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
-| 3.4 ⬜ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
+| 3.4 ✅ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
 | 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
 | 3.7 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host; logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
@@ -954,6 +954,22 @@ ignored; the last `X-Forwarded-For` entry was an intermediate hop). `/debug/addr
 caller their own address headers; `/health` reports games, connections and proxy trust. Live
 `tools/onlineAbuse.ts`: flood closed, junk closed, **9th connection refused (429)**, 20 KB
 refused; honest smoke 100 turns, 0 mismatches. **Milestone 3.3 done.**
+
+**3.4 result** *(2026-10-17)*. Protocol v3. A game is **private by default**; its creator
+flips "Public — anyone can join from the start screen" in the lobby (`visibility` message).
+`GET /api/games` lists open public games (fullest first, at most 20, full and started ones left
+out; readable cross-origin for the dev page); the start screen shows them under "Open games"
+(creator's game · map · size · mode · players, "starting soon") with **Join**, refreshed every 4
+s. **Countdown** (mine): a public game with 2+ players starts by itself after **30 s** (a joiner
+doesn't reset it; dropping below 2 stops it; the creator may still start early; it can't start a
+game twice); everyone sees "Starts by itself in N s". **Name blocklist** (D-035,
+`src/shared/nameFilter.ts`): a short list of words offensive anywhere inside a name, matched
+after lowercasing and reading lookalikes (`sh1t`, `F.U.C.K`, `a$hole`); applied in every lobby
+(a private game can go public): a blocked name on joining becomes "Player N", a rename to one is
+refused; chosen to spare ordinary names (Bassist, Grapes, Nazir, Cucumber, Kyshawn, Dickens).
+Checked: two tabs — public switch, the game on the other tab's list, Join, "Starts by itself in
+29 s" counting down in both, the game started by itself, the list empty again; no new console
+errors. Tests: 525.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

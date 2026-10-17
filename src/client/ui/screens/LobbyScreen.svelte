@@ -15,9 +15,18 @@
     onLeave: () => void;
     onRename: (name: string) => void;
     onReady: (ready: boolean) => void;
+    /** Creator: list the game for strangers, or keep it to the link (3.4). */
+    onPublic: (listed: boolean) => void;
   }
 
-  let { onStart, onLeave, onRename, onReady }: Props = $props();
+  let { onStart, onLeave, onRename, onReady, onPublic }: Props = $props();
+  /** Ticks once a second while a public countdown runs. */
+  let clock = $state(Date.now());
+  $effect(() => {
+    if (!ui.online?.startsAt) return;
+    const timer = setInterval(() => (clock = Date.now()), 250);
+    return () => clearInterval(timer);
+  });
   let copied = $state(false);
   let starting = $state(false);
   /** The name being typed (null = show the server's). */
@@ -26,6 +35,9 @@
   const online = $derived(ui.online);
   const link = $derived(online?.gameId ? gameLink(online.gameId, location) : "");
   const me = $derived(online?.players[online.you]);
+  const secondsLeft = $derived(
+    online?.startsAt ? Math.max(0, Math.ceil((online.startsAt - clock) / 1000)) : null,
+  );
   const notReady = $derived(online ? online.players.filter((p) => !p.ready).length : 0);
   const summary = $derived.by(() => {
     const s = online?.summary;
@@ -94,6 +106,24 @@
     </div>
 
     {#if summary}<p class="note">{summary}</p>{/if}
+
+    {#if online.creator}
+      <label class="switch">
+        <input
+          type="checkbox"
+          checked={online.public}
+          onchange={(e) => onPublic(e.currentTarget.checked)}
+        />
+        <span>Public — anyone can join from the start screen</span>
+      </label>
+    {:else if online.public}
+      <p class="note">Public game — anyone can join from the start screen.</p>
+    {/if}
+    {#if secondsLeft !== null}
+      <p class="countdown" role="status">Starts by itself in {secondsLeft} s</p>
+    {:else if online.public}
+      <p class="note">Starts by itself 30 s after a second player joins.</p>
+    {/if}
 
     <h2 class="label">Players ({online.players.length})</h2>
     <ul class="players">
@@ -254,6 +284,28 @@
   }
 
   .secondary,
+  .switch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+
+  .switch input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+  }
+
+  .countdown {
+    margin: 0;
+    font-weight: 650;
+    color: var(--color-warning);
+  }
+
   .leave {
     height: 36px;
     padding: 0 var(--space-4);

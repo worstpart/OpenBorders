@@ -14,15 +14,45 @@
   import { clampTeams, describeSplit, maxTeams, type GameMode } from "../../app/teams.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { DEFAULT_RULES, DIFFICULTIES, type Difficulty } from "../../../sim/rules.ts";
+  import { MAP_DIMENSIONS, MAP_SIZE_NAMES } from "../../../sim/map/generate.ts";
+  import type { OpenGame } from "../../../shared/protocol.ts";
+  import { fetchOpenGames } from "../../app/online.ts";
 
   interface Props {
     onPlay: () => void;
     /** Create an online game with these choices (Phase 3) and open its lobby. */
     onPlayOnline: () => void;
+    /** Join one of the open public games listed here (3.4). */
+    onJoinOnline: (gameId: string) => void;
     onSelectMap: (choice: MapChoice) => void;
   }
 
-  let { onPlay, onPlayOnline, onSelectMap }: Props = $props();
+  let { onPlay, onPlayOnline, onJoinOnline, onSelectMap }: Props = $props();
+
+  /** Open public games (3.4), refreshed every few seconds while this screen shows. */
+  let openGames = $state<OpenGame[]>([]);
+  $effect(() => {
+    let live = true;
+    const refresh = async () => {
+      const games = await fetchOpenGames();
+      if (live) openGames = games;
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 4000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  });
+
+  function describeGame(game: OpenGame): string {
+    const s = game.summary;
+    const size = MAP_SIZE_NAMES.find(
+      (n) => MAP_DIMENSIONS[n].width === s.map.width && MAP_DIMENSIONS[n].height === s.map.height,
+    );
+    const mode = s.mode === "teams" ? `${s.teams} teams` : "FFA";
+    return `${MAP_STYLE_LABELS[s.map.style]} · ${size ? MAP_SIZES[size].label : "?"} · ${mode}`;
+  }
   let starting = $state(false);
   const opponents = $derived(ui.nations + ui.tribes);
   const perPlayer = $derived(landPerPlayer(ui.landTiles, opponents));
@@ -192,6 +222,25 @@
   <button type="button" class="online" onclick={onPlayOnline} disabled={starting || ui.mapLoading}>
     Play online with friends
   </button>
+  {#if openGames.length > 0}
+    <section class="open-games" aria-labelledby="open-games-title">
+      <h2 id="open-games-title">Open games ({openGames.length})</h2>
+      <ul>
+        {#each openGames.slice(0, 4) as game (game.gameId)}
+          <li>
+            <div class="game-info">
+              <span class="game-title">{game.creator}'s game</span>
+              <span class="game-meta"
+                >{describeGame(game)} · {game.players}/{game.maxPlayers} players{#if game.startsIn !== null}
+                  · starting soon{/if}</span
+              >
+            </div>
+            <button type="button" onclick={() => onJoinOnline(game.gameId)}>Join</button>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
   <p class="note">Phase 2 prototype</p>
 </section>
 
@@ -362,6 +411,72 @@
     border-radius: var(--radius-control);
     background: transparent;
     color: var(--text-primary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .open-games {
+    margin-top: var(--space-4);
+    text-align: left;
+  }
+
+  .open-games h2 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .open-games ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .open-games li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .game-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .game-title,
+  .game-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .game-title {
+    font-weight: 600;
+    font-size: var(--text-sm);
+  }
+
+  .game-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .open-games button {
+    height: 30px;
+    padding: 0 var(--space-3);
+    border: none;
+    border-radius: var(--radius-control);
+    background: var(--accent);
+    color: #fff;
     font: inherit;
     font-weight: 600;
     cursor: pointer;

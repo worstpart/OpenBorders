@@ -59,6 +59,10 @@ export interface OnlineState {
   readonly outOfSync: boolean;
   /** The game's settings, once in the lobby. */
   readonly summary: LobbySummary | null;
+  /** Listed for strangers (3.4). */
+  readonly public: boolean;
+  /** When the public countdown ends (Date.now() clock), or null. */
+  readonly startsAt: number | null;
 }
 
 /** Game speeds offered in the pause menu (solo games only). */

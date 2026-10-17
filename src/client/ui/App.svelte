@@ -16,6 +16,9 @@
     leaveOnline: () => void;
     renameOnline: (name: string) => void;
     readyOnline: (ready: boolean) => void;
+    publicOnline: (listed: boolean) => void;
+    /** Join an open public game from the start screen's list (3.4). */
+    joinOnline: (gameId: string) => void;
     /** Change the map's size or type, or roll a new one (shows the loading screen meanwhile). */
     selectMap: (choice: MapChoice) => void;
     confirmSpawn: () => void;
@@ -107,6 +110,7 @@
     <StartScreen
       onPlay={actions.play}
       onPlayOnline={actions.playOnline}
+      onJoinOnline={actions.joinOnline}
       onSelectMap={actions.selectMap}
     />
   </main>
@@ -117,6 +121,7 @@
       onLeave={actions.leaveOnline}
       onRename={actions.renameOnline}
       onReady={actions.readyOnline}
+      onPublic={actions.publicOnline}
     />
   </main>
 {:else}

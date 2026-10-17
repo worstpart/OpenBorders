@@ -7,7 +7,9 @@ import type { Command } from "../../sim/commands.ts";
 import type { PlayerId } from "../../sim/world.ts";
 import {
   PROTOCOL_VERSION,
+  OPEN_GAMES_PATH,
   SOCKET_PATH,
+  type OpenGame,
   type ClientMessage,
   type GameConfig,
   type OnlineSettings,
@@ -41,6 +43,19 @@ function saveName(name: string): void {
   }
 }
 
+/** The open public games (3.4) from the game server; [] when it can't be reached. */
+export async function fetchOpenGames(): Promise<OpenGame[]> {
+  const base = import.meta.env.DEV ? `http://${location.hostname}:8787` : "";
+  try {
+    const response = await fetch(`${base}${OPEN_GAMES_PATH}`, { cache: "no-store" });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { games?: OpenGame[] };
+    return Array.isArray(body.games) ? body.games : [];
+  } catch {
+    return [];
+  }
+}
+
 /** The link that joins game `gameId` (shared by its creator). */
 export function gameLink(gameId: string, location: { origin: string; pathname: string }): string {
   return `${location.origin}${location.pathname}?game=${encodeURIComponent(gameId)}`;
@@ -69,6 +84,8 @@ export class OnlineSession {
       error: "",
       outOfSync: false,
       summary: null,
+      public: false,
+      startsAt: null,
     };
     this.socket = new WebSocket(url);
     this.socket.onopen = () => {
@@ -116,6 +133,11 @@ export class OnlineSession {
     this.post({ t: "ready", ready });
   }
 
+  /** The creator lists the game for strangers, or makes it link-only again (3.4). */
+  setPublic(listed: boolean): void {
+    this.post({ t: "visibility", public: listed });
+  }
+
   /** The creator starts the game for everyone in the lobby. */
   start(): void {
     this.post({ t: "start" });
@@ -156,6 +178,8 @@ export class OnlineSession {
           you: message.you,
           creator: message.creator,
           summary: message.summary,
+          public: message.public,
+          startsAt: message.startsIn === null ? null : Date.now() + message.startsIn,
           error: "",
         };
         break;

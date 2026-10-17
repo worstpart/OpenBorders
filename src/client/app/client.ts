@@ -352,6 +352,11 @@ export class GameClient {
     this.online?.setReady(ready);
   }
 
+  /** The creator lists the game on everyone's start screen (3.4), or unlists it. */
+  publicOnline(listed: boolean): void {
+    this.online?.setPublic(listed);
+  }
+
   /** Leaves the online lobby or game, back to the start screen. */
   leaveOnline(): void {
     this.backToStart();
