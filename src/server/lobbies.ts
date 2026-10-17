@@ -17,7 +17,8 @@ import {
   type OnlineSettings,
   type ServerMessage,
 } from "../shared/protocol.ts";
-import { commandProblem, type TurnMessage } from "./game.ts";
+import type { TurnMessage } from "./game.ts";
+import { CommandBudget, commandProblem } from "./validate.ts";
 
 /** One connected browser. */
 export interface Peer {
@@ -47,6 +48,10 @@ export interface LobbyOptions {
   readonly newSeed: () => number;
   /** Games this server runs at once (lobbies included). */
   readonly maxGames?: number;
+  /** Games one address may have created and not yet finished (3.3). */
+  readonly maxGamesPerAddress?: number;
+  /** The clock for sending budgets (ms); Date.now by default. */
+  readonly now?: () => number;
   readonly log?: (line: string) => void;
 }
 
@@ -66,6 +71,8 @@ interface Room {
   members: Member[];
   runner: GameRunner | null;
   started: boolean;
+  /** Where its creator connected from (games per address, 3.3). */
+  readonly address: string;
 }
 
 /** What a connection does with the messages its browser sends. */
@@ -86,8 +93,10 @@ export class Lobbies {
     return this.rooms.size;
   }
 
-  connect(peer: Peer): Connection {
+  /** A new browser connection, from `address` (its IP, as the server sees it). */
+  connect(peer: Peer, address = ""): Connection {
     let greeted = false;
+    const budget = new CommandBudget(this.options.now ?? Date.now);
     let room: Room | null = null;
     let member: Member | null = null;
     const fail = (message: string) => peer.send({ t: "error", message });
@@ -112,6 +121,13 @@ export class Lobbies {
           peer.close("no hello");
           return;
         }
+        // Everything after the hello spends from this connection's budget (3.3).
+        const verdict = budget.take();
+        if (verdict === "kick") {
+          peer.close("too many messages");
+          return;
+        }
+        if (verdict === "drop") return;
         switch (message.t) {
           case "create": {
             if (room) return fail("already in a game");
@@ -120,12 +136,17 @@ export class Lobbies {
             if (this.rooms.size >= (this.options.maxGames ?? 20)) {
               return fail("The server is full right now — try again in a few minutes.");
             }
+            const mine = [...this.rooms.values()].filter((r) => r.address === address).length;
+            if (address && mine >= (this.options.maxGamesPerAddress ?? 3)) {
+              return fail("You already have several games open — finish or leave one first.");
+            }
             room = {
               id: this.uniqueId(),
               settings: message.settings,
               members: [],
               runner: null,
               started: false,
+              address,
             };
             this.rooms.set(room.id, room);
             member = this.addMember(room, peer, message.name);
@@ -168,8 +189,11 @@ export class Lobbies {
           }
           case "command": {
             if (!room?.runner || !member || member.playerId === 0) return;
-            if (commandProblem(message.command)) return; // 3.3 counts these
-            room.runner.command(member.playerId, message.command);
+            if (commandProblem(message.command)) {
+              if (budget.strike() === "kick") peer.close("malformed commands");
+              return;
+            }
+            room.runner.command(member.playerId, message.command as Command);
             return;
           }
           default:
@@ -269,9 +293,11 @@ export class Lobbies {
   }
 
   private uniqueId(): string {
-    let id = this.options.newGameId();
-    while (this.rooms.has(id)) id = this.options.newGameId();
-    return id;
+    for (let tries = 0; tries < 100; tries++) {
+      const id = this.options.newGameId();
+      if (!this.rooms.has(id)) return id;
+    }
+    throw new Error("no free game id");
   }
 
   private log(line: string): void {

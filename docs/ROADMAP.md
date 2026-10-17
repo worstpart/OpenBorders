@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅; 3.3 next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅; 3.4 public lobbies next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -857,7 +857,7 @@ bots-only games must not change):
 | 3.0 ✅ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
 | 3.1 ✅ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
 | 3.2 ✅ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
-| 3.3 ⬜ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
+| 3.3 ✅ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ⬜ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
 | 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
@@ -929,6 +929,23 @@ joiners see "Starting… preparing the map". Checked: `tools/onlineSmoke.ts` wit
 ready / not ready, "Start anyway — 1 not ready", Alice and Bob in the game's player list, no
 console errors; a squashed name field fixed. Tests: 511 (names, duplicates against bots, ready
 flags, the summary, start with players not ready, renames ignored after the start).
+
+**3.3 result** *(2026-10-17)*. `src/server/validate.ts`: **exact command shapes** — every online
+command type has its field list (kind and range: tiles 0..16M, players 0..65,535, ids,
+percentages 0..10,000, booleans, the building / missile / ping / resource names, walls of 2–32
+points); unknown types (incl. `testFlight`, `__proto__`), missing, extra (a claimed `playerId`)
+or mistyped fields are refused before a turn — a new command without a schema is a compile
+error. **Budgets** per connection: 30 at once, 15 a second (a human clicking 8 a second for a
+minute is never limited); excess dropped, 60 drops → closed ("too many messages"); 20 malformed
+commands → closed. **Limits**: 8 connections per address and 2,000 in all (HTTP 429 beyond), 3
+open games per address, 8 KB messages, 40 messages a second; behind Railway the address is the
+last `X-Forwarded-For` entry (trusted only there). A message that makes the lobby code throw
+closes that connection, never the server; a game id search can no longer loop forever.
+**Fuzz**: 4,000 random commands that pass the check (edge values, real tiles and ids, gold for
+builds and missiles) thrown at a real Islands game from two players — every tick ran, and the
+same garbage gives the same hashes. `tools/onlineAbuse.ts` against the server: a 300-command
+flood closed, 30 junk commands closed, the 9th connection refused (429), a 20 KB message refused;
+an honest game alongside: 0 mismatches. Tests: 519.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

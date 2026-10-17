@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import type { Command } from "../../src/sim/commands.ts";
 import { MAP_DIMENSIONS } from "../../src/sim/map/generate.ts";
-import { commandProblem, ServerGame } from "../../src/server/game.ts";
+import { ServerGame } from "../../src/server/game.ts";
+import { commandProblem } from "../../src/server/validate.ts";
 import { Lobbies, type GameEvents, type Peer } from "../../src/server/lobbies.ts";
 import {
   cleanName,
@@ -116,10 +117,71 @@ describe("lobbies", () => {
     b.connection.receive({ t: "command", command: { type: "testFlight", from: 1, to: 2 } });
     b.connection.receive({ t: "command", command: { type: "spawn", tile: Infinity } });
     a.connection.receive({ t: "command", command: { type: "spawn", tile: 5 } });
-    expect(runners[0]!.commands).toEqual([
-      [2, { type: "confirmSpawn", playerId: 1 }], // the claimed id is ignored: the sim reads the stamp
-      [1, { type: "spawn", tile: 5 }],
-    ]);
+    // Claiming a player id is refused outright (3.3: exact fields); the stamp is the sender.
+    expect(runners[0]!.commands).toEqual([[1, { type: "spawn", tile: 5 }]]);
+  });
+
+  it("closes a flooding connection and one that keeps sending malformed commands (3.3)", () => {
+    let now = 0;
+    const runners: GameEvents[] = [];
+    const lobbies = new Lobbies({
+      startRunner: (_config, events) => {
+        runners.push(events);
+        return { command: () => {}, stop: () => {} };
+      },
+      newGameId: (() => {
+        let n = 0;
+        return () => `f${++n}`;
+      })(),
+      newSeed: () => 1,
+      now: () => now,
+    });
+    const peer = fakePeer();
+    const c = lobbies.connect(peer, "1.2.3.4");
+    c.receive({ t: "hello", version: PROTOCOL_VERSION });
+    c.receive({ t: "create", settings: SETTINGS, name: "Flood" });
+    c.receive({ t: "start" });
+    for (let k = 0; k < 200 && !peer.closedWith; k++) {
+      c.receive({ t: "command", command: { type: "confirmSpawn" } });
+    }
+    expect(peer.closedWith).toBe("too many messages");
+
+    const other = fakePeer();
+    const d = lobbies.connect(other, "5.6.7.8");
+    d.receive({ t: "hello", version: PROTOCOL_VERSION });
+    d.receive({ t: "create", settings: SETTINGS, name: "Junk" });
+    d.receive({ t: "start" });
+    for (let k = 0; k < 25 && !other.closedWith; k++) {
+      now += 1000; // slow enough for the budget, but every one is junk
+      d.receive({ t: "command", command: { type: "spawn", tile: "everywhere" } });
+    }
+    expect(other.closedWith).toBe("malformed commands");
+  });
+
+  it("one address may hold only a few open games (3.3)", () => {
+    const lobbies = new Lobbies({
+      startRunner: () => ({ command: () => {}, stop: () => {} }),
+      newGameId: (() => {
+        let n = 0;
+        return () => `g${++n}`;
+      })(),
+      newSeed: () => 1,
+      maxGames: 50,
+      maxGamesPerAddress: 3,
+    });
+    const make = (address: string) => {
+      const peer = fakePeer();
+      const c = lobbies.connect(peer, address);
+      c.receive({ t: "hello", version: PROTOCOL_VERSION });
+      c.receive({ t: "create", settings: SETTINGS, name: "X" });
+      return peer;
+    };
+    for (let k = 0; k < 3; k++) expect(last(make("9.9.9.9"))).toMatchObject({ t: "lobby" });
+    expect(last(make("9.9.9.9"))).toMatchObject({
+      t: "error",
+      message: expect.stringMatching(/several games/),
+    });
+    expect(last(make("8.8.8.8"))).toMatchObject({ t: "lobby" });
   });
 
   it("refuses bad settings, unknown games, a full server and missing hellos", () => {

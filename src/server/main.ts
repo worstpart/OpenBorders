@@ -30,6 +30,15 @@ const DIST = resolve(fileURLToPath(new URL("../../dist", import.meta.url)));
 /** Messages a browser may send per second before the server hangs up (3.3 refines this). */
 const MAX_MESSAGES_PER_SECOND = 40;
 const PING_MS = 25_000;
+/** Open game connections per address, and in all (3.3): a few tabs each, never a swarm. */
+const MAX_CONNECTIONS_PER_ADDRESS = 8;
+const MAX_CONNECTIONS = 2_000;
+/**
+ * Behind Railway's proxy every connection comes from the proxy; the player's address is the
+ * last entry it adds to X-Forwarded-For. Only trusted there (elsewhere a client could write it).
+ */
+const BEHIND_PROXY =
+  process.env["RAILWAY_ENVIRONMENT"] !== undefined || process.env["TRUST_PROXY"] === "1";
 
 const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
 
@@ -132,15 +141,43 @@ const server = createServer((req, res) => {
 
 const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
 
+const connectionsByAddress = new Map<string, number>();
+let connectionCount = 0;
+
+function addressOf(req: IncomingMessage): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (BEHIND_PROXY && typeof forwarded === "string") {
+    const last = forwarded.split(",").at(-1)?.trim();
+    if (last) return last;
+  }
+  return req.socket.remoteAddress ?? "";
+}
+
 server.on("upgrade", (req, socket, head) => {
   if (new URL(req.url ?? "/", "http://x").pathname !== SOCKET_PATH) {
     socket.destroy();
     return;
   }
-  sockets.handleUpgrade(req, socket, head, (ws) => accept(ws));
+  const address = addressOf(req);
+  const open = connectionsByAddress.get(address) ?? 0;
+  if (open >= MAX_CONNECTIONS_PER_ADDRESS || connectionCount >= MAX_CONNECTIONS) {
+    socket.end("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
+    return;
+  }
+  connectionsByAddress.set(address, open + 1);
+  connectionCount++;
+  sockets.handleUpgrade(req, socket, head, (ws) => {
+    ws.on("close", () => {
+      connectionCount--;
+      const left = (connectionsByAddress.get(address) ?? 1) - 1;
+      if (left > 0) connectionsByAddress.set(address, left);
+      else connectionsByAddress.delete(address);
+    });
+    accept(ws, address);
+  });
 });
 
-function accept(ws: WebSocket): void {
+function accept(ws: WebSocket, address: string): void {
   let alive = true;
   let windowStart = Date.now();
   let messages = 0;
@@ -150,7 +187,7 @@ function accept(ws: WebSocket): void {
     },
     close: (reason: string) => ws.close(1008, reason.slice(0, 100)),
   };
-  const connection = lobbies.connect(peer);
+  const connection = lobbies.connect(peer, address);
   ws.on("message", (data, isBinary) => {
     const now = Date.now();
     if (now - windowStart >= 1_000) {
@@ -165,7 +202,15 @@ function accept(ws: WebSocket): void {
     } catch {
       return peer.close("bad JSON");
     }
-    connection.receive(parsed);
+    try {
+      connection.receive(parsed);
+    } catch (error) {
+      // A bug handling one message closes that connection, never the whole server.
+      log(
+        `message error from ${address}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      );
+      peer.close("server error");
+    }
   });
   ws.on("pong", () => (alive = true));
   const ping = setInterval(() => {
