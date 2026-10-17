@@ -7,6 +7,7 @@
 import type { Command } from "../sim/commands.ts";
 import type { TickFrame } from "../sim/frame.ts";
 import type { GameMap } from "../sim/map/gameMap.ts";
+import type { WorldSnapshot } from "../sim/snapshot.ts";
 import type { GameSetup, PlayerId } from "../sim/world.ts";
 
 export interface InitialState {
@@ -15,8 +16,28 @@ export interface InitialState {
   readonly owner: Uint16Array;
   /** The state at tick 0 (players, phase); its change list is empty. */
   readonly frame: TickFrame;
-  /** The player this client controls. */
+  /** The player this client controls (0: an online spectator). */
   readonly localPlayerId: PlayerId;
+  /** Fortification levels per tile, when the game didn't start at tick 0 (a restore). */
+  readonly fort?: Uint8Array;
+}
+
+/**
+ * The state after a snapshot replaced the world (online repair or rejoin, 3.5): the client
+ * redraws from it — its ownership and fortification copies and every HUD value described
+ * the old world.
+ */
+export interface RestoredState {
+  readonly owner: Uint16Array;
+  readonly fort: Uint8Array;
+  /** A complete frame of the restored world (nothing cached from before). */
+  readonly frame: TickFrame;
+}
+
+/** A host whose world can be replaced by a snapshot (manual-clock and worker hosts). */
+export interface Restorable {
+  /** Replaces the world; `done` gets the new state, in order with the frames. */
+  restore(snapshot: WorldSnapshot, done: (state: RestoredState) => void): void;
 }
 
 /** Timing information that isn't part of the game state (for the performance overlay). */

@@ -28,7 +28,7 @@ function setup() {
   const lobbies = new Lobbies({
     startRunner: (config) => {
       started.push(config);
-      return { command: () => {}, stop: () => {} };
+      return { command: () => {}, snapshot: () => {}, stop: () => {} };
     },
     newGameId: () => `g${++ids}`,
     newSeed: () => 7,
@@ -50,7 +50,11 @@ function setup() {
   };
   const player = (address: string) => {
     const inbox: ServerMessage[] = [];
-    const peer: Peer = { send: (m) => inbox.push(m), close: () => {} };
+    const peer: Peer = {
+      send: (m) => inbox.push(m),
+      sendText: (text) => inbox.push(JSON.parse(text) as ServerMessage),
+      close: () => {},
+    };
     const connection = lobbies.connect(peer, address);
     connection.receive({ t: "hello", version: PROTOCOL_VERSION });
     const lobby = () => {
@@ -80,6 +84,7 @@ describe("public games (3.4)", () => {
         maxPlayers: 16,
         summary: expect.objectContaining({ nations: 1, difficulty: "hard" }),
         startsIn: null,
+        running: false,
       },
     ]);
     const b = player("2.2.2.2");
@@ -90,7 +95,7 @@ describe("public games (3.4)", () => {
     expect(lobbies.openGames()).toEqual([]);
   });
 
-  it("two players start a 30 s countdown; at zero the game starts by itself and leaves the list", () => {
+  it("two players start a 30 s countdown; at zero the game starts by itself, listed to watch", () => {
     const { lobbies, advance, player, started } = setup();
     const a = player("1.1.1.1");
     a.connection.receive({ t: "create", settings: SETTINGS, name: "Host" });
@@ -107,7 +112,10 @@ describe("public games (3.4)", () => {
     expect(started).toHaveLength(1);
     expect(started[0]!.players.slice(0, 3).map((p) => p.name)).toEqual(["Host", "Guest", "Third"]);
     expect(c.inbox.some((m) => m.t === "start")).toBe(true);
-    expect(lobbies.openGames()).toEqual([]);
+    // Running, it stays listed — to watch (3.5).
+    expect(lobbies.openGames()).toEqual([
+      expect.objectContaining({ gameId: "g1", players: 3, running: true }),
+    ]);
   });
 
   it("the countdown stops when players drop below two, and the creator may start early", () => {

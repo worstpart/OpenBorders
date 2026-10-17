@@ -8,6 +8,7 @@
 import type { Command, Turn } from "../sim/commands.ts";
 import type { BoatSnapshot, TickFrame, TradeShipSnapshot, WallSnapshot } from "../sim/frame.ts";
 import type { GameRules } from "../sim/rules.ts";
+import type { WorldSnapshot } from "../sim/snapshot.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
 
 export type WireBoat = Omit<BoatSnapshot, "route"> & { readonly route: Int32Array | null };
@@ -38,6 +39,10 @@ export type ToWorker =
     }
   /** Online games: the next turn from the server. */
   | { readonly type: "turn"; readonly turn: Turn }
+  /** Development checks only: make this world differ on purpose (3.5). */
+  | { readonly type: "debugCorrupt" }
+  /** Online games: replace the world with the server's snapshot (3.5). */
+  | { readonly type: "restore"; readonly snapshot: WorldSnapshot }
   /** A command from the local player (`playerId` null) or, in dev checks, another player. */
   | { readonly type: "send"; readonly playerId: PlayerId | null; readonly command: Command }
   | { readonly type: "pause" }
@@ -47,6 +52,13 @@ export type ToWorker =
 export type FromWorker =
   | { readonly type: "started"; readonly owner: Uint16Array; readonly frame: WireFrame }
   | { readonly type: "frame"; readonly frame: WireFrame; readonly tickMs: number }
+  /** The world was replaced (3.5): full ownership and fortification, and a complete frame. */
+  | {
+      readonly type: "restored";
+      readonly owner: Uint16Array;
+      readonly fort: Uint8Array;
+      readonly frame: WireFrame;
+    }
   | { readonly type: "error"; readonly message: string };
 
 /** The worker's side: strips what the main thread already has from each frame. */

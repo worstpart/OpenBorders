@@ -55,14 +55,18 @@ export interface OnlineState {
   /** You created the game and may start it. */
   readonly creator: boolean;
   readonly error: string;
-  /** This browser's game drifted from the server's (repair comes in 3.5). */
-  readonly outOfSync: boolean;
   /** The game's settings, once in the lobby. */
   readonly summary: LobbySummary | null;
   /** Listed for strangers (3.4). */
   readonly public: boolean;
   /** When the public countdown ends (Date.now() clock), or null. */
   readonly startsAt: number | null;
+  /** Watching a running game: no country of your own (3.5). */
+  readonly watching: boolean;
+  /** Waiting for the server's snapshot: joined mid-game, rejoined, or drifted (3.5). */
+  readonly catchingUp: boolean;
+  /** The connection dropped: reconnect attempt n (0: connected). */
+  readonly reconnecting: number;
 }
 
 /** Game speeds offered in the pause menu (solo games only). */

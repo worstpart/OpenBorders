@@ -68,6 +68,10 @@ function startRunner(config: GameConfig, events: GameEvents): GameRunner {
         commands: message.commands as never,
         hash: message.hash,
       });
+    } else if (message.type === "snapshot") events.snapshot(message.json);
+    else if (message.type === "snapshotFailed") {
+      log(`snapshot failed: ${message.message}`);
+      events.snapshot(null);
     } else if (message.type === "ended") finish();
     else finish(message.message);
   });
@@ -76,6 +80,7 @@ function startRunner(config: GameConfig, events: GameEvents): GameRunner {
   post({ type: "start", config });
   return {
     command: (playerId, command) => post({ type: "command", playerId, command }),
+    snapshot: () => post({ type: "snapshot" }),
     stop: () => {
       done = true;
       post({ type: "stop" });
@@ -175,7 +180,17 @@ const server = createServer((req, res) => {
 
 // --- The game socket ----------------------------------------------------------------------
 
-const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
+/**
+ * Big messages are compressed (3.5): a snapshot (~150–450 KB of JSON on a Normal map) shrinks
+ * several times; turns and lobby updates stay below the threshold and go out as they are.
+ */
+const COMPRESS_FROM_BYTES = 16 * 1024;
+
+const sockets = new WebSocketServer({
+  noServer: true,
+  maxPayload: MAX_CLIENT_MESSAGE_BYTES,
+  perMessageDeflate: { threshold: COMPRESS_FROM_BYTES },
+});
 
 const connectionsByAddress = new Map<string, number>();
 let connectionCount = 0;
@@ -229,6 +244,9 @@ function accept(ws: WebSocket, address: string): void {
   const peer = {
     send: (message: ServerMessage) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+    },
+    sendText: (text: string) => {
+      if (ws.readyState === ws.OPEN) ws.send(text);
     },
     close: (reason: string) => ws.close(1008, reason.slice(0, 100)),
   };

@@ -5,9 +5,11 @@
  */
 import type { Command, StampedCommand, Turn } from "../sim/commands.ts";
 import { buildFrame, type TickFrame } from "../sim/frame.ts";
+import { deserializeWorld, type WorldSnapshot } from "../sim/snapshot.ts";
 import { runTick } from "../sim/tick.ts";
-import { createWorld, type GameSetup, type PlayerId, type World } from "../sim/world.ts";
-import type { FrameListener, InitialState, SimHost } from "./host.ts";
+import { isLand } from "../sim/map/gameMap.ts";
+import { createWorld, setOwner, type GameSetup, type PlayerId, type World } from "../sim/world.ts";
+import type { FrameListener, InitialState, Restorable, RestoredState, SimHost } from "./host.ts";
 
 /** If the tab was in the background, don't fast-forward more than this many ticks at once. */
 const MAX_CATCH_UP_TICKS = 5;
@@ -21,7 +23,7 @@ export interface LocalHostOptions {
   clock?: "realtime" | "manual";
 }
 
-export class LocalHost implements SimHost {
+export class LocalHost implements SimHost, Restorable {
   private world: World | null = null;
   private readonly listeners = new Set<FrameListener>();
   private pending: StampedCommand[] = [];
@@ -120,6 +122,45 @@ export class LocalHost implements SimHost {
     this.lastFrameAt = performance.now();
     for (const listener of this.listeners) listener(frame, { tickMs });
     return frame;
+  }
+
+  /**
+   * Online repair and rejoin (3.5, manual clock): the world becomes the snapshot's, on the
+   * same map and rules. The next turn continues from the snapshot's tick.
+   */
+  restore(snapshot: WorldSnapshot, done?: (state: RestoredState) => void): RestoredState {
+    const world = this.world;
+    if (!world) throw new Error("LocalHost is not running");
+    if (this.clock !== "manual") throw new Error("restore() needs the manual clock");
+    const restored = deserializeWorld(snapshot, world.map, world.rules);
+    this.world = restored;
+    this.pending = [];
+    this.lastFrameAt = performance.now();
+    const state = {
+      owner: restored.owner.slice(),
+      fort: restored.fortLevel.slice(),
+      frame: buildFrame(restored),
+    };
+    done?.(state);
+    return state;
+  }
+
+  /**
+   * Development checks only (3.5): makes this world differ from everyone else's — a 25-tile
+   * square of land at the map's centre becomes the local player's — so the next hash check
+   * fails and the online repair can be watched.
+   */
+  debugCorrupt(): void {
+    const world = this.world;
+    if (!world) return;
+    const { width, height } = world.map;
+    const owner = Math.max(1, this.localPlayerId);
+    for (let y = (height >> 1) - 12; y < (height >> 1) + 13; y++) {
+      for (let x = (width >> 1) - 12; x < (width >> 1) + 13; x++) {
+        const tile = y * width + x;
+        if (isLand(world.map, tile) && world.owner[tile] !== owner) setOwner(world, tile, owner);
+      }
+    }
   }
 
   dispose(): void {

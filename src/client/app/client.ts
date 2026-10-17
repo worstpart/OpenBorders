@@ -9,7 +9,7 @@ import { ONLINE_RULES, type GameConfig, type OnlineSettings } from "../../shared
 import type { GameSetup } from "../../sim/world.ts";
 import { OnlineSession } from "./online.ts";
 import { WorkerHost } from "../../host/workerHost.ts";
-import type { FrameTiming } from "../../host/host.ts";
+import type { FrameTiming, RestoredState } from "../../host/host.ts";
 import type { Command } from "../../sim/commands.ts";
 import type { TickFrame } from "../../sim/frame.ts";
 import { isLand, tileAt, type GameMap } from "../../sim/map/gameMap.ts";
@@ -364,16 +364,37 @@ export class GameClient {
 
   private onlineHandlers() {
     return {
-      start: (config: GameConfig, playerId: number) => {
-        this.beginOnlineGame(config, playerId).catch((error: unknown) => {
+      start: (config: GameConfig, playerId: number, midGame: boolean) => {
+        this.beginOnlineGame(config, playerId, midGame).catch((error: unknown) => {
           this.onSimError(error instanceof Error ? error.message : String(error));
+        });
+      },
+      // The connection came back (3.5): the game waits for the server's snapshot.
+      resumed: () => {
+        if (this.host instanceof NetworkHost) this.host.awaitSnapshot();
+      },
+      presence: (playerId: number, connected: boolean) => {
+        const name = this.latestFrame?.players.find((p) => p.id === playerId)?.name;
+        if (!name || playerId === ui.localPlayerId) return;
+        this.toast({
+          text: connected
+            ? `${name} is back`
+            : `${name} lost the connection — their country waits for them`,
+          tone: "info",
         });
       },
     };
   }
 
-  /** The server started the game: build the same world and run the server's turns. */
-  private async beginOnlineGame(config: GameConfig, playerId: number): Promise<void> {
+  /**
+   * The server started the game: build the same world and run the server's turns. Mid-game
+   * (a rejoin, or watching as player 0) the world comes from the server's snapshot (3.5).
+   */
+  private async beginOnlineGame(
+    config: GameConfig,
+    playerId: number,
+    midGame: boolean,
+  ): Promise<void> {
     const session = this.online;
     if (!session) return;
     const key = `${config.map.style}:${config.map.seed}:${config.map.width}x${config.map.height}`;
@@ -388,19 +409,56 @@ export class GameClient {
     const host = new NetworkHost({
       localPlayerId: playerId,
       sendCommand: (command) => session.command(command),
-      onDesync: (tick) => {
-        console.warn(`online game: this browser drifted from the server at tick ${tick}`);
-        if (ui.online) ui.online = { ...ui.online, outOfSync: true };
+      awaitSnapshot: midGame,
+      onResync: (tick) => {
+        console.warn(`online game: out of step with the server at tick ${tick} — catching up`);
+        if (ui.online) ui.online = { ...ui.online, catchingUp: true };
+        session.desync(tick);
       },
+      onRestored: (state) => this.restored(state),
       onError: (m) => this.onSimError(m),
     });
-    session.attach((turn) => host.receiveTurn(turn));
+    session.attach({
+      turn: (turn) => host.receiveTurn(turn),
+      sync: (snapshot) => host.receiveSnapshot(snapshot),
+    });
     await this.launch(host, {
       seed: config.seed,
       map,
       players: config.players,
       rules: ONLINE_RULES,
     });
+    if (this.host === host && ui.online) ui.online = { ...ui.online, catchingUp: false };
+  }
+
+  /**
+   * A snapshot replaced the running world (3.5: a repair after a drift, or after a dropped
+   * connection): ownership and fortification are redrawn where they differ, and everything
+   * drawn from the old world's events is dropped.
+   */
+  private restored(state: RestoredState): void {
+    const changed: number[] = [];
+    for (let tile = 0; tile < state.owner.length; tile++) {
+      if (this.owner[tile] !== state.owner[tile]) changed.push(tile);
+    }
+    const tiles = Int32Array.from(changed);
+    const owners = Uint16Array.from(changed, (tile) => state.owner[tile]!);
+    for (const tile of changed) this.owner[tile] = state.owner[tile]!;
+    this.renderer.applyTileChanges(tiles, owners, state.frame.tick);
+    ui.fort.set(state.fort);
+    this.labelsDirty = true;
+    this.lootEffects = [];
+    this.tradeEffects = [];
+    this.shotEffects = [];
+    this.blastEffects = [];
+    this.pendingLaunches = [];
+    this.alerts = new AlertPlanner();
+    this.latestFrame = state.frame;
+    this.publish(state.frame);
+    if (ui.online) ui.online = { ...ui.online, catchingUp: false };
+    console.info(
+      `online game: caught up at tick ${state.frame.tick} (${changed.length} tiles redrawn)`,
+    );
   }
 
   /** Starts a game on `host` (solo or online) and shows it. */
@@ -421,7 +479,7 @@ export class GameClient {
     this.owner = initial.owner.slice();
     ui.map = initial.map;
     ui.owner = this.owner;
-    ui.fort = new Uint8Array(this.owner.length);
+    ui.fort = initial.fort ? initial.fort.slice() : new Uint8Array(this.owner.length);
     this.renderer.setMap(initial.map, this.owner);
     this.renderer.setPlayerColors(colors);
     this.renderer.setLocalOwner(initial.localPlayerId);
@@ -449,6 +507,12 @@ export class GameClient {
       resume: () => this.host?.resume(),
       frame: () => this.latestFrame,
       renderer: () => this.renderer,
+      /** Online (3.5): drops the connection, to watch it reconnect. */
+      dropConnection: () => this.online?.debugDrop(),
+      /** Online (3.5): corrupts this browser's world on purpose, to watch it repair itself. */
+      corrupt: () => {
+        if (this.host instanceof NetworkHost) this.host.debugCorrupt();
+      },
       /** Sends a command as the local player (scripted browser checks). */
       send: (command: Command) => this.host?.send(command),
       /** Sends a command as another player (e.g. a bot asking us for an alliance). */
@@ -1013,6 +1077,8 @@ export class GameClient {
     const wasOnline = this.online !== null;
     this.online?.close();
     this.online = null;
+    // The address bar showed the game's link (3.5): back to the plain page.
+    if (wasOnline && location.search) history.replaceState(null, "", location.pathname);
     this.latestFrame = null;
     if (this.map) {
       this.owner = new Uint16Array(this.map.width * this.map.height);
@@ -1064,7 +1130,9 @@ export class GameClient {
         ui.fort[frame.fortTiles[k]!] = frame.fortLevels[k]!;
       }
     }
-    const me = ui.localPlayerId;
+    // A spectator (player 0, 3.5) is nobody here: 0 is also neutral land, and an attack on
+    // neutral land isn't one "on you".
+    const me = ui.localPlayerId || -1;
     // Launches no frame has shown after 3 s are dropped (they were lost or rejected).
     if (this.pendingLaunches.length > 0) {
       this.pendingLaunches = this.pendingLaunches.filter((p) => frame.tick - p.tick < 30);
@@ -1373,10 +1441,15 @@ export class GameClient {
     else this.dismissRenewal(card.ally);
   }
 
+  /** Watching an online game (3.5): the map can be looked at, nothing ordered. */
+  private get watching(): boolean {
+    return ui.online?.watching === true;
+  }
+
   private primaryClick(at: ScreenPoint): void {
     const map = this.map;
     const tile = this.camera.tileAt(at);
-    if (!map || !tile || ui.screen !== "game" || !this.host || ui.menu) return;
+    if (!map || !tile || ui.screen !== "game" || !this.host || ui.menu || this.watching) return;
     const index = tileAt(map, tile.x, tile.y);
     if (ui.phase === "spawn" && !ui.me?.ready) {
       this.host.send({ type: "spawn", tile: index });
@@ -1486,6 +1559,7 @@ export class GameClient {
     const map = this.map;
     const tile = this.camera.tileAt(at);
     if (!map || !tile || ui.screen !== "game" || ui.phase !== "playing" || ui.menu) return;
+    if (this.watching) return;
     const index = tileAt(map, tile.x, tile.y);
     if (!isLand(map, index)) return;
     ui.menu = { kind: "context", x: at.x, y: at.y, tile: index, owner: this.owner[index]! };
@@ -1511,6 +1585,14 @@ export class GameClient {
   }
 
   private key(action: KeyAction): void {
+    if (
+      this.watching &&
+      action !== "togglePerf" &&
+      action !== "escape" &&
+      action !== "airDefense"
+    ) {
+      return;
+    }
     switch (action) {
       case "togglePerf":
         this.perf.toggle();

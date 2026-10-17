@@ -375,7 +375,7 @@ interface SimHost {
 |---|---|---|
 | `LocalHost` | Phase 1 | Turn scheduler + simulation on the main thread (simplest to debug) |
 | `WorkerHost` | ✅ milestone 2.8 (the game's host whenever workers exist) | A LocalHost inside a Web Worker (`host/simWorker.ts`); see below |
-| `NetworkHost` | Phase 3 | Commands go to the server; turns come back; local sim in a worker |
+| `NetworkHost` | Phase 3 | Commands go to the server; turns come back; local sim in a worker; a drift, a rejoin or watching = the server's snapshot replaces the world (3.5) |
 
 Because the renderer and UI only ever consume `TickFrame`s, swapping hosts doesn't
 touch them.

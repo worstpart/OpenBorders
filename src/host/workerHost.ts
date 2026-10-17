@@ -7,7 +7,8 @@
  */
 import type { Command, Turn } from "../sim/commands.ts";
 import type { GameSetup, PlayerId } from "../sim/world.ts";
-import type { FrameListener, InitialState, SimHost } from "./host.ts";
+import type { WorldSnapshot } from "../sim/snapshot.ts";
+import type { FrameListener, InitialState, Restorable, RestoredState, SimHost } from "./host.ts";
 import { FrameRestorer, type FromWorker, type ToWorker } from "./workerProtocol.ts";
 
 export interface WorkerHostOptions {
@@ -18,7 +19,7 @@ export interface WorkerHostOptions {
   onError?: (message: string) => void;
 }
 
-export class WorkerHost implements SimHost {
+export class WorkerHost implements SimHost, Restorable {
   private readonly worker: Worker;
   private readonly listeners = new Set<FrameListener>();
   private readonly localPlayerId: PlayerId;
@@ -28,7 +29,9 @@ export class WorkerHost implements SimHost {
   private speed = 1;
   private isPaused = false;
   private lastFrameAt = 0;
-  private readonly restorer = new FrameRestorer();
+  private restorer = new FrameRestorer();
+  /** Callbacks of restores sent to the worker, oldest first (3.5). */
+  private readonly restoring: ((state: RestoredState) => void)[] = [];
   private starting: {
     resolve: (initial: InitialState) => void;
     reject: (error: Error) => void;
@@ -88,6 +91,17 @@ export class WorkerHost implements SimHost {
     this.post({ type: "turn", turn });
   }
 
+  /** Online games: the world becomes the snapshot's (3.5); `done` runs in order with the frames. */
+  restore(snapshot: WorldSnapshot, done: (state: RestoredState) => void): void {
+    this.restoring.push(done);
+    this.post({ type: "restore", snapshot });
+  }
+
+  /** Development checks only (3.5): makes the worker's world differ on purpose. */
+  debugCorrupt(): void {
+    this.post({ type: "debugCorrupt" });
+  }
+
   /** Development checks only (the debug hook): a command as if another player sent it. */
   sendAs(playerId: PlayerId, command: Command): void {
     this.post({ type: "send", playerId, command });
@@ -128,6 +142,13 @@ export class WorkerHost implements SimHost {
   private receive(message: FromWorker): void {
     if (message.type === "error") {
       this.failed(message.message);
+      return;
+    }
+    if (message.type === "restored") {
+      this.restorer = new FrameRestorer();
+      const frame = this.restorer.restore(message.frame);
+      this.lastFrameAt = performance.now();
+      this.restoring.shift()?.({ owner: message.owner, fort: message.fort, frame });
       return;
     }
     const frame = this.restorer.restore(message.frame);

@@ -224,18 +224,21 @@
   </button>
   {#if openGames.length > 0}
     <section class="open-games" aria-labelledby="open-games-title">
-      <h2 id="open-games-title">Open games ({openGames.length})</h2>
+      <h2 id="open-games-title">Public games ({openGames.length})</h2>
       <ul>
         {#each openGames.slice(0, 4) as game (game.gameId)}
           <li>
             <div class="game-info">
               <span class="game-title">{game.creator}'s game</span>
               <span class="game-meta"
-                >{describeGame(game)} · {game.players}/{game.maxPlayers} players{#if game.startsIn !== null}
+                >{describeGame(game)} · {game.players}/{game.maxPlayers} players{#if game.running}
+                  · playing now{:else if game.startsIn !== null}
                   · starting soon{/if}</span
               >
             </div>
-            <button type="button" onclick={() => onJoinOnline(game.gameId)}>Join</button>
+            <button type="button" onclick={() => onJoinOnline(game.gameId)}
+              >{game.running ? "Watch" : "Join"}</button
+            >
           </li>
         {/each}
       </ul>

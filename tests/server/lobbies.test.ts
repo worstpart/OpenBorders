@@ -7,6 +7,7 @@ import { commandProblem } from "../../src/server/validate.ts";
 import { Lobbies, type GameEvents, type Peer } from "../../src/server/lobbies.ts";
 import {
   cleanName,
+  EMPTY_GAME_GRACE_MS,
   gamePlayers,
   PROTOCOL_VERSION,
   settingsProblem,
@@ -35,6 +36,7 @@ function fakePeer(): FakePeer {
     inbox: [],
     closedWith: null,
     send: (m) => peer.inbox.push(m),
+    sendText: (text) => peer.inbox.push(JSON.parse(text) as ServerMessage),
     close: (reason) => (peer.closedWith = reason),
   };
   return peer;
@@ -45,29 +47,55 @@ function setup() {
     config: GameConfig;
     events: GameEvents;
     commands: [number, Command][];
+    snapshots: number;
     stopped: boolean;
   }[] = [];
   let ids = 0;
+  let now = 0;
+  const timers: { at: number; fn: () => void; live: boolean }[] = [];
   const lobbies = new Lobbies({
     startRunner: (config, events) => {
-      const runner = { config, events, commands: [] as [number, Command][], stopped: false };
+      const runner = {
+        config,
+        events,
+        commands: [] as [number, Command][],
+        snapshots: 0,
+        stopped: false,
+      };
       runners.push(runner);
       return {
         command: (playerId, command) => runner.commands.push([playerId, command]),
+        snapshot: () => runner.snapshots++,
         stop: () => (runner.stopped = true),
       };
     },
     newGameId: () => `game${++ids}`,
     newSeed: () => 1234,
+    newToken: () => `token${++ids}`,
     maxGames: 2,
+    now: () => now,
+    schedule: (fn, ms) => {
+      const timer = { at: now + ms, fn, live: true };
+      timers.push(timer);
+      return () => (timer.live = false);
+    },
   });
+  const advance = (ms: number) => {
+    now += ms;
+    for (const t of timers) {
+      if (t.live && t.at <= now) {
+        t.live = false;
+        t.fn();
+      }
+    }
+  };
   const join = () => {
     const peer = fakePeer();
     const connection = lobbies.connect(peer);
     connection.receive({ t: "hello", version: PROTOCOL_VERSION });
     return { peer, connection };
   };
-  return { lobbies, runners, join };
+  return { lobbies, runners, join, advance };
 }
 
 const last = (peer: FakePeer) => peer.inbox.at(-1);
@@ -127,7 +155,7 @@ describe("lobbies", () => {
     const lobbies = new Lobbies({
       startRunner: (_config, events) => {
         runners.push(events);
-        return { command: () => {}, stop: () => {} };
+        return { command: () => {}, snapshot: () => {}, stop: () => {} };
       },
       newGameId: (() => {
         let n = 0;
@@ -160,7 +188,7 @@ describe("lobbies", () => {
 
   it("one address may hold only a few open games (3.3)", () => {
     const lobbies = new Lobbies({
-      startRunner: () => ({ command: () => {}, stop: () => {} }),
+      startRunner: () => ({ command: () => {}, snapshot: () => {}, stop: () => {} }),
       newGameId: (() => {
         let n = 0;
         return () => `g${++n}`;
@@ -207,8 +235,8 @@ describe("lobbies", () => {
     expect(old.closedWith).toBe("version");
   });
 
-  it("leaving: the lobby passes to the next player; the game stops when every human has left", () => {
-    const { runners, join, lobbies } = setup();
+  it("leaving: the lobby passes to the next player; the game stops 2 min after every human left", () => {
+    const { runners, join, lobbies, advance } = setup();
     const a = join();
     a.connection.receive({ t: "create", settings: SETTINGS });
     const b = join();
@@ -227,6 +255,11 @@ describe("lobbies", () => {
     b.connection.closed();
     expect(runners[0]!.stopped).toBe(false); // c still plays
     c.connection.closed();
+    // It runs on a while for a rejoin (3.5), then stops.
+    expect(runners[0]!.stopped).toBe(false);
+    advance(EMPTY_GAME_GRACE_MS - 1);
+    expect(runners[0]!.stopped).toBe(false);
+    advance(1);
     expect(runners[0]!.stopped).toBe(true);
     expect(lobbies.gameCount).toBe(0);
   });

@@ -1,9 +1,18 @@
 <script lang="ts">
   import { fly } from "svelte/transition";
+  import { onlineBanner } from "../../app/online.ts";
   import { ui } from "../../app/uiState.svelte.ts";
+
+  // An online game's connection state (3.5) heads the list while it matters.
+  const banner = $derived(onlineBanner(ui.online));
 </script>
 
 <ul class="toasts" aria-live="polite" aria-label="Notifications">
+  {#if banner}
+    <li class="toast banner {banner.tone}" role={banner.tone === "error" ? "alert" : "status"}>
+      {banner.text}
+    </li>
+  {/if}
   {#each ui.toasts as toast (toast.id)}
     <li
       class="toast {toast.tone}"
@@ -45,6 +54,18 @@
   }
 
   .toast.danger {
+    border-color: color-mix(in srgb, var(--color-danger) 60%, transparent);
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  .toast.warn {
+    border-color: color-mix(in srgb, var(--color-warning) 60%, transparent);
+    color: var(--color-warning);
+    font-weight: 600;
+  }
+
+  .toast.error {
     border-color: color-mix(in srgb, var(--color-danger) 60%, transparent);
     color: var(--color-danger);
     font-weight: 600;

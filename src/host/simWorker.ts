@@ -14,7 +14,7 @@ interface WorkerScope {
 const scope = self as unknown as WorkerScope;
 
 let host: LocalHost | null = null;
-const slimmer = new FrameSlimmer();
+let slimmer = new FrameSlimmer();
 
 function fail(error: unknown): void {
   scope.postMessage({
@@ -56,6 +56,22 @@ scope.onmessage = (event) => {
       case "turn":
         host?.applyTurn(message.turn);
         break;
+      case "debugCorrupt":
+        host?.debugCorrupt();
+        break;
+      case "restore": {
+        if (!host) break;
+        const state = host.restore(message.snapshot);
+        // The main thread forgets the old ships and walls too: send everything again.
+        slimmer = new FrameSlimmer();
+        const { wire, transfer } = slimmer.slim(state.frame);
+        scope.postMessage({ type: "restored", owner: state.owner, fort: state.fort, frame: wire }, [
+          state.owner.buffer,
+          state.fort.buffer,
+          ...transfer,
+        ]);
+        break;
+      }
       case "send":
         if (message.playerId === null) host?.send(message.command);
         else host?.sendAs(message.playerId, message.command);

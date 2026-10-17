@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅; 3.5 resync / reconnect next — handoff `PHASE_3_AFTER_3.4_HANDOFF.md` |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅; 3.6 online feel next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -859,7 +859,7 @@ bots-only games must not change):
 | 3.2 ✅ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ✅ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ✅ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
-| 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
+| 3.5 ✅ | **Hash checks, resync, reconnect, spectators** | clients check every turn's hash against the server's and ask for a snapshot when they drift; rejoin with a secret seat token (reload, reopened link, dropped connection — retried by itself); late join = watch (snapshot + the turns since) | robustness |
 | 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
 | 3.7 ⬜ | **Accounts & profiles** *(added 2026-10-17 at the user's request)* | **optional** sign-in — **Google** and/or an email + password account; guests keep playing with just a name (D-035). A profile: display name (the lobby name rules + blocklist), games played, wins, join date; signed-in names are reserved. Needs: a database (Railway Postgres add-on — a small monthly cost, ask first), a Google Cloud OAuth client (the user creates it, like the Railway account), sessions in secure cookies, password hashing (a vetted package, ask first), a short privacy note. Decision D-037 at the start: sign-in methods, what a profile holds and shows, data kept and how to delete it | people can keep a name and a record |
 | 3.8 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host (signing in too); logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
@@ -983,6 +983,43 @@ Checked: 3 sim tests; a lone online game left alone started itself at tick 600 w
 49-tile spawn; bots-only games identical to `4d597f7`. Tests: 528. Deployed after the user's game
 (e4cb1ae): live smoke 700 turns (past the 60 s spawn timeout) with `ONLINE_RULES` on both sides,
 0 mismatches. **Milestone 3.4 done.**
+
+**3.5 result** *(2026-10-17)*. Protocol v5. **Repair:** a browser checks every turn's hash (and
+that turns follow each other); off by one, it sends `desync`, drops turns until the server's
+`sync` (a `serializeWorld` snapshot made by the game's worker thread between two ticks, sent as
+the JSON the worker made — never re-encoded) and replaces its worker's world with it
+(`deserializeWorld`); the snapshot and the turns after it travel on the same socket in order, so
+no turn history is needed. The page redraws only the tiles that differ and drops effects drawn
+from the old world. Asked again after 8 s if nothing came; the server answers one connection at
+most every 5 s, and everyone waiting shares one snapshot; a failed snapshot is an error message,
+never the end of the game. **Rejoin:** `start` gives each player a secret token, kept by the
+page in sessionStorage (this tab: reloads; two tabs of one browser never swap seats) and
+localStorage (a link reopened in a new tab); the address bar shows the game's link, so a reload
+or a reopened tab sends `rejoin` and the player is back in their country (`start` with
+`midGame`, then a snapshot — the page never shows tick 0 of a game in progress). A rejoin from
+another tab takes the seat over and the old tab says "This game was opened in another tab."
+Others see "X lost the connection — their country waits for them" / "X is back". Seats are kept
+for the whole game (the country stands idle); a game nobody plays any more runs on **2 minutes**
+for a rejoin, then stops (mine). **Auto-reconnect:** a dropped connection is retried after 1, 2,
+4, 8 and 15 s ("Connection lost — reconnecting (try n of 5)…"), then given up; a refused rejoin
+(the game ended, the server restarted) says so. **Spectators:** a link to a running game opens
+it to **watch** (player 0, up to 32 a game; commands ignored, no menus, no "you" toasts — 0 is
+also neutral land); running public games stay on the start screen's list ("Public games") with
+**Watch**. Messages over 16 KB are compressed (permessage-deflate; turns stay plain). The page
+shows the online state as a banner over the toasts (catching up, reconnecting, watching,
+errors). Dev hooks: `__openborder.corrupt()` (a square of land changes hands in this browser's
+world only) and `dropConnection()`; `localStorage["openborder.devServerPort"]` points the dev
+page at another local server. **Checked:** tests (server: tokens, takeover, wrong tokens, the
+grace, watchers and their limit, shared snapshots, cooldown, the server game's snapshot
+rebuilding its exact world; host: a corrupted client repairs and runs in step, a missed turn
+counts as a drift, a mid-game join starts from its snapshot, a reconnect waits for its snapshot);
+`tools/onlineSmoke.ts` now also corrupts the creator (1 mismatch, repaired, then in step), adds
+a spectator mid-game and drops and rejoins the joiner (0 mismatches each) — passed; in three
+tabs: a corrupted tab caught up in under a second, a reloaded player came back into their
+country, a watcher followed the game, a dropped connection came back by itself while the other
+tab showed "lost the connection" / "is back"; no console errors. Snapshots early in a game:
+35–56 KB of JSON. Not in scope: games surviving a server restart (a Railway update still ends
+them — 3.8). Tests: 545.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

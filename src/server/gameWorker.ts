@@ -2,6 +2,8 @@
  * A game's own thread (D-034: one game per worker thread): builds the ServerGame and runs a
  * tick every rules.tickMs (100 ms) on a drift-free schedule, posting each turn to the main
  * thread, which broadcasts it. A slow tick never holds up other games or the sockets.
+ * Asked for a snapshot (3.5) it posts one between two turns — the main thread forwards both
+ * in the order they came, so the turns after a snapshot continue exactly from it.
  */
 import { parentPort } from "node:worker_threads";
 import type { Command } from "../sim/commands.ts";
@@ -11,6 +13,7 @@ import { ServerGame } from "./game.ts";
 export type ToGameWorker =
   | { readonly type: "start"; readonly config: GameConfig }
   | { readonly type: "command"; readonly playerId: number; readonly command: Command }
+  | { readonly type: "snapshot" }
   | { readonly type: "stop" };
 
 export type FromGameWorker =
@@ -20,6 +23,9 @@ export type FromGameWorker =
       readonly commands: unknown[];
       readonly hash: number;
     }
+  | { readonly type: "snapshot"; readonly tick: number; readonly json: string }
+  /** A snapshot couldn't be made (a bug): the game goes on, the asker gets an error. */
+  | { readonly type: "snapshotFailed"; readonly message: string }
   | { readonly type: "ended" }
   | { readonly type: "error"; readonly message: string };
 
@@ -80,6 +86,18 @@ port.on("message", (message: ToGameWorker) => {
       break;
     case "command":
       game?.queue(message.playerId, message.command);
+      break;
+    case "snapshot":
+      if (game) {
+        try {
+          post({ type: "snapshot", ...game.snapshot() });
+        } catch (error) {
+          post({
+            type: "snapshotFailed",
+            message: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          });
+        }
+      }
       break;
     case "stop":
       if (timer) clearTimeout(timer);

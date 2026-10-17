@@ -6,14 +6,22 @@
  * (map spec, seed, players) and its player id, regenerates the map and runs the same
  * simulation from the server's turns. The server runs the simulation too; each turn carries
  * the server's state hash after that tick, so a client can tell when it has drifted.
+ *
+ * Repair, rejoin, watching (3.5): a client that drifted sends `desync` and gets a `sync` — a
+ * snapshot of the server's world (sim/snapshot.ts) — then the turns after it, on the same
+ * socket and in order, so nothing is missed. Each player gets a secret rejoin token at the
+ * start; `rejoin` with it puts a reconnecting browser back in its country (`start` with
+ * `midGame`, then a `sync`). `join` on a game already running makes the browser a
+ * spectator (player 0): it gets the same, and its commands are ignored.
  */
 import type { Command, StampedCommand } from "../sim/commands.ts";
+import type { WorldSnapshot } from "../sim/snapshot.ts";
 import { MAP_DIMENSIONS, MAP_SIZE_NAMES, MAP_STYLES, type MapSpec } from "../sim/map/generate.ts";
 import { makeRules, type Difficulty } from "../sim/rules.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
 
 /** Bumped when the messages change; a client and server of different versions refuse each other. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * The rules of every online game — the server and each browser build the world with exactly
@@ -30,6 +38,19 @@ export const MAX_CLIENT_MESSAGE_BYTES = 8 * 1024;
 
 /** Humans per online game (D-035; bots fill the rest, D-036). */
 export const MAX_HUMANS = 16;
+
+/** Spectators per running game (3.5). */
+export const MAX_WATCHERS = 32;
+
+/**
+ * A running game nobody plays any more (every human disconnected) keeps going this long, so a
+ * reload or a dropped connection can rejoin it; then it stops (3.5). Seats are otherwise kept
+ * for the whole game — a missing player's country stands idle.
+ */
+export const EMPTY_GAME_GRACE_MS = 120_000;
+
+/** One connection asks for a repair snapshot at most this often (3.5). */
+export const RESYNC_COOLDOWN_MS = 5_000;
 
 /** The creator's choices on the start screen. */
 export interface OnlineSettings {
@@ -113,7 +134,12 @@ export function uniqueName(name: string, taken: ReadonlySet<string>): string {
 export type ClientMessage =
   | { readonly t: "hello"; readonly version: number }
   | { readonly t: "create"; readonly settings: OnlineSettings; readonly name: string }
+  /** Join a lobby — or, once the game runs, watch it (3.5). */
   | { readonly t: "join"; readonly gameId: string; readonly name: string }
+  /** Back into a running game with the token its `start` gave (3.5). */
+  | { readonly t: "rejoin"; readonly gameId: string; readonly token: string }
+  /** This client's state differs from the server's after `tick`: send a snapshot (3.5). */
+  | { readonly t: "desync"; readonly tick: number }
   /** In the lobby: change your name, or say you're (not) ready. */
   | { readonly t: "name"; readonly name: string }
   | { readonly t: "ready"; readonly ready: boolean }
@@ -136,7 +162,22 @@ export type ServerMessage =
       /** A public game starts by itself this many ms from now; null = no countdown. */
       readonly startsIn: number | null;
     }
-  | { readonly t: "start"; readonly config: GameConfig; readonly playerId: PlayerId }
+  /**
+   * The game runs: `playerId` is yours (0: you watch). `rejoin` is your secret seat token
+   * ("" for spectators); `midGame`: a `sync` follows — wait for it instead of playing turns.
+   */
+  | {
+      readonly t: "start";
+      readonly gameId: string;
+      readonly config: GameConfig;
+      readonly playerId: PlayerId;
+      readonly rejoin: string;
+      readonly midGame: boolean;
+    }
+  /** The server's whole game state; the turns that follow continue from its tick (3.5). */
+  | { readonly t: "sync"; readonly snapshot: WorldSnapshot }
+  /** A human player lost their connection, or is back (3.5). */
+  | { readonly t: "presence"; readonly playerId: PlayerId; readonly connected: boolean }
   /** Tick `tick`'s commands, and the server's state hash after running it. */
   | {
       readonly t: "turn";
@@ -225,4 +266,6 @@ export interface OpenGame {
   readonly maxPlayers: number;
   readonly summary: LobbySummary;
   readonly startsIn: number | null;
+  /** Already playing: the start screen offers to watch it (3.5). */
+  readonly running: boolean;
 }
