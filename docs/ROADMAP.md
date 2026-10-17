@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 decisions made 2026-10-16; 3.0 next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app); 3.2 next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -855,7 +855,7 @@ bots-only games must not change):
 | | Milestone | What it delivers | Proves |
 |---|---|---|---|
 | 3.0 ✅ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
-| 3.1 🟡 | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
+| 3.1 ✅ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
 | 3.2 ⬜ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ⬜ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ⬜ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
@@ -907,8 +907,14 @@ pause online and has no speed buttons; `railway.json`; `npm start`. **Checked:**
 mismatches**, both expanding; two browser tabs (dev page and the production build served by
 the server) — lobby by link, Start, both spawned and expanded, in sync, no console errors; the
 solo game unchanged. Tests: 508 (7 new: lobbies, stamping, refusals, leaving, `ServerGame`,
-shape checks, team dealing). **Left for 3.1:** the deploy — the user creates the Railway
-account and connects the GitHub repo; then two browsers anywhere play one game.
+shape checks, team dealing). **Deployed 2026-10-17:** the user set up Railway (GitHub `worstpart/OpenBorders`, auto-deploy on
+push) — **https://openborders-production.up.railway.app** (`/health` → `ok N games`; it serves the
+same bundle as a local build). Over the internet: `tools/onlineSmoke.ts
+wss://openborders-production.up.railway.app/ws` — 300 turns each, **0 hash mismatches**, 10
+turns/s; two browser tabs on the public address (production build, no debug hook: real map
+clicks) — lobby by link, Start, spawn, expand, no drift warnings, no console errors; **click →
+visible on the map in ~155 ms** (spawn, both tabs); the server closed the game when both left.
+**Milestone 3.1 done.**
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
