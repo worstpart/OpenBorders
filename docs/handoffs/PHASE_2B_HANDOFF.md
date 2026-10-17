@@ -1,5 +1,8 @@
 # Phase 2B handoff — air & strategic warfare complete; next: Phase 3 multiplayer
 
+> **Superseded as the entry point by [`PHASE_3_AFTER_3.0_HANDOFF.md`](PHASE_3_AFTER_3.0_HANDOFF.md)**
+> (2026-10-16). Its §3.1, §3.2 and §4–§7 below still apply.
+
 > **For the next session: read this file first.** It is the end-of-phase handoff for Phase 2B
 > and replaces [`PHASE_2B_AFTER_2B.5_HANDOFF.md`](PHASE_2B_AFTER_2B.5_HANDOFF.md). The
 > **working agreements (§4), environment facts (§5) and repository map (§6) of
