@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   donationKeyOf,
   donationOptions,
-  mobilizePreview,
   type DonationContext,
 } from "../../src/client/app/economy.ts";
-import { HintTracker } from "../../src/client/app/hints.ts";
 import { toastsForEvents } from "../../src/client/app/toasts.ts";
 import type { PlayerSnapshot } from "../../src/sim/frame.ts";
 import { DEFAULT_RULES } from "../../src/sim/rules.ts";
@@ -27,7 +25,7 @@ function player(id: number, overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
     gold: 50_000,
     goldPerTick: 20,
     tradeGold: 0,
-    mobilizeDiscount: 0,
+    capacityBonus: 0,
     growthBonus: 0,
     peakTiles: 100,
     tier: id === 1 ? null : "nation",
@@ -41,31 +39,6 @@ function player(id: number, overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
     ...overrides,
   };
 }
-
-describe("Mobilize button", () => {
-  it("counts a Factory's discount", () => {
-    expect(mobilizePreview(DEFAULT_RULES, player(1, { mobilizeDiscount: 0.2 }))).toEqual({
-      troops: 10_000,
-      gold: 8_000,
-      blocked: null,
-    });
-  });
-
-  it("buys 10% of the capacity for as much gold", () => {
-    expect(mobilizePreview(DEFAULT_RULES, player(1))).toEqual({
-      troops: 10_000,
-      gold: 10_000,
-      blocked: null,
-    });
-  });
-
-  it("buys what the gold pays for, and nothing at the cap or without gold", () => {
-    expect(mobilizePreview(DEFAULT_RULES, player(1, { gold: 2_500 })).troops).toBe(2_500);
-    expect(mobilizePreview(DEFAULT_RULES, player(1, { gold: 0 })).blocked).toBe("noGold");
-    const full = player(1, { homeTroops: 80_000, fieldTroops: 20_000 });
-    expect(mobilizePreview(DEFAULT_RULES, full).blocked).toBe("full");
-  });
-});
 
 describe("donation options", () => {
   const ctx = (overrides: Partial<DonationContext> = {}): DonationContext => ({
@@ -111,7 +84,7 @@ describe("donation options", () => {
   });
 });
 
-describe("gold toasts and hint", () => {
+describe("gold toasts", () => {
   const names = (id: number) => `P${id}`;
 
   it("report gifts to and from the local player, and loot", () => {
@@ -130,15 +103,5 @@ describe("gold toasts and hint", () => {
       ["You sent P3 5K gold", "info"],
       ["You eliminated P4 and took 8K gold", "success"],
     ]);
-  });
-
-  it("the gold hint shows once the player can mobilize", () => {
-    const hints = new HintTracker(null);
-    for (const id of ["expand", "sweetSpot", "menus"] as const) hints.complete(id);
-    const base = { playing: true, canAttackPlayer: false };
-    expect(hints.update({ ...base, canMobilize: false }, 0)).toBeNull();
-    expect(hints.update({ ...base, canMobilize: true }, 1)).toBe("gold");
-    hints.complete("gold");
-    expect(hints.update({ ...base, canMobilize: true }, 2)).toBeNull();
   });
 });

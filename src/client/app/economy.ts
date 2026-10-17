@@ -1,36 +1,11 @@
 /**
- * What the HUD shows about gold (GAME_DESIGN.md §3.16): the Mobilize button and the
- * donation options for a friend. Pure functions over frame snapshots, so they can be
+ * What the HUD shows about gold (GAME_DESIGN.md §3.16): the donation options for a friend. Pure functions over frame snapshots, so they can be
  * tested without the UI; the numbers come from the simulation's own formulas.
  */
 import type { PlayerSnapshot } from "../../sim/frame.ts";
 import type { GameRules } from "../../sim/rules.ts";
-import {
-  donationAmount,
-  mobilizeCost,
-  mobilizeTroops,
-  troopRoom,
-} from "../../sim/systems/economy.ts";
+import { donationAmount, troopRoom } from "../../sim/systems/economy.ts";
 import type { DonationResource, PlayerId } from "../../sim/world.ts";
-
-/** One Mobilize click (or M) buys this share (%) of the capacity. */
-export const MOBILIZE_PERCENT = 10;
-
-export interface MobilizePreview {
-  /** Troops one click raises (0 = none). */
-  readonly troops: number;
-  readonly gold: number;
-  /** Why it can't be used now, if it can't. */
-  readonly blocked: "full" | "noGold" | null;
-}
-
-export function mobilizePreview(rules: GameRules, me: PlayerSnapshot): MobilizePreview {
-  if (troopRoom(me) < 1) return { troops: 0, gold: 0, blocked: "full" };
-  const troops = mobilizeTroops(rules, me, MOBILIZE_PERCENT * 100, me.mobilizeDiscount);
-  if (troops < 1) return { troops: 0, gold: 0, blocked: "noGold" };
-  const gold = Math.min(me.gold, mobilizeCost(rules, troops, me.mobilizeDiscount));
-  return { troops, gold, blocked: null };
-}
 
 /** Key of the local player's last donation of a resource to a friend (see ui.myDonations). */
 export function donationKeyOf(to: PlayerId, resource: DonationResource): string {

@@ -8,7 +8,7 @@
 | **0 — Research** | Understand OpenFront; design our architecture and first slice | ✅ |
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
-| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | 🟡 2B.0 ✅ · 2B.0b ✅ · 2B.1 ✅ · 2B.2 ✅ · 2B.3 ✅ · 2B.4 ✅ · 2B.5 ✅ · 2B.6 ✅ — awaiting the user's playtest approval |
+| **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
 | **3 — Multiplayer** | Authoritative server, lobbies, reconnects, spectators | ⬜ |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
@@ -488,7 +488,7 @@ Range re-check: building spacing (8) and Port range (30) are about local density
 stay; boat speed stays (crossings on Huge take longer — that is the map's size); the trade
 cap (6,000 at 560 tiles) keeps Huge routes from overpaying; nations' sea reach now scales.
 
-## Phase 2B — Air & strategic warfare 🟡
+## Phase 2B — Air & strategic warfare ✅
 
 Design: GAME_DESIGN §3.17.7–3.17.8. **Placement (user, 2026-10-02): after Phase 2, before
 multiplayer** — the solo game gets its full depth first; Phase 3 then carries these
@@ -793,6 +793,36 @@ open sea (the order event, the ship there 2 km from the spot), its 15 km circle;
 patrolling offshore; a strike missile on an enemy Housing: destroyed, the enemy 612.9K → 548.9K
 troops, toast "🚀 Your strike missile hit 1 building: −2 levels each · 60.9K troops killed"; no
 console errors. Tests: 496.
+
+**Phase 2B playtest round (2026-10-16, D-033)** — the user played Phase 2B ("This feels good")
+and asked for twelve changes; placed here because they tune Phase 2B's own systems and HUD
+(none is a new system). Asked three concrete questions (splash, troops, icons) — the user chose
+craters + blasts, "Housing matters more" **and removing Mobilize entirely**, and colour + symbol
+badges. Done: **strike-missile crater** (4 km of enemy land burns to neutral, 30 s at 3× to
+retake, troops lost in proportion; standing buildings' tiles spared so the buster keeps its job),
+**bunker-buster splash** (−1 level within 4 km), missiles **60 km/s**, a **missile launcher** in
+the command bar (R / T / X; each click on enemy land fires from the nearest Silo that can, while
+missiles are left); **Mobilize removed** (command, button, key M, Factory discount, war chest),
+land capacity −⅓, Housing 2.5× (75k / 225k / 625k), "🏠 +75K" on the troop bar; **keys 1–7**
+for the build bar (presets on Shift+1–5); build-bar tiles fit their text (one-line names, the
+key on each, wrapping row); **type badges** (colour + symbol) on the map, build bar and cards;
+**level pips** on zoomed-out dots; the **hover card** hidden over unclaimed and tribe land and
+rebuilt as labelled rows; trade 1,000 + 12/tile (cap 6,000); **80%** to win (FFA). Investigation
+of nations' troops: land gave ~90% of their capacity and Mobilize turned their gold into armies
+(1.7M troops in 12 min for one nation); after: Housing gives 60–80% of a big nation's capacity
+late in the game. **Headless** (Medium; before in brackets): Islands (40) median 20.4 min [18.6],
+370 player attacks a game [369], 8.6 missiles [4.2], 2.5 Silos [1.7]; Islands 2 teams (30) 11.2
+min [8.5], teams 13 · 17; Continent Hard (60) 10.1 min [8.8], wins expander 14 · turtle 17 ·
+opportunist 15 · aggressor 14 [16 · 21 · 12 · 11]. No errors, no timeouts, every game has a
+winner. **Browser** (own tab): keys 1 / 2 pick up Housing / Factory, Shift+3 sets 50%; the seven
+build tiles on one row inside the bar with nothing spilling out (it overflowed at 800 px at
+first: tiles tightened, the bar widened to 700 px); badges on the map icons and build bar; a
+Silo II's launcher "🚀 Missile 2 · 🎯 Buster 2", R then two clicks on an enemy fired two strike
+missiles and aiming ended by itself; the aiming preview with the red crater inside the 8 km
+circle ("crater: 49 tiles burned · …"); two craters on the map and the toast "🚀 Your strike
+missile hit — no buildings there · 49 tiles of land burned · 56.8K troops killed"; zoomed-out
+Housing dots in green with one and two pips; the hover card over a nation (Troops, Land, Gold,
+Housing rows) and none over a tribe; no console errors on a fresh load. Tests: 490.
 
 **Dependency map** (what must exist first):
 

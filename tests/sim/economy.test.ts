@@ -1,4 +1,4 @@
-/** Gold, Mobilize, donations and loot (GAME_DESIGN.md §3.16). */
+/** Gold, donations and loot (GAME_DESIGN.md §3.16). Mobilize was removed (D-033). */
 import { describe, expect, it } from "vitest";
 import type { Command, StampedCommand } from "../../src/sim/commands.ts";
 import type { SimEvent } from "../../src/sim/events.ts";
@@ -85,47 +85,17 @@ describe("gold income", () => {
     const world = twoPlayers({ rules: makeRules({ economy: { enabled: false } }) });
     run(world, 20);
     expect(world.players[0]!.gold).toBe(0);
-    expect(rejection(send(world, 1, { type: "mobilize", percentBp: 1000 }))).toBe(
-      "there is no gold in this game",
-    );
   });
 });
 
-describe("mobilize", () => {
-  it("turns gold into home troops, one for one, up to the share of capacity asked", () => {
+describe("mobilize (removed, D-033)", () => {
+  it("is no command any more: gold no longer buys troops", () => {
     const world = twoPlayers();
     const me = world.players[0]!;
     me.gold = 100_000;
-    const capacity = me.capacity;
-    const events = send(world, 1, { type: "mobilize", percentBp: 1000 });
-    const troops = Math.floor(capacity * 0.1);
-    expect(events).toContainEqual({ type: "mobilized", playerId: 1, troops, gold: troops });
-    expect(me.homeTroops).toBe(5_000 + troops);
-    expect(me.gold).toBe(100_000 - troops + me.lastIncome);
-  });
-
-  it("never goes past the capacity, and buys only what the gold pays for", () => {
-    const world = twoPlayers();
-    const me = world.players[0]!;
-    me.gold = 1_000_000;
-    send(world, 1, { type: "mobilize", percentBp: 10_000 });
-    expect(me.homeTroops).toBe(me.capacity);
-    expect(rejection(send(world, 1, { type: "mobilize", percentBp: 1000 }))).toBe(
-      "your army is full",
-    );
-
-    const poor = twoPlayers();
-    poor.players[0]!.gold = 300;
-    send(poor, 1, { type: "mobilize", percentBp: 5000 });
-    expect(poor.players[0]!.homeTroops).toBe(5_300);
-    expect(poor.players[0]!.gold).toBe(poor.players[0]!.lastIncome);
-  });
-
-  it("is rejected without gold", () => {
-    const world = twoPlayers();
-    expect(rejection(send(world, 1, { type: "mobilize", percentBp: 1000 }))).toBe(
-      "not enough gold",
-    );
+    const command = { type: "mobilize", percentBp: 1000 } as unknown as Command;
+    expect(rejection(send(world, 1, command))).toBe("unknown command mobilize");
+    expect(me.homeTroops).toBe(5_000 + me.lastGrowth);
   });
 });
 
@@ -218,49 +188,6 @@ describe("loot", () => {
 });
 
 describe("nations and gold", () => {
-  it("spend their gold as a war chest, right before attacking a player", () => {
-    const world = worldFromAscii(
-      `
-      ~~~~~~~~~~~~
-      ~1111112222~
-      ~1111112222~
-      ~~~~~~~~~~~~
-      `,
-      { rules: RULES, players: ["bot", "human"], personality: "aggressor", homeTroops: [0, 100] },
-    );
-    const bot = world.players[0]!;
-    bot.homeTroops = Math.floor(0.8 * bot.capacity);
-    bot.gold = 1_000_000;
-    let mobilizedWithAttack = false;
-    let mobilizedAlone = false;
-    for (let k = 0; k < 80; k++) {
-      const { events } = runTick(world, { tick: world.tick + 1, commands: [] });
-      const mobilized = events.some((e) => e.type === "mobilized" && e.playerId === 1);
-      const attacked = events.some(
-        (e) => e.type === "attackStarted" && e.attacker === 1 && e.target === 2,
-      );
-      if (mobilized && attacked) mobilizedWithAttack = true;
-      else if (mobilized) mobilizedAlone = true;
-    }
-    expect(mobilizedWithAttack).toBe(true);
-    expect(mobilizedAlone).toBe(false);
-  });
-
-  it("don't mobilize while they just grow", () => {
-    const world = worldFromAscii(
-      `
-      ~~~~~~~~~~
-      ~1111111~~
-      ~1111111~~
-      ~~~~~~~~~~
-      `,
-      { rules: RULES, players: ["bot"], personality: "turtle", homeTroops: [1_000] },
-    );
-    world.players[0]!.gold = 1_000_000;
-    const events = run(world, 80);
-    expect(events.some((e) => e.type === "mobilized")).toBe(false);
-  });
-
   it("send troops to a teammate who is losing a war", () => {
     const world = worldFromAscii(
       `

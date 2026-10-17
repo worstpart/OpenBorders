@@ -196,3 +196,47 @@ export function iconPath(type: Placeable, level: number): string {
   const set = type === "wall" ? WALL_ICONS : BUILDING_ICONS[type];
   return set[Math.min(3, Math.max(1, level)) - 1]!;
 }
+
+/**
+ * Type badges (D-033, the user: "icons do not feel clear enough of what they actually are"):
+ * every building type has its own colour and a bold symbol, drawn as a small disc on the
+ * corner of its icon — on the map, in the build bar and on its card — and as the fill of its
+ * far-zoom dot. Simple silhouettes (24 × 24, filled nonzero) that read at 10 px.
+ */
+export const TYPE_COLORS: Readonly<Record<Placeable, string>> = {
+  housing: "#3fb950",
+  factory: "#d29922",
+  port: "#388bfd",
+  airport: "#a371f7",
+  sam: "#2ec4b6",
+  silo: "#f85149",
+  wall: "#8b949e",
+};
+
+export const TYPE_GLYPHS: Readonly<Record<Placeable, string>> = {
+  // A house.
+  housing: "M12 3L22 12H19V21H5V12H2Z",
+  // A sawtooth factory with a chimney.
+  factory: "M2 21V11L8 14V11L14 14V4H18V21Z",
+  // An anchor.
+  port: [
+    "M12 2a2.6 2.6 0 1 1 0 5.2a2.6 2.6 0 1 1 0-5.2Z",
+    rect(10.8, 6.5, 2.4, 13),
+    rect(7.5, 8.6, 9, 2.2),
+    "M3.5 12.5H6.2A5.8 5.8 0 0 0 17.8 12.5H20.5A8.5 8.5 0 0 1 3.5 12.5Z",
+  ].join(""),
+  // A plane.
+  airport:
+    "M12 1.5C12.9 1.5 13.4 2.3 13.4 3.2V9L22 14V16.6L13.4 14V18.6L15.8 20.4V22L12 21L8.2 22V20.4L10.6 18.6V14L2 16.6V14L10.6 9V3.2C10.6 2.3 11.1 1.5 12 1.5Z",
+  // A shield.
+  sam: "M12 2L20.5 5.2V11.2C20.5 16.3 16.9 20.4 12 22.2C7.1 20.4 3.5 16.3 3.5 11.2V5.2Z",
+  // A rocket.
+  silo: [
+    "M12 1.5C14.8 3.8 16.3 7.4 16.3 11.4V17H7.7V11.4C7.7 7.4 9.2 3.8 12 1.5Z",
+    "M7.7 12.5L4.2 16.8V20.5L7.7 18.2Z",
+    "M16.3 12.5L19.8 16.8V20.5L16.3 18.2Z",
+    "M9.8 17.8H14.2L13.2 22H10.8Z",
+  ].join(""),
+  // Battlements.
+  wall: "M2 21V8H6V11H10V8H14V11H18V8H22V21Z",
+};

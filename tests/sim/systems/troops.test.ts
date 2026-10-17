@@ -19,17 +19,18 @@ function ticksToGrow(tiles: number, from: number, to: number): number {
 }
 
 describe("troop capacity (golden values)", () => {
+  // D-033: land gives a third less (capacityScale 650, was 1,000); Housing gives more.
   it("grows sublinearly with land", () => {
     expect(troopCapacity(rules, 0)).toBe(10_000);
-    expect(troopCapacity(rules, 1)).toBe(11_000);
-    expect(troopCapacity(rules, 49)).toBe(20_330); // a fresh spawn
-    expect(troopCapacity(rules, 1_000)).toBe(73_095);
-    expect(troopCapacity(rules, 10_000)).toBe(261_188);
-    expect(troopCapacity(rules, 100_000)).toBe(1_009_999);
+    expect(troopCapacity(rules, 1)).toBe(10_650);
+    expect(troopCapacity(rules, 49)).toBe(16_714); // a fresh spawn
+    expect(troopCapacity(rules, 1_000)).toBe(51_012);
+    expect(troopCapacity(rules, 10_000)).toBe(173_272);
+    expect(troopCapacity(rules, 100_000)).toBe(659_999);
   });
 
   it("starts a fresh spawn at 30% of capacity", () => {
-    expect(startingTroops(rules, 49)).toBe(6_099);
+    expect(startingTroops(rules, 49)).toBe(5_014);
   });
 });
 
@@ -39,7 +40,7 @@ describe("troop growth", () => {
 
   it("follows the pinned curve (golden values)", () => {
     expect([0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1].map(growthAt)).toEqual([
-      10, 35, 63, 79, 58, 27, 3, 0,
+      10, 32, 56, 69, 51, 24, 2, 0,
     ]);
   });
 
@@ -67,11 +68,11 @@ describe("troop growth", () => {
 
   it("matches the design timings (GAME_DESIGN §3.4)", () => {
     // Fresh spawn: ~15 s (150 ticks) from 10% to 50% and from 50% to 90%.
-    expect(ticksToGrow(49, 0.1, 0.5)).toBe(132);
-    expect(ticksToGrow(49, 0.5, 0.9)).toBe(144);
-    // Big empires refill proportionally slower: ~30 s at 10k tiles, ~40 s at 100k.
-    expect(ticksToGrow(10_000, 0.1, 0.5)).toBe(277);
-    expect(ticksToGrow(100_000, 0.1, 0.5)).toBe(394);
+    expect(ticksToGrow(49, 0.1, 0.5)).toBe(123);
+    expect(ticksToGrow(49, 0.5, 0.9)).toBe(136);
+    // Big empires refill proportionally slower: ~25 s at 10k tiles, ~35 s at 100k.
+    expect(ticksToGrow(10_000, 0.1, 0.5)).toBe(249);
+    expect(ticksToGrow(100_000, 0.1, 0.5)).toBe(353);
   });
 });
 

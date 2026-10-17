@@ -50,7 +50,7 @@ function player(overrides: Partial<PlayerSnapshot>): PlayerSnapshot {
     gold: 0,
     goldPerTick: 0,
     tradeGold: 0,
-    mobilizeDiscount: 0,
+    capacityBonus: 0,
     growthBonus: 0,
     peakTiles: 100,
     tier: "nation",

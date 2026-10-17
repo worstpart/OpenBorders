@@ -24,7 +24,7 @@
  * --teams N deals the nations round-robin into N teams (GAME_DESIGN §3.15; tribes have no
  * team); the report then counts wins by team and checks that teammates never fight.
  * --no-economy turns gold off (GAME_DESIGN §3.16): games then play as in 2.3. Each game
- * reports gold earned, mobilized, donated and looted, and the median income of the
+ * reports gold earned, donated and looted, and the median income of the
  * nations alive at minutes 1, 3 and 6.
  * --no-buildings turns buildings off (GAME_DESIGN §3.17): games then play as in 2.4. Each
  * game reports builds, upgrades, gold spent on them, captures, and when the first level
@@ -136,8 +136,6 @@ export interface GameReport {
   /** Gold (GAME_DESIGN §3.16), totals over all players. */
   economy: {
     earned: number;
-    mobilized: number;
-    mobilizes: number;
     troopGifts: number;
     troopsGiven: number;
     goldGifts: number;
@@ -418,8 +416,6 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
   const isTribeId = (id: number) => world.players[id - 1]?.brain?.tier === "tribe";
   const economy: GameReport["economy"] = {
     earned: 0,
-    mobilized: 0,
-    mobilizes: 0,
     troopGifts: 0,
     troopsGiven: 0,
     goldGifts: 0,
@@ -538,10 +534,7 @@ function playOne(map: GameMap, options: Options, seed: number): GameReport {
         } else if (event.type === "allianceRenewed") diplomacy.renewed++;
         else if (event.type === "allianceEnded" && event.reason === "expired") diplomacy.expired++;
         else if (event.type === "allianceBroken") diplomacy.betrayals++;
-        else if (event.type === "mobilized") {
-          economy.mobilizes++;
-          economy.mobilized += event.gold;
-        } else if (event.type === "donated") {
+        else if (event.type === "donated") {
           if (event.resource === "troops") {
             economy.troopGifts++;
             economy.troopsGiven += event.amount;

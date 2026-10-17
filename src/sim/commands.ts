@@ -49,11 +49,6 @@ export type Command =
   | { readonly type: "allianceRenew"; readonly ally: PlayerId }
   /** End the alliance with `ally` now; the breaker becomes a traitor for a while. */
   | { readonly type: "allianceBreak"; readonly ally: PlayerId }
-  /**
-   * Spend gold on instant home troops (GAME_DESIGN.md §3.16): up to this share of your
-   * capacity (basis points), limited by your gold and the room under the cap.
-   */
-  | { readonly type: "mobilize"; readonly percentBp: number }
   /** Give an ally or teammate a share (basis points) of your home troops or your gold. */
   | {
       readonly type: "donate";

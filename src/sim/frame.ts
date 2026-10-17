@@ -40,8 +40,8 @@ export interface PlayerSnapshot {
   readonly goldPerTick: number;
   /** Gold earned from trade ships so far (GAME_DESIGN.md §3.19). */
   readonly tradeGold: number;
-  /** Mobilize discount from Factories (GAME_DESIGN.md §3.17), a share. */
-  readonly mobilizeDiscount: number;
+  /** Troop capacity from Housing (included in capacity; D-033 shows it apart). */
+  readonly capacityBonus: number;
   /** Troop growth bonus from Housing, a share. */
   readonly growthBonus: number;
   readonly peakTiles: number;
@@ -283,7 +283,7 @@ export function snapshotPlayers(world: World): PlayerSnapshot[] {
     gold: p.gold,
     goldPerTick: p.lastIncome,
     tradeGold: p.tradeGold,
-    mobilizeDiscount: p.bonus.mobilizeDiscount,
+    capacityBonus: p.bonus.capacity,
     growthBonus: p.bonus.growth,
     peakTiles: p.peakTiles,
     tier: p.brain?.tier ?? null,

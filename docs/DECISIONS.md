@@ -37,6 +37,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-029 | Landed armies (airborne, boats) don't collide with counter-attacks; the pocket is taken tile by tile | **Accepted** 2026-10-12 (user's playtest of 2B.4) |
 | D-030 | Missiles hit enemies only; the warhead spares your and your teammates' land but hits allies; explosion particles | **Accepted** 2026-10-12 (mine, minor; particles the user's request) |
 | D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
+| D-033 | After the Phase 2B playtest: Mobilize removed and Housing 2.5× (land −⅓); strike-missile crater, bunker-buster splash, missiles 60 km/s, a missile launcher; keys 1–7 build; type badges and level dots; clearer hover card; 80% to win; richer early trade | **Accepted** 2026-10-16 (user's requests and answers; details mine) |
 | D-032 | After the 2B.6 playtest: warships take orders (click, then the sea), patrol 4 km offshore; missiles take 2 levels / destroy and kill troops; nations fight more (missiles, blockades, bolder expanders/opportunists) | **Accepted** 2026-10-15 (user's requests; numbers mine) |
 
 ---
@@ -311,6 +312,8 @@ spawn at random, humans choose).
 ---
 
 ## D-020 — Economy: land-linked gold, Mobilize, gifts, full loot · Accepted 2026-10-02
+
+*(Mobilize removed in D-033, 2026-10-16.)*
 
 **Context.** Milestone 2.4 (§6.1, Q6) adds gold before buildings exist (2.5). Asked at the
 start: whether troops can be donated at all, or only gold. During the milestone the user
@@ -660,6 +663,57 @@ more UI, and unit micromanagement the game otherwise avoids); trade-only warship
 unstoppable at sea); a real wall built along the coast (would break tile by tile and need
 rebuilding — the virtual fortification follows the coast as it changes hands); an 80% team goal
 (too small a change: 5.5 → 6.6 min).
+
+## D-033 — The Phase 2B playtest: Mobilize removed, Housing carries armies, missile splash and launcher, clearer HUD, 80% to win · Accepted 2026-10-16
+
+**Context.** The user played Phase 2B ("This feels good") and asked for twelve changes:
+missiles need splash damage ("maybe this comes with the bunker buster"); a button to send
+missiles fast instead of clicking the Silo; keys 1 Housing, 2 Factory, 3 Port "and so on";
+UI boxes not aligned with their text; faster missiles; more money from Ports receiving goods
+early; clearer icons; no hover card over tribes or unclaimed land, and a clearer hover card;
+80% of the land to win; level dots when zoomed out; and "nations seem to gain a lot of troops
+with little to no upgrades and housing placement, please investigate".
+
+**Investigation (nations' troops).** A recorded Islands game (7 Medium nations, 25 tribes):
+a nation's capacity came almost all from its land (100k tiles ≈ 1M troops; Housing added
+10–20%), and nations turned most of their gold into troops with Mobilize (one added 1.7M
+troops that way in 12 min). No cheating: nations play by the player's rules (D-012).
+
+**Decisions.** I asked three concrete questions; the user chose:
+- **Splash:** craters and blasts — a strike missile also burns a **4 km crater** (enemy land →
+  neutral, 3× to retake for 30 s, its owners losing home troops in proportion); a bunker
+  buster also costs every other enemy building within **4 km a level**; both show their
+  circles while aiming and on impact. *Mine, from a test:* the crater spares the tiles of
+  buildings still standing — a crater that destroyed every building in it made the strike
+  missile better than the bunker buster at everything.
+- **Troops:** "Housing matters more" **and remove Mobilize entirely, the feature seems
+  overpowered**. Land gives a third less capacity (`capacityScale` 650, was 1,000); Housing
+  gives 2.5× (75k / 225k / 625k, was 30k / 90k / 250k); Mobilize is gone — the command, the
+  button and key M, the Factory discount (Factory II/III income 100 / 250, was 90 / 220), the
+  nations' war chest. The HUD shows Housing's share ("🏠 +75K", the hover card's Housing row).
+- **Icons:** a colour and a bold symbol per building type, as a disc on the icon (map, build
+  bar, card).
+
+**Mine (the details).** The missile launcher replaces the Mobilize button: one button per
+missile your Silos can fire with the count ready (R / T / X); every click on enemy land fires
+from the nearest Silo that can, and aiming continues while missiles are left. Missiles 60 km/s
+(6 tiles a tick, was 3). Number keys 1–7 pick up the build bar's buildings; the attack presets
+moved to Shift+1–5 (numpad 1–5). Build bar: one-line names ("SAM", "Silo"), the key on each
+tile, a 700 px bar whose row wraps on narrow screens (the boxes "not aligned with text" were
+two-line names spilling out of 36 px tiles). Trade: 1,000 + 12 gold per route tile, still at
+most 6,000 (was 400 + 10) — a first try with a 9,000 cap made long Islands routes pay nearly
+as much as land. 80% to win in free-for-all (team games keep 85%); the anti-stall decline now
+reaches 50% at 30 min. Zoomed-out dots take their type's colour and one pip per level. Hover
+card: hidden over unclaimed and tribe land; owner-coloured edge, a relation chip, labelled
+rows, the click's outcome in its own box.
+
+**Alternatives.** Keep Mobilize but weaker (the user chose removal); only showing the existing
+8 km blast (the user chose craters); new art from the user's tool for the icons (slower; the
+badges work now and don't replace their art).
+
+**Consequences.** Gold has no instant-troop use: it goes into buildings, walls and missiles,
+so nations build more Housing and fire more missiles; games run ~2 min longer (80%, fewer
+instant armies). Headless and browser results: ROADMAP "Phase 2B playtest round".
 
 ## D-032 — Warship orders, harder missiles, more aggressive nations (after the 2B.6 playtest) · Accepted 2026-10-15
 

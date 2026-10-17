@@ -136,7 +136,8 @@ describe("Missile Silo", () => {
     expect(rejection(launch)).toBeNull();
     expect(w.players[0]!.gold).toBe(10_000_000 - 75_000);
     expect(w.flights[0]).toMatchObject({ kind: "missile", planes: 1, troops: 0, target: 2 });
-    expect(w.flights[0]!.arriveTick - w.tick).toBe(Math.ceil(147 / 3));
+    // 6 tiles a tick (3 until the Phase 2B playtest: "missiles need to move faster").
+    expect(w.flights[0]!.arriveTick - w.tick).toBe(Math.ceil(147 / 6));
     expect(siloReady(w.rules, w.buildings[0]!, w.tick)).toBe(0);
     expect(rejection(step(w, [fire()]))).toBe("no missile ready — the Silo is reloading");
     expect(w.buildings[0]!.reloads).toEqual([w.tick - 1 + 300]);
@@ -147,20 +148,33 @@ describe("Missile Silo", () => {
     const near = building(w, "factory", 2, at(150, 22), 3);
     const edge = building(w, "housing", 2, at(158, 22), 2); // exactly 8 km
     const far = building(w, "housing", 2, at(159, 22), 2);
-    const before = w.players[1]!.homeTroops;
+    const enemy = w.players[1]!;
+    const before = enemy.homeTroops;
+    const tilesBefore = enemy.tiles;
     const events = fireAndWait(w);
     expect(near.level).toBe(1);
     expect(w.buildings.includes(edge)).toBe(false); // level II: destroyed
     expect(far.level).toBe(2);
     expect(struck(events)).toHaveLength(2);
     expect(near.disabledUntil).toBe(w.tick - 1 + 600);
-    expect(events.find((e) => e.type === "missileHit")).toMatchObject({
-      missile: "missile",
-      victim: 2,
-      buildings: 2,
-      troops: before * 0.1,
-    });
-    expect(w.players[1]!.homeTroops).toBeCloseTo(before * 0.9, 6);
+    // The crater (D-033): the 4 km circle burns to neutral land — all but the standing
+    // Factory's tile — and its share of the land's troops die too.
+    let circle = 0;
+    for (let dy = -4; dy <= 4; dy++)
+      for (let dx = -4; dx <= 4; dx++) if (dx * dx + dy * dy <= 16) circle++;
+    const crater = circle - 1;
+    expect(w.owner[at(150, 22)]).toBe(2);
+    expect(w.owner[at(151, 22)]).toBe(NEUTRAL);
+    expect(w.owner[at(154, 22)]).toBe(NEUTRAL);
+    expect(w.owner[at(155, 22)]).toBe(2);
+    expect(enemy.tiles).toBe(tilesBefore - crater);
+    const afterShare = before * 0.9;
+    const craterKills = (afterShare * crater) / tilesBefore;
+    const hit = events.find((e) => e.type === "missileHit");
+    expect(hit).toMatchObject({ missile: "missile", victim: 2, buildings: 2, crater });
+    expect(hit?.type === "missileHit" && hit.troops).toBeCloseTo(before * 0.1 + craterKills, 6);
+    expect(enemy.homeTroops).toBeCloseTo(afterShare - craterKills, 6);
+    expect(w.scorched).toEqual([{ tile: TARGET, radius: 4, by: 1, untilTick: w.tick - 1 + 300 }]);
     expect(w.suppressions[0]).toMatchObject({ radius: 8, victim: 2, by: 1 });
     expect(isSuppressed(w, at(150, 30))).toBe(true);
     expect(isSuppressed(w, at(150, 31))).toBe(false);
@@ -197,9 +211,9 @@ describe("Missile Silo", () => {
     const before = w.players[1]!.homeTroops;
     const hits = run(w, missileTicks(w) + 1);
     expect(w.buildings.includes(fort)).toBe(false); // even a level-III building
-    expect(neighbour.level).toBe(2); // the buster hits only its target
+    expect(neighbour.level).toBe(1); // its splash (D-033): a level off everything within 4 km
     const buster = hits.find((e) => e.type === "missileHit" && e.missile === "buster");
-    expect(buster).toMatchObject({ victim: 2, troops: before * 0.05 });
+    expect(buster).toMatchObject({ victim: 2, troops: before * 0.05, buildings: 2, crater: 0 });
     // A level-II building hit by a buster is destroyed.
     const w2 = world(2);
     const house = building(w2, "housing", 2, TARGET, 2);
@@ -228,7 +242,7 @@ describe("Missile Silo", () => {
   it("one interceptor per missile: three missiles against a SAM II, one gets through", () => {
     const w = world(3);
     building(w, "sam", 2, at(100, 22), 2); // two interceptors
-    const factory = building(w, "factory", 2, TARGET, 3);
+    const factory = building(w, "factory", 2, at(156, 22), 3);
     const events = [...step(w, [fire(), fire(), fire()]), ...run(w, missileTicks(w) + 1)];
     expect(events.filter((e) => e.type === "flightIntercepted")).toHaveLength(2);
     expect(factory.level).toBe(1); // one got through: −2 levels
@@ -370,22 +384,20 @@ describe("war production (Factory III)", () => {
     factory.level = 2;
     factory.targetLevel = 2;
     run(w, 300);
-    step(w, [fire()]);
+    step(w, [fire(at(140, 22))]); // the first one's crater is no one's land now
     expect(w.buildings[0]!.reloads).toEqual([w.tick + 300]);
   });
 });
 
 describe("nations and missiles", () => {
-  const decide = (w: World, actions: Command[] = [], mobilizing = false) =>
-    decideMissiles(w, w.players[0]!, actions, mobilizing);
+  const decide = (w: World, actions: Command[] = []) => decideMissiles(w, w.players[0]!, actions);
   const war: Command = { type: "attack", target: 2, focusTile: at(12, 4), percentBp: 5_000 };
 
-  it("at war, a cluster of buildings worth twice the launch — nothing in peace or when mobilizing", () => {
+  it("at war, a cluster of buildings worth twice the launch — nothing in peace", () => {
     const w = world();
     building(w, "housing", 2, at(150, 22), 3);
     building(w, "factory", 2, at(155, 22), 3);
     expect(decide(w)).toEqual([]);
-    expect(decide(w, [war], true)).toEqual([]);
     expect(decide(w, [war])).toEqual([
       { type: "launchMissile", buildingId: 1, tile: at(150, 22), missile: "missile" },
     ]);

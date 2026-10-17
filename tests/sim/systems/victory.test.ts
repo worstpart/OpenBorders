@@ -18,8 +18,8 @@ function runUntilOver(world: World, maxTicks = 500): TickFrame[] {
 }
 
 describe("victory", () => {
-  it("holding 70% of the land wins", () => {
-    // 20 land tiles: player 1 holds 12 and expands; 14 tiles (70%) wins.
+  it("holding 80% of the land wins", () => {
+    // 20 land tiles: player 1 holds 12 and expands; 16 tiles (80%, 70% until D-033) wins.
     const world = worldFromAscii(
       `
       ~~~~~~~~~~~~
@@ -53,7 +53,7 @@ describe("victory", () => {
       team: 0,
       reason: "landShare",
     });
-    expect(world.players[0]!.tiles).toBe(14);
+    expect(world.players[0]!.tiles).toBe(16);
     // Armies stop and come home when the match ends.
     expect(last.attacks).toEqual([]);
     expect(world.players[0]!.fieldTroops).toBe(0);
@@ -94,17 +94,17 @@ describe("victory", () => {
 
   it("anti-stall: the land needed to win drops after 15 minutes, down to 50%", () => {
     const share = (ticks: number): number => Math.round(winLandShare(DEFAULT_RULES, ticks) * 100);
-    expect(share(0)).toBe(70);
-    expect(share(9_000)).toBe(70); // 15:00
-    expect(share(9_299)).toBe(70);
-    expect(share(9_300)).toBe(69); // 15:30
-    expect(share(12_000)).toBe(60); // 20:00
-    expect(share(15_000)).toBe(50); // 25:00
+    expect(share(0)).toBe(80);
+    expect(share(9_000)).toBe(80); // 15:00
+    expect(share(9_299)).toBe(80);
+    expect(share(9_300)).toBe(79); // 15:30
+    expect(share(12_000)).toBe(70); // 20:00
+    expect(share(18_000)).toBe(50); // 30:00
     expect(share(60_000)).toBe(50);
   });
 
   it("a stalled duel is won by the bigger player once the requirement drops to their share", () => {
-    // 11 of 20 tiles (55%) against 9: no one wins at 70%, nobody attacks.
+    // 11 of 20 tiles (55%) against 9: no one wins at 80%, nobody attacks.
     const world = worldFromAscii(
       `
       ~~~~~~~~~~~~
@@ -122,8 +122,8 @@ describe("victory", () => {
     );
     world.playStartTick = world.tick;
     const frames = runUntilOver(world, 100);
-    // 70% → 55% takes 3 steps: 10 + 3 × 5 ticks of play.
-    expect(world.tick).toBe(25);
+    // 80% → 55% takes 5 steps: 10 + 5 × 5 ticks of play.
+    expect(world.tick).toBe(35);
     expect(frames.at(-1)!.events).toContainEqual({
       type: "gameOver",
       winner: 1,

@@ -9,8 +9,10 @@ import {
 import {
   airliftPreview,
   flightSprite,
+  launcherPreview,
   liftProblemText,
   missileEffectText,
+  missileLauncher,
 } from "../../src/client/app/flights.ts";
 import { incomingThreats } from "../../src/client/app/threats.ts";
 import { toastsForEvents } from "../../src/client/app/toasts.ts";
@@ -88,10 +90,17 @@ describe("aiming a missile", () => {
       building("housing", 3, at(59, 25), 1),
     ]);
     expect(p).toMatchObject({ problem: null, cost: 75_000, planes: 1, planesLost: 0 });
-    expect(p.seconds).toBe(Math.ceil(40 / 3) / 10);
-    expect(p.missile).toMatchObject({ kind: "missile", buildings: 2, radius: 8 });
+    expect(p.seconds).toBe(Math.ceil(40 / 6) / 10);
+    expect(p.missile).toMatchObject({
+      kind: "missile",
+      buildings: 2,
+      radius: 8,
+      craterRadius: 4,
+      craterTiles: 49,
+    });
     expect(missileEffectText(DEFAULT_RULES, p.missile!)).toBe(
-      "2 buildings −2 levels · 10% of their troops · suppress 8 km for 30 s",
+      // The 4 km crater (D-033): 49 tiles of their land burn.
+      "crater: 49 tiles burned · 2 buildings −2 levels · 10% of their troops · suppress 8 km for 30 s",
     );
   });
 
@@ -173,13 +182,13 @@ describe("the Silo's card and texts", () => {
 
   it("names the levels: range, slots, bunker buster, warhead; Factory III's war production", () => {
     expect(effectLines(DEFAULT_RULES, "silo", 1)).toEqual([
-      "Strike missile (75K): every enemy building within 8 km loses 2 levels, and 10% of their troops die",
+      "Strike missile (75K): blasts a 4 km crater of empty land, every enemy building within 8 km loses 2 levels, and 10% of their troops die",
       "1 missile, each reloads in 30 s",
       "Range 250 km",
     ]);
     expect(upgradeLines(DEFAULT_RULES, "silo", 2)).toContain("Range: the whole map");
     expect(upgradeLines(DEFAULT_RULES, "silo", 1)).toContain(
-      "New: bunker buster — destroys one enemy building, and 5% of its owner's troops die",
+      "New: bunker buster — destroys one enemy building, the enemy buildings within 4 km lose 1 level, and 5% of its owner's troops die",
     );
     expect(upgradeLines(DEFAULT_RULES, "factory", 2)).toContain(
       "New: war production — Airports and Silos within 60 km reload 25% faster",
@@ -226,15 +235,16 @@ describe("missile toasts and threats", () => {
       victim: 1,
       buildings: 1,
       troops: 1_200,
+      crater: 40,
     },
   ];
 
   it("one toast per missile, not one per building", () => {
     expect(toastsForEvents(hit(3), 1, nameOf).map((t) => t.text)).toEqual([
-      "🚀 P3's strike missile hit 1 of your buildings (−2 levels) · 1.2K troops killed",
+      "🚀 P3's strike missile hit 1 of your buildings · 40 tiles of land burned · 1.2K troops killed",
     ]);
     expect(toastsForEvents(hit(1), 1, nameOf).map((t) => t.text)).toEqual([
-      "🚀 Your strike missile hit 1 building: −2 levels each · 1.2K troops killed",
+      "🚀 Your strike missile hit 1 building · 40 tiles of land burned · 1.2K troops killed",
     ]);
   });
 
@@ -342,5 +352,72 @@ describe("explosion particles", () => {
     expect(system.active).toBe(true);
     for (let k = 0; k < 40; k++) system.explode("warhead", 10, 10, 0);
     expect(system.count).toBe(MAX_PARTICLES);
+  });
+});
+
+describe("missile launcher (D-033)", () => {
+  const near = building("silo", 1, at(15, 25), 1, { id: 901 });
+  const far = building("silo", 1, at(2, 25), 2, { id: 902 });
+
+  it("one button per missile your Silos can fire, with how many are ready", () => {
+    expect(missileLauncher(DEFAULT_RULES, [], me, 100)).toEqual([]);
+    const slots = missileLauncher(DEFAULT_RULES, [near, far], me, 100);
+    expect(slots.map((s) => [s.kind, s.ready, s.key])).toEqual([
+      ["missile", 3, "R"],
+      ["buster", 2, "T"],
+    ]);
+    // Launches sent but not seen yet count as used.
+    const pending = new Map([[902, 1]]);
+    expect(missileLauncher(DEFAULT_RULES, [near, far], me, 100, pending)[1]!.ready).toBe(1);
+    expect(missileLauncher(DEFAULT_RULES, [far], { ...me, gold: 1_000 }, 100)[0]!.affordable).toBe(
+      false,
+    );
+  });
+
+  it("fires from the nearest Silo that can; on to the next while one reloads", () => {
+    const target = at(50, 25);
+    const pick = (pending = new Map<number, number>(), kind: "missile" | "buster" = "missile") =>
+      launcherPreview(
+        DEFAULT_RULES,
+        map,
+        me,
+        owner,
+        friends,
+        new Set(),
+        100,
+        target,
+        [near, far],
+        kind,
+        pending,
+      );
+    expect(pick()).toMatchObject({ problem: null, airport: { id: 901 } });
+    expect(pick(new Map([[901, 1]]))).toMatchObject({ problem: null, airport: { id: 902 } });
+    expect(
+      pick(
+        new Map([
+          [901, 1],
+          [902, 2],
+        ]),
+      )?.problem,
+    ).toBe("reloading");
+    // A bunker buster needs a Silo II and an enemy building there.
+    expect(pick(new Map(), "buster")).toMatchObject({
+      airport: { id: 902 },
+      problem: "noBuilding",
+    });
+    expect(
+      launcherPreview(
+        DEFAULT_RULES,
+        map,
+        me,
+        owner,
+        friends,
+        new Set(),
+        100,
+        target,
+        [near],
+        "buster",
+      ),
+    ).toBeNull();
   });
 });

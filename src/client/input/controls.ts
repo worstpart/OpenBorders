@@ -26,12 +26,22 @@ export type KeyAction =
   /** Yes / no to the top diplomacy card. */
   | "diplomacyYes"
   | "diplomacyNo"
-  /** Turn gold into troops (GAME_DESIGN.md §3.16). */
-  | "mobilize"
   /** Drop a map ping under the cursor for allies and teammates (GAME_DESIGN.md §3.20). */
   | "ping"
   /** Show or hide every SAM's ring (the air defence view, GAME_DESIGN.md §3.17.7). */
-  | "airDefense";
+  | "airDefense"
+  /** Pick up the build bar's 1st … 7th building (D-033: 1 Housing, 2 Factory, 3 Port …). */
+  | "build1"
+  | "build2"
+  | "build3"
+  | "build4"
+  | "build5"
+  | "build6"
+  | "build7"
+  /** Aim a missile from the launcher (D-033). */
+  | "missile"
+  | "buster"
+  | "warhead";
 
 export interface ControlHandlers {
   primaryClick(at: ScreenPoint): void;
@@ -57,11 +67,14 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   F3: "togglePerf",
   Backquote: "togglePerf",
   Escape: "escape",
-  Digit1: "preset1",
-  Digit2: "preset2",
-  Digit3: "preset3",
-  Digit4: "preset4",
-  Digit5: "preset5",
+  // Number keys pick up buildings (D-033); Shift+number (or the numpad) sets the attack %.
+  Digit1: "build1",
+  Digit2: "build2",
+  Digit3: "build3",
+  Digit4: "build4",
+  Digit5: "build5",
+  Digit6: "build6",
+  Digit7: "build7",
   Numpad1: "preset1",
   Numpad2: "preset2",
   Numpad3: "preset3",
@@ -72,9 +85,20 @@ const KEY_ACTIONS: Record<string, KeyAction> = {
   KeyK: "ally",
   KeyY: "diplomacyYes",
   KeyN: "diplomacyNo",
-  KeyM: "mobilize",
   KeyG: "ping",
   KeyV: "airDefense",
+  KeyR: "missile",
+  KeyT: "buster",
+  KeyX: "warhead",
+};
+
+/** With Shift held these keys mean something else. */
+const SHIFT_KEY_ACTIONS: Record<string, KeyAction> = {
+  Digit1: "preset1",
+  Digit2: "preset2",
+  Digit3: "preset3",
+  Digit4: "preset4",
+  Digit5: "preset5",
 };
 
 const PAN_KEYS: Record<string, [number, number]> = {
@@ -193,7 +217,7 @@ export class Controls {
       e.preventDefault();
       return;
     }
-    const action = KEY_ACTIONS[e.code];
+    const action = (e.shiftKey ? SHIFT_KEY_ACTIONS[e.code] : undefined) ?? KEY_ACTIONS[e.code];
     if (action && !e.repeat) {
       // Space/Enter would also "click" a focused button; the game handles them instead.
       e.preventDefault();

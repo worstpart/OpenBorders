@@ -14,9 +14,6 @@ import { isMissile } from "../../sim/systems/missiles.ts";
 import type { FlightKind } from "../../sim/world.ts";
 import { FLIGHT_INFO } from "./flights.ts";
 
-const BUSTER_LEVELS = DEFAULT_RULES.flights.busterLevels;
-const MISSILE_LEVELS = DEFAULT_RULES.flights.missileLevels;
-
 const TRAITOR_SECONDS = (DEFAULT_RULES.diplomacy.traitorTicks * DEFAULT_RULES.tickMs) / 1000;
 const TRAITOR_DISCOUNT = Math.round((1 - DEFAULT_RULES.diplomacy.traitorLoss) * 100);
 
@@ -77,17 +74,20 @@ export function toastsForEvents(
         break;
       case "missileHit": {
         const info = FLIGHT_INFO[event.missile];
-        const levels = event.missile === "buster" ? BUSTER_LEVELS : MISSILE_LEVELS;
-        // Missiles kill people too (after the 2B.6 playtest).
+        // Missiles kill people too (after the 2B.6 playtest) and blast craters (D-033).
         const killed = event.troops >= 1 ? ` · ${formatTroops(event.troops)} troops killed` : "";
+        const crater =
+          event.crater > 0 ? ` · ${event.crater.toLocaleString("en-US")} tiles of land burned` : "";
+        const plural = (n: number) => `${n} building${n > 1 ? "s" : ""}`;
         if (event.owner === me) {
           toasts.push({
             text:
               (event.buildings > 0
-                ? `${info.icon} Your ${info.name} hit ${event.buildings} building${event.buildings > 1 ? "s" : ""}: −${levels} level${levels > 1 ? "s" : ""} each`
+                ? `${info.icon} Your ${info.name} hit ${plural(event.buildings)}`
                 : event.missile === "buster"
                   ? `${info.icon} Your bunker buster found no building`
-                  : `${info.icon} Your strike missile hit — no buildings there; defences suppressed`) +
+                  : `${info.icon} Your strike missile hit — no buildings there`) +
+              crater +
               killed,
             tone: "success",
             ...(event.victim ? { player: event.victim } : {}),
@@ -96,8 +96,8 @@ export function toastsForEvents(
           toasts.push({
             text:
               mineHit > 0
-                ? `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit ${mineHit} of your buildings (−${levels} level${levels > 1 ? "s" : ""})${killed}`
-                : `${info.icon} ${nameOf(event.owner)}'s ${info.name} knocked out your defences there${killed}`,
+                ? `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit ${mineHit} of your buildings${crater}${killed}`
+                : `${info.icon} ${nameOf(event.owner)}'s ${info.name} hit your land${crater}${killed}`,
             tone: "danger",
             player: event.owner,
           });

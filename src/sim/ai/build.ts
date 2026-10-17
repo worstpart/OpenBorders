@@ -8,8 +8,7 @@
  * best one it can reach within `goalHorizonTicks` of income:
  *  - capacity counts one per troop;
  *  - a growth bonus counts as that share of its peak growth for `growthHorizonTicks`;
- *  - gold per tick counts for `incomeHorizonTicks`, and a Mobilize discount as that share
- *    of the gold it earns over the same time;
+ *  - gold per tick counts for `incomeHorizonTicks`;
  *  - a wall level counts as `wallWorth` × capacity × the personality's `fortifyWeight`,
  *    in proportion to its length (a rough "defenders it is worth"), and only while it
  *    faces a threat.
@@ -31,10 +30,9 @@
  * enemy in reach, Continent nations built 0.8 Airports a game and never flew an assault: their
  * enemies' armies were too big for a lift — 2B.3 headless runs.) Worth less per gold than the
  * economy, so it comes late.
- * Escalating prices make the next new building dearer, so upgrades win in time. Gold is
- * also its war chest (§3.16, Mobilize right before attacking a player); while saving, it
- * keeps part of the goal's price out of the chest (`saving`, by personality), and builds
- * once it can pay — one construction at a time, never while losing a war at home (except
+ * Escalating prices make the next new building dearer, so upgrades win in time. While
+ * saving, it keeps part of the goal's price out of reach of gifts and missiles (`saving`, by
+ * personality), and builds once it can pay — one construction at a time, never while losing a war at home (except
  * a wall on the threatened front). New buildings go deep inside its land (sampled tiles,
  * scored by how far they are from the nearest tile it doesn't own), where they are
  * hardest to capture.
@@ -460,12 +458,10 @@ function worth(world: World, bot: Player, effect: BuildingLevelRules, tile = -1)
   const ai = world.rules.ai.build;
   const troops = world.rules.troops;
   const peakGrowth = troops.growthScale * detPow(Math.max(1, bot.capacity), troops.growthExponent);
-  const income = bot.lastIncome * ai.incomeHorizonTicks;
   return (
     (effect.capacity ?? 0) +
     (effect.growthBonus ?? 0) * peakGrowth * ai.growthHorizonTicks +
     (effect.income ?? 0) * ai.incomeHorizonTicks +
-    (effect.mobilizeDiscount ?? 0) * income +
     ((effect.boatSpeed ?? 1) - 1) * ai.portWorth * bot.capacity +
     expectedTradePerTick(world, bot.id, tile, effect.tradeEveryTicks ?? 0) * ai.incomeHorizonTicks
   );

@@ -474,8 +474,9 @@ export class FlightLayer {
       ctx.stroke();
       ctx.restore();
     }
-    if (aim.missile && aim.missile.kind !== "buster") {
-      // The area a strike missile hits (orange) or a warhead scorches (red).
+    if (aim.missile) {
+      // The area a strike missile hits (orange) with its crater (red, D-033), a bunker
+      // buster's splash (orange), or what a warhead scorches (red).
       const warhead = aim.missile.kind === "warhead";
       ctx.save();
       ctx.setLineDash([6, 4]);
@@ -486,6 +487,16 @@ export class FlightLayer {
       ctx.arc(to.x, to.y, aim.missile.radius * zoom, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      if (aim.missile.kind === "missile") {
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(255, 90, 70, 0.95)";
+        ctx.fillStyle = "rgba(255, 70, 50, 0.16)";
+        ctx.beginPath();
+        ctx.arc(to.x, to.y, aim.missile.craterRadius * zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
     }
     const text = aim.problem

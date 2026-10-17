@@ -1,8 +1,10 @@
 /**
  * Building icons on the map (GAME_DESIGN.md §3.17.10): a round dark badge ringed in the
  * owner's colour, the painted sprite for its level (sprites.ts, the user's icon pack — D-028;
- * the same art as the build bar), and 1–3 level pips under it; a level-III building gets a
- * gold outer ring.
+ * the same art as the build bar), its type badge (D-033: a disc in the type's colour with
+ * its symbol, on the upper left) and 1–3 level pips under it; a level-III building gets a
+ * gold outer ring. Zoomed out, other players' level I–II buildings are dots in their type's
+ * colour, ringed in the owner's, with their level pips (D-033).
  * The tier reads without clicking. A building under construction is faded with a progress
  * ring; one being upgraded shows the ring at full strength.
  *
@@ -29,7 +31,7 @@ import type { BuildingSnapshot, WallSnapshot } from "../../sim/frame.ts";
 import type { BuildingType, GameRules } from "../../sim/rules.ts";
 import type { WallPreview } from "../app/buildings.ts";
 import { formatTroops } from "../format.ts";
-import { iconPath } from "../icons.ts";
+import { iconPath, TYPE_COLORS, TYPE_GLYPHS } from "../icons.ts";
 import { drawSprite, sprites } from "../sprites.ts";
 import type { MapView } from "./renderer.ts";
 
@@ -149,7 +151,7 @@ export class BuildingLayer {
       // Zoomed out, other players' level I–II buildings shrink to a dot (still visible,
       // without cluttering the map); yours and level III keep their icon.
       if (small && !mine && b.level < 3) {
-        this.dot(at.x, at.y, input.colorOf(b.owner), b.level);
+        this.dot(at.x, at.y, input.colorOf(b.owner), b.type, b.level);
         continue;
       }
       const working = b.readyTick >= 0;
@@ -248,24 +250,67 @@ export class BuildingLayer {
     ctx.restore();
   }
 
-  /** A far-zoom building marker: a dark dot ringed in the owner's colour (bigger per level). */
-  private dot(x: number, y: number, color: string, level: number): void {
+  /**
+   * A far-zoom building marker: a dot in its type's colour ringed in the owner's (bigger per
+   * level), with one white pip per level under it (D-033: "level dots when zoomed out").
+   */
+  private dot(x: number, y: number, color: string, type: BuildingType, level: number): void {
     const ctx = this.context;
-    const r = level >= 2 ? 4.5 : 3.5;
+    const r = level >= 2 ? 5.5 : 4.5;
     ctx.save();
     if (level === 0) ctx.globalAlpha = 0.6;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#0e121a";
+    ctx.fillStyle = TYPE_COLORS[type];
     ctx.fill();
     ctx.lineWidth = 1.8;
     ctx.strokeStyle = color;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x, y, 1.3, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffd166";
-    ctx.fill();
+    if (level > 0) {
+      const pip = 1.9;
+      const gap = 5;
+      const py = y + r + 4;
+      for (let k = 0; k < level; k++) {
+        ctx.beginPath();
+        ctx.arc(x + (k - (level - 1) / 2) * gap, py, pip, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = "rgba(10, 14, 22, 0.85)";
+        ctx.stroke();
+      }
+    }
     ctx.restore();
+  }
+
+  /** A type badge (D-033): a disc in the type's colour with its symbol, centred at (x, y). */
+  private typeBadge(x: number, y: number, r: number, type: BuildingType): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = TYPE_COLORS[type];
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(10, 14, 22, 0.9)";
+    ctx.stroke();
+    const scale = (r * 1.3) / 24;
+    ctx.translate(x - 12 * scale, y - 12 * scale);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill(this.glyph(type));
+    ctx.restore();
+  }
+
+  private readonly glyphs = new Map<BuildingType, Path2D>();
+
+  private glyph(type: BuildingType): Path2D {
+    let path = this.glyphs.get(type);
+    if (!path) {
+      path = new Path2D(TYPE_GLYPHS[type]);
+      this.glyphs.set(type, path);
+    }
+    return path;
   }
 
   /**
@@ -513,6 +558,7 @@ export class BuildingLayer {
       progress: number | null;
       selected: boolean;
       pips?: boolean;
+      typeBadge?: boolean;
       /** Out of action after an air strike: the share of that time still left, else null. */
       struck?: number | null;
     },
@@ -556,6 +602,12 @@ export class BuildingLayer {
       ctx.fill(this.path(type, level), "evenodd");
     }
     ctx.restore();
+
+    // The type badge on the upper left (D-033), over the sprite's corner.
+    if (style.typeBadge !== false) {
+      const br = Math.max(5.5, size * 0.21);
+      this.typeBadge(x - r * 0.74, y - r * 0.74, br, type);
+    }
 
     const struck = style.struck ?? null;
     if (struck !== null) {

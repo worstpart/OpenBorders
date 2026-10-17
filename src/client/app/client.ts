@@ -32,7 +32,11 @@ import {
   BLAST_MS,
   isHostile,
   isMissileMode,
+  LAUNCHER_NAMES,
+  launcherPreview,
   liftProblemText,
+  missileLauncher,
+  silosFor,
   PUFF_MS,
   SHOT_MS,
   type AirliftPreview,
@@ -42,7 +46,7 @@ import {
 } from "./flights.ts";
 import { airportRange, samInterceptors, samRadius, samReady } from "../../sim/systems/flights.ts";
 import { samStops, siloRange } from "../../sim/systems/missiles.ts";
-import type { DonationResource, PlayerSetup } from "../../sim/world.ts";
+import type { DonationResource, MissileKind, PlayerSetup } from "../../sim/world.ts";
 import type { BuildingType } from "../../sim/rules.ts";
 import {
   BuildingLayer,
@@ -54,6 +58,7 @@ import {
 } from "../render/buildings.ts";
 import {
   BUILD_BLOCK_TEXT,
+  buildBarItems,
   buildingAtPoint,
   placementCheck,
   WALL_PREVIEW_TEXT,
@@ -79,7 +84,7 @@ import { MapRenderer } from "../render/renderer.ts";
 import { DEFAULT_RULES, makeRules, type Difficulty } from "../../sim/rules.ts";
 import { presetPercent, stepPercent } from "./attackPercent.ts";
 import { allianceStatus, diplomacyCards } from "./diplomacy.ts";
-import { donationKeyOf, MOBILIZE_PERCENT, mobilizePreview } from "./economy.ts";
+import { donationKeyOf } from "./economy.ts";
 import { nearestOwnedTile } from "./focus.ts";
 import { HintTracker, localHintStore, type HintId } from "./hints.ts";
 import { pickBotNames, pickNationNames, playerColors, teamPlayerColors } from "./players.ts";
@@ -178,6 +183,8 @@ export class GameClient {
   /** SAM shots being drawn (GAME_DESIGN.md §3.17.7). */
   private shotEffects: ShotEffect[] = [];
   private blastEffects: BlastEffect[] = [];
+  /** Missile launches sent but not seen in a frame yet (launcher aiming, D-033). */
+  private pendingLaunches: { silo: number; tick: number }[] = [];
   /** Explosion particles (the user's request in 2B.5): every explosion on the map. */
   private readonly particles = new ParticleSystem();
   /** Which map is loaded, and the latest load asked for (older results are dropped). */
@@ -437,12 +444,6 @@ export class GameClient {
     this.ping(tile, kind);
   }
 
-  /** Turns gold into troops: one click buys MOBILIZE_PERCENT of the capacity. */
-  mobilize(): void {
-    if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
-    this.host?.send({ type: "mobilize", percentBp: MOBILIZE_PERCENT * 100 });
-  }
-
   /** Gives a friend `percent`% of our home troops or gold. */
   donate(to: number, resource: DonationResource, percent: number): void {
     this.host?.send({ type: "donate", to, resource, percentBp: Math.round(percent * 100) });
@@ -471,7 +472,56 @@ export class GameClient {
     ui.placing = null;
     ui.wallPoints = [];
     ui.liftMode = mode;
+    ui.missileAuto = false;
     ui.airliftFrom = buildingId;
+  }
+
+  /**
+   * The command bar's missile launcher (D-033) or its key: aims a missile of `kind`; every
+   * click on enemy land then fires one from whichever Silo can, while any are ready. Again
+   * (or Esc / right-click) stops aiming.
+   */
+  aimMissile(kind: MissileKind): void {
+    const me = ui.me;
+    if (ui.screen !== "game" || ui.phase !== "playing" || !me?.alive) return;
+    if (ui.missileAuto && ui.airliftFrom !== null && ui.liftMode === kind) {
+      ui.airliftFrom = null;
+      return;
+    }
+    const silos = silosFor(ui.buildings, me.id, kind);
+    if (silos.length === 0) {
+      this.toast({
+        text: `No Silo for that: ${LAUNCHER_NAMES[kind].name.toLowerCase()}s need a Missile Silo of level ${kind === "missile" ? "I" : kind === "buster" ? "II" : "III"}`,
+        tone: "info",
+      });
+      return;
+    }
+    ui.menu = null;
+    ui.placing = null;
+    ui.wallPoints = [];
+    ui.selectedWarship = null;
+    ui.liftMode = kind;
+    ui.missileAuto = true;
+    ui.airliftFrom = silos[0]!.id;
+  }
+
+  /** Launches sent per Silo that no frame has shown yet. */
+  private pendingBySilo(): Map<number, number> {
+    const pending = new Map<number, number>();
+    for (const p of this.pendingLaunches) pending.set(p.silo, (pending.get(p.silo) ?? 0) + 1);
+    return pending;
+  }
+
+  /** A building key (1–7, D-033): picks up the build bar's building at `index`. */
+  private pickByKey(index: number): void {
+    if (ui.screen !== "game" || ui.phase !== "playing" || !ui.me?.alive) return;
+    const item = buildBarItems(ui.buildContext)[index];
+    if (!item) return;
+    if (!item.affordable && ui.placing !== item.type) {
+      this.toast({ text: `Not enough gold for ${item.name}`, tone: "info" });
+      return;
+    }
+    this.pickBuilding(item.type);
   }
 
   /** Sends the airlift being aimed to `tile`, if it may go there. */
@@ -497,6 +547,8 @@ export class GameClient {
       return;
     }
     const mode = preview.mode;
+    const auto = ui.missileAuto && isMissileMode(mode);
+    if (auto) this.pendingLaunches.push({ silo: preview.airport.id, tick: ui.tick });
     this.host.send(
       mode === "strike"
         ? { type: "airStrike", buildingId: preview.airport.id, tile }
@@ -509,7 +561,14 @@ export class GameClient {
               percentBp: Math.round(ui.attackPercent * 100),
             },
     );
-    ui.airliftFrom = null;
+    // The launcher keeps aiming while missiles of this kind are ready (fire, fire, fire).
+    const left =
+      auto && ui.me
+        ? (missileLauncher(DEFAULT_RULES, ui.buildings, ui.me, ui.tick, this.pendingBySilo()).find(
+            (slot) => slot.kind === mode,
+          )?.ready ?? 0)
+        : 0;
+    if (left < 1) ui.airliftFrom = null;
   }
 
   /** The airlift being aimed, to `tile` (null: no target yet). */
@@ -518,6 +577,21 @@ export class GameClient {
     const me = ui.me;
     const airport = ui.buildings.find((b) => b.id === ui.airliftFrom);
     if (!map || !me || !airport) return null;
+    if (ui.missileAuto && isMissileMode(ui.liftMode)) {
+      return launcherPreview(
+        DEFAULT_RULES,
+        map,
+        me,
+        this.owner,
+        ui.friends,
+        ui.teammates,
+        this.latestFrame?.tick ?? 0,
+        tile,
+        ui.buildings,
+        ui.liftMode,
+        this.pendingBySilo(),
+      );
+    }
     return airliftPreview(
       DEFAULT_RULES,
       map,
@@ -864,9 +938,23 @@ export class GameClient {
       }
     }
     const me = ui.localPlayerId;
+    // Launches no frame has shown after 3 s are dropped (they were lost or rejected).
+    if (this.pendingLaunches.length > 0) {
+      this.pendingLaunches = this.pendingLaunches.filter((p) => frame.tick - p.tick < 30);
+    }
     for (const event of frame.events) {
       if (event.type === "commandRejected" && event.playerId === me) {
         console.info(`Command "${event.command}" rejected: ${event.reason}`);
+        if (event.command === "launchMissile") this.pendingLaunches.shift();
+      } else if (
+        event.type === "flightLaunched" &&
+        event.owner === me &&
+        isMissileMode(event.kind as LiftMode) &&
+        this.pendingLaunches.length > 0
+      ) {
+        const silo = frame.buildings.find((b) => b.tile === event.fromTile && b.type === "silo");
+        const at = this.pendingLaunches.findIndex((p) => p.silo === silo?.id);
+        this.pendingLaunches.splice(at >= 0 ? at : 0, 1);
       } else if (event.type === "attackStarted" && event.attacker === me) {
         this.hints.complete(event.target === 0 ? "expand" : "attack");
       } else if (event.type === "allianceRequested" && event.from === me) {
@@ -889,8 +977,6 @@ export class GameClient {
         const sent = new Map(ui.myDonations);
         sent.set(donationKeyOf(event.to, event.resource), frame.tick);
         ui.myDonations = sent;
-      } else if (event.type === "mobilized" && event.playerId === me) {
-        this.hints.complete("gold");
       } else if (event.type === "buildingStarted" && event.playerId === me) {
         this.hints.complete("build");
       } else if (event.type === "eliminated" && event.playerId === ui.localPlayerId) {
@@ -902,11 +988,16 @@ export class GameClient {
       }
       this.explode(event);
       if (event.type === "missileHit" || event.type === "warheadDetonated") {
-        // A missile's blast (2B.5): a flash and a ring over its radius.
+        // A missile's blast (2B.5): a flash and a ring over its radius (a buster's: its splash).
+        const f = DEFAULT_RULES.flights;
         this.blastEffects.push({
           tile: event.tile,
           radius:
-            event.type === "warheadDetonated" ? event.radius : DEFAULT_RULES.flights.missileRadius,
+            event.type === "warheadDetonated"
+              ? event.radius
+              : event.missile === "buster"
+                ? f.busterSplashRadius
+                : f.missileRadius,
           warhead: event.type === "warheadDetonated",
           start: performance.now(),
         });
@@ -1051,14 +1142,19 @@ export class GameClient {
     if (ui.placing && (frame.phase !== "playing" || !frame.players[ui.localPlayerId - 1]?.alive)) {
       ui.placing = null;
     }
-    // Aiming an airlift stops when the Airport is gone (or no longer ours) or the game is.
+    // Aiming an airlift stops when the Airport is gone (or no longer ours) or the game is;
+    // the missile launcher moves on to another Silo that can fire.
     const aiming = ui.airliftFrom;
     if (
       aiming !== null &&
       (frame.phase !== "playing" ||
         !frame.buildings.some((b) => b.id === aiming && b.owner === ui.localPlayerId))
     ) {
-      ui.airliftFrom = null;
+      const next =
+        frame.phase === "playing" && ui.missileAuto && isMissileMode(ui.liftMode)
+          ? silosFor(frame.buildings, ui.localPlayerId, ui.liftMode)[0]
+          : undefined;
+      ui.airliftFrom = next?.id ?? null;
     }
     // A building card whose building is gone closes.
     const menu = ui.menu;
@@ -1332,11 +1428,22 @@ export class GameClient {
       case "ally":
         this.allyWithHovered();
         break;
-      case "mobilize":
-        this.mobilize();
-        break;
       case "ping":
         this.quickPing();
+        break;
+      case "build1":
+      case "build2":
+      case "build3":
+      case "build4":
+      case "build5":
+      case "build6":
+      case "build7":
+        this.pickByKey(Number(action.slice(-1)) - 1);
+        break;
+      case "missile":
+      case "buster":
+      case "warhead":
+        this.aimMissile(action);
         break;
       case "airDefense":
         if (ui.screen === "game" && DEFAULT_RULES.flights.enabled) ui.airDefense = !ui.airDefense;
@@ -1614,14 +1721,13 @@ export class GameClient {
       playing &&
       protectionSecondsLeft(ui.previewContext) === 0 &&
       !!me?.neighbors?.some((id) => id !== 0);
-    const canMobilize = playing && !!me && mobilizePreview(DEFAULT_RULES, me).blocked === null;
     const canBuild =
       playing &&
       !!me &&
       DEFAULT_RULES.buildings.enabled &&
       me.gold >= DEFAULT_RULES.buildings.types.housing.levels[0].cost;
     const hint = this.hints.update(
-      { playing, canAttackPlayer, canMobilize, canBuild },
+      { playing, canAttackPlayer, canBuild },
       performance.now() / 1000,
     );
     if (hint !== ui.hint) ui.hint = hint;

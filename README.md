@@ -14,11 +14,12 @@ presentation. Not affiliated with OpenFront.
 **Phase 1 — Playable prototype: complete** (git tag `phase-1`): spawn, expand, fight bots,
 encircle, win or lose, with a full HUD. **Phase 2 — Gameplay depth: complete** (git tag
 `phase-2`): big lobbies (up to 125 opponents); Tribes & Nations (weak filler tribes,
-nations with Easy/Medium/Hard); alliances (timed, renewable, traitors); teams; gold,
-Mobilize and gifts; buildings — Housing, Factory, Port, levels I–III; walls drawn point by
+nations with Easy/Medium/Hard); alliances (timed, renewable, traitors); teams; gold and
+gifts; buildings — Housing, Factory, Port, levels I–III; walls drawn point by
 point; islands, boats and beachhead landings; trade ships; map types Continent / Islands /
 Two lands in three sizes; alert sounds, map pings and emojis. **Phase 2B — air & strategic
-warfare: built, awaiting the playtest approval**: the user's icon-pack art; Airports I–III
+warfare: complete** (git tag `phase-2b`, approved by the user's playtest; the fixes from that
+playtest — D-033 — came right after it): the user's icon-pack art; Airports I–III
 (airlifts, airborne assaults, air strikes), SAMs I–III, Missile Silos I–III (strike missiles,
 bunker busters, the strategic warhead), Port III Naval Base (warships, coastal fortification)
 and a balance pass. **Next: Phase 3 — multiplayer** (plan in [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -49,12 +50,15 @@ npm install
 |---|---|
 | Left click | Choose / move your start (spawn phase); then expand into neutral land or attack enemy land — land you can't reach over your border (another island, a player you don't border) gets a boat |
 | Enter | Confirm your start |
-| 1 2 3 4 5 | Send 10 / 25 / 50 / 75 / 100% of your home troops per click |
+| Shift + 1 2 3 4 5 (or numpad 1–5) | Send 10 / 25 / 50 / 75 / 100% of your home troops per click |
 | Q / E, Shift + wheel | Send 5% less / more |
 | × on an attack chip | Retreat (troops return after 2 s, −20% against players) |
 | ↩ on a boat chip | Turn the boat back (its troops come home when it is back) |
-| Build bar (bottom) | Pick up Housing, Factory, Port (coast only), Airport, SAM Site, Missile Silo or the Wall tool; click your land to place; right-click / Esc puts it back |
-| M | Mobilize: turn gold into troops |
+| Build bar (bottom), keys 1–7 | Pick up Housing (1), Factory (2), Port (3, coast only), Airport (4), SAM Site (5), Missile Silo (6) or the Wall tool (7); click your land to place; right-click / Esc puts it back |
+| Missile launcher (once you own a Silo), R / T / X | Aim a strike missile / bunker buster / strategic warhead; every click on enemy land fires one from a Silo that can reach it, while any are ready |
+| Click your warship, then the sea | Send it there to patrol and fight |
+| V | Air defence view: every SAM's range |
+| G | Ping the map for your allies and teammates |
 | Play again (end card) | Back to the start screen for a new game |
 | Drag (any button) | Pan |
 | Mouse wheel | Zoom toward the cursor |

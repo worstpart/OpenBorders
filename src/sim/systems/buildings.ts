@@ -532,7 +532,6 @@ function sumBonuses(world: World): void {
     bonus.capacity = 0;
     bonus.growth = 0;
     bonus.income = 0;
-    bonus.mobilizeDiscount = 0;
   }
   const rules = world.rules;
   for (const building of world.buildings) {
@@ -542,7 +541,6 @@ function sumBonuses(world: World): void {
     bonus.capacity += effect.capacity ?? 0;
     bonus.growth += effect.growthBonus ?? 0;
     bonus.income += effect.income ?? 0;
-    bonus.mobilizeDiscount = Math.max(bonus.mobilizeDiscount, effect.mobilizeDiscount ?? 0);
   }
   const maxGrowth = rules.buildings.maxGrowthBonus;
   for (const player of world.players) {

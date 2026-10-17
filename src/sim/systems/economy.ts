@@ -3,7 +3,8 @@
  *
  *  - Every tick of play each living player earns incomeBase + incomePerSqrtTile · √tiles
  *    gold (tribes a share of it, which they never spend).
- *  - Mobilize turns gold into home troops at goldPerTroop, never past the capacity.
+ *  - Gold buys buildings, walls and missiles. (Mobilize, gold into instant troops, was
+ *    removed after the Phase 2B playtest: "over powered" — D-033.)
  *  - Allies and teammates can give each other home troops (only what fits under the
  *    friend's capacity) or gold, each kind to each friend at most every
  *    donationCooldownTicks.
@@ -42,16 +43,6 @@ export function incomeOf(rules: GameRules, player: Player): number {
   return land + (land > 0 ? player.bonus.income : 0);
 }
 
-/** Gold one troop costs to mobilize, after a Factory's discount. */
-export function goldPerTroop(rules: GameRules, discount = 0): number {
-  return rules.economy.goldPerTroop * (1 - discount);
-}
-
-/** Gold a mobilize of `troops` costs (rounded up to whole gold). */
-export function mobilizeCost(rules: GameRules, troops: number, discount = 0): number {
-  return Math.ceil(troops * goldPerTroop(rules, discount));
-}
-
 /** Tick system (step 6b): income, and forgetting donation cooldowns that are over. */
 export function earnGold(world: World): void {
   const rules = world.rules;
@@ -70,39 +61,6 @@ export function earnGold(world: World): void {
 /** Room under the troop cap. */
 export function troopRoom(player: { capacity: number; homeTroops: number; fieldTroops: number }) {
   return Math.max(0, Math.floor(player.capacity - player.homeTroops - player.fieldTroops));
-}
-
-/**
- * Troops a mobilize of `percentBp` of capacity raises: limited by the room under the cap
- * and by the gold (0 = none). Shared with the HUD.
- */
-export function mobilizeTroops(
-  rules: GameRules,
-  player: { capacity: number; homeTroops: number; fieldTroops: number; gold: number },
-  percentBp: number,
-  discount = 0,
-): number {
-  const wanted = Math.floor((player.capacity * percentBp) / 10_000);
-  const affordable = Math.floor(player.gold / goldPerTroop(rules, discount));
-  return Math.max(0, Math.min(wanted, troopRoom(player), affordable));
-}
-
-/** Handles `mobilize`. Returns a rejection reason, or null on success. */
-export function applyMobilize(world: World, player: Player, percentBp: number): string | null {
-  if (!world.rules.economy.enabled) return "there is no gold in this game";
-  if (world.phase !== "playing") return "the match hasn't started";
-  if (!Number.isInteger(percentBp) || percentBp < 1 || percentBp > 10_000) {
-    return "invalid percentage";
-  }
-  if (troopRoom(player) < 1) return "your army is full";
-  const discount = player.bonus.mobilizeDiscount;
-  const troops = mobilizeTroops(world.rules, player, percentBp, discount);
-  if (troops < 1) return "not enough gold";
-  const gold = Math.min(player.gold, mobilizeCost(world.rules, troops, discount));
-  player.gold -= gold;
-  player.homeTroops += troops;
-  world.events.push({ type: "mobilized", playerId: player.id, troops, gold });
-  return null;
 }
 
 /** Ticks until `from` may give `to` this resource again (0 = now). */

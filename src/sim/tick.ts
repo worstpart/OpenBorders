@@ -24,7 +24,7 @@ import {
   applyUpgrade,
   updateBuildings,
 } from "./systems/buildings.ts";
-import { applyDonate, applyMobilize, earnGold } from "./systems/economy.ts";
+import { applyDonate, earnGold } from "./systems/economy.ts";
 import { applyBuildWall, applyCancelWall, applyUpgradeWall, updateWalls } from "./systems/walls.ts";
 import { advanceBoats, applyBoatCommand, applyRecallBoat } from "./systems/naval.ts";
 import { advanceTrade } from "./systems/trade.ts";
@@ -185,8 +185,6 @@ function applyCommand(world: World, player: Player, command: Command): string | 
       return applyAllianceRenew(world, player, command.ally);
     case "allianceBreak":
       return applyAllianceBreak(world, player, command.ally);
-    case "mobilize":
-      return applyMobilize(world, player, command.percentBp);
     case "donate":
       return applyDonate(world, player, command.to, command.resource, command.percentBp);
     case "build":

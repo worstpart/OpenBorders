@@ -1,23 +1,31 @@
 <script lang="ts">
   import { DEFAULT_RULES } from "../../../sim/rules.ts";
   import { ATTACK_PRESETS } from "../../app/attackPercent.ts";
-  import { MOBILIZE_PERCENT, mobilizePreview } from "../../app/economy.ts";
+  import { missileLauncher } from "../../app/flights.ts";
   import { GROWTH_TEXT, troopBarModel } from "../../app/troopBar.ts";
   import { ui } from "../../app/uiState.svelte.ts";
   import { formatTroops } from "../../format.ts";
   import type { Placeable } from "../../app/buildings.ts";
   import BuildBar from "./BuildBar.svelte";
 
+  import type { MissileKind } from "../../../sim/world.ts";
+
   interface Props {
-    onMobilize: () => void;
     onPickBuilding: (type: Placeable) => void;
+    onAimMissile: (kind: MissileKind) => void;
   }
 
-  let { onMobilize, onPickBuilding }: Props = $props();
+  let { onPickBuilding, onAimMissile }: Props = $props();
 
   const me = $derived(ui.me);
   const economy = DEFAULT_RULES.economy.enabled;
-  const mobilize = $derived(me ? mobilizePreview(DEFAULT_RULES, me) : null);
+  // The missile launcher (D-033): one button per missile your Silos can fire.
+  const launcher = $derived(
+    me && ui.tick >= 0 ? missileLauncher(DEFAULT_RULES, ui.buildings, me, ui.tick) : [],
+  );
+  const aiming = $derived(ui.missileAuto && ui.airliftFrom !== null ? ui.liftMode : null);
+  const MISSILE_ICON: Record<MissileKind, string> = { missile: "🚀", buster: "🎯", warhead: "☢" };
+  const landCapacity = $derived(me ? Math.max(0, me.capacity - me.capacityBonus) : 0);
   const goldPerSecond = $derived(me ? (me.goldPerTick * 1000) / DEFAULT_RULES.tickMs : 0);
   const bar = $derived(
     me ? troopBarModel(me.homeTroops, me.fieldTroops, me.capacity, ui.attackPercent) : null,
@@ -45,9 +53,19 @@
   >
     <div class="numbers">
       <span class="home" title="Troops at home (defending)">{formatTroops(me.homeTroops)}</span>
-      <span class="cap" title="Capacity: troops at home and in the field can't exceed this">
+      <span
+        class="cap"
+        title="Capacity: troops at home and in the field can't exceed this — {formatTroops(
+          landCapacity,
+        )} from your land, {formatTroops(me.capacityBonus)} from Housing"
+      >
         / {formatTroops(me.capacity)}
       </span>
+      {#if me.capacityBonus > 0}
+        <span class="housing" title="Troop capacity from your Housing">
+          🏠 +{formatTroops(me.capacityBonus)}
+        </span>
+      {/if}
       {#if me.fieldTroops >= 1}
         <span class="field" title="Troops away in attacks (count toward capacity)">
           {formatTroops(me.fieldTroops)} in the field
@@ -85,7 +103,7 @@
               role="radio"
               aria-checked={ui.attackPercent === preset}
               class:active={ui.attackPercent === preset}
-              title="Send {preset}% (key {i + 1})"
+              title="Send {preset}% (Shift+{i + 1})"
               tabindex={-1}
               onclick={() => (ui.attackPercent = preset)}>{preset}</button
             >
@@ -103,36 +121,36 @@
       </div>
     </div>
 
-    {#if economy && mobilize}
+    {#if economy}
       <div class="economy">
         <span class="gold" title="Gold: earned from your land every second (more land, more gold)">
           <span class="coin" aria-hidden="true"></span>
           {formatTroops(me.gold)} gold
           <span class="income">+{formatTroops(goldPerSecond)}/s</span>
         </span>
-        <button
-          type="button"
-          class="mobilize"
-          tabindex={-1}
-          disabled={mobilize.blocked !== null}
-          title={mobilize.blocked === "full"
-            ? "Your army is at its cap: nothing to mobilize"
-            : mobilize.blocked === "noGold"
-              ? "Not enough gold"
-              : `Turn gold into troops at once: +${MOBILIZE_PERCENT}% of your capacity per click, 1 gold per troop (key M)`}
-          onclick={onMobilize}
-        >
-          Mobilize
-          {#if mobilize.blocked === "full"}
-            <span class="muted">army full</span>
-          {:else if mobilize.blocked === "noGold"}
-            <span class="muted">no gold</span>
-          {:else}
-            <span class="buy">+{formatTroops(mobilize.troops)}</span>
-            <span class="muted">{formatTroops(mobilize.gold)} gold</span>
-          {/if}
-          <kbd>M</kbd>
-        </button>
+        {#if launcher.length > 0}
+          <div class="launcher" role="group" aria-label="Missiles">
+            {#each launcher as slot (slot.kind)}
+              <button
+                type="button"
+                class="launch"
+                class:active={aiming === slot.kind}
+                class:poor={!slot.affordable}
+                tabindex={-1}
+                disabled={slot.ready < 1 && aiming !== slot.kind}
+                title={slot.ready < 1
+                  ? `${slot.name}: none ready — your Silos are reloading`
+                  : `Aim a ${slot.name.toLowerCase()} (${formatTroops(slot.cost)} gold each): every click on enemy land fires one from a Silo that can reach it (key ${slot.key})`}
+                onclick={() => onAimMissile(slot.kind)}
+              >
+                <span aria-hidden="true">{MISSILE_ICON[slot.kind]}</span>
+                {slot.name}
+                <span class="count">{slot.ready}</span>
+                <kbd>{slot.key}</kbd>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
       <BuildBar onPick={onPickBuilding} />
     {/if}
@@ -146,8 +164,8 @@
     left: 50%;
     bottom: var(--space-4);
     transform: translateX(-50%);
-    /* 620: room for six buildings, the wall and the air defence toggle (2B.2). */
-    width: min(620px, calc(100% - 2 * var(--space-4)));
+    /* Room for six buildings, the wall and the air defence toggle on one row (D-033). */
+    width: min(700px, calc(100% - 2 * var(--space-4)));
     padding: var(--space-3) var(--space-4);
     background: var(--surface-glass);
     backdrop-filter: blur(var(--surface-blur));
@@ -196,6 +214,12 @@
     margin-left: var(--space-2);
     font-size: var(--text-sm);
     color: var(--text-muted);
+  }
+
+  .housing {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
   }
 
   .growth {
@@ -396,40 +420,56 @@
     color: var(--text-secondary);
   }
 
-  .mobilize {
+  .launcher {
+    display: flex;
+    gap: 6px;
+  }
+
+  .launch {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
     height: 28px;
-    padding: 0 var(--space-2) 0 var(--space-3);
-    border: 1px solid color-mix(in srgb, var(--color-gold) 45%, transparent);
+    padding: 0 var(--space-2);
+    border: 1px solid rgb(255 120 90 / 0.5);
     border-radius: var(--radius-control);
-    background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+    background: rgb(255 120 90 / 0.12);
     color: var(--text-primary);
     font: inherit;
     font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
     transition: background var(--duration-fast) var(--ease-out);
   }
 
-  .mobilize:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-gold) 24%, transparent);
+  .launch:hover:not(:disabled) {
+    background: rgb(255 120 90 / 0.24);
   }
 
-  .mobilize:disabled {
+  .launch.active {
+    border-color: #fff;
+    background: rgb(255 120 90 / 0.35);
+  }
+
+  .launch:disabled {
     border-color: var(--surface-hairline);
     background: none;
     color: var(--text-muted);
     cursor: default;
   }
 
-  .mobilize .buy {
-    color: var(--color-success);
+  .launch.poor .count {
+    color: var(--color-danger);
   }
 
-  .mobilize .muted {
-    font-weight: 500;
-    color: var(--text-muted);
+  .count {
+    min-width: 14px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.12);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
   }
 
   kbd {

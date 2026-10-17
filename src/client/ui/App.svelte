@@ -5,6 +5,7 @@
   import type { Placeable } from "../app/buildings.ts";
   import type { LiftMode } from "../app/flights.ts";
   import type { PingKind } from "../../sim/rules.ts";
+  import type { MissileKind } from "../../sim/world.ts";
 
   export interface AppActions {
     /** Start a game with the start screen's choices (ui.nations, ui.tribes, …). */
@@ -28,11 +29,12 @@
     renewAlliance: (ally: number) => void;
     dismissRenewal: (ally: number) => void;
     breakAlliance: (ally: number) => void;
-    /** Gold (GAME_DESIGN.md §3.16): buy troops; give a friend troops or gold. */
-    mobilize: () => void;
+    /** Gold (GAME_DESIGN.md §3.16): give a friend troops or gold. */
     donate: (to: number, resource: "troops" | "gold", percent: number) => void;
     /** Buildings (GAME_DESIGN.md §3.17): pick one up from the build bar to place it. */
     pickBuilding: (type: Placeable) => void;
+    /** The command bar's missile launcher (D-033). */
+    aimMissile: (kind: MissileKind) => void;
     upgrade: (buildingId: number) => void;
     cancelBuild: (buildingId: number) => void;
     /** Walls (GAME_DESIGN.md §3.17.6): drawn with the build bar's wall tool. */
@@ -113,7 +115,7 @@
     onCounter={actions.counter}
     onRecallBoat={actions.recallBoat}
   />
-  <CommandBar onMobilize={actions.mobilize} onPickBuilding={actions.pickBuilding} />
+  <CommandBar onPickBuilding={actions.pickBuilding} onAimMissile={actions.aimMissile} />
   <HoverCard />
   <ContextMenu
     onAttack={actions.attackTile}

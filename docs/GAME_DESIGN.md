@@ -47,7 +47,7 @@ START SMALL → EXPAND → GROW → MEET NEIGHBORS → FORM BORDERS → FIGHT / 
 | Meet neighbors | Borders touch | Every shared border is a threat *and* an opportunity |
 | Fight | Choose a % of troops and click enemy land | Bigger commitments are more efficient but leave you exposed |
 | Encircle | Cut through, surround pockets | Fully enclosed land falls instantly |
-| Win | Control 70% of the land or outlast everyone | |
+| Win | Control 80% of the land (70% until D-033) or outlast everyone | |
 
 ---
 
@@ -286,12 +286,12 @@ the one with the longest shared border, or the one actively attacking). Coasts a
 
 ### 3.10 Victory & defeat
 
-- **Victory:** control **≥ 70% of all land**, or be the last player standing. In team
+- **Victory:** control **≥ 80% of all land** (70% until the Phase 2B playtest, D-033), or be the last player standing. In team
   games a team needs **85%** together (2B.6 balance pass, §3.15).
 - **Defeat:** your territory reaches zero. You may keep watching (spectate) or restart.
 - **Anti-stall** (pulled into Phase 1 at milestone 1.7): after **15 min** the land
   requirement drops **1% every 30 s**, down to **50%** at 25 min. The HUD shows the
-  current goal next to the clock ("Win 70%", amber once it drops) and a toast announces
+  current goal next to the clock ("Win 80%", amber once it drops) and a toast announces
   the start. Why: about 1 bot game in 100 ended as two equal players who kept cancelling
   each other's attacks (counters cancel armies 1:1, and equal armies stall by design,
   §3.6) — those games ran 40–60 min. Almost every other game ends by 16 min, so the rule
@@ -456,7 +456,7 @@ below. All numbers live in `rules.diplomacy`; `enabled: false` turns the whole s
 | Break | at any time; the breaker is a **traitor for 30 s** | Betrayal is possible but costly |
 | Traitor | anyone attacking a traitor loses **0.6×** troops per tile and moves **1.33× faster** (0.75× the delay per tile); tribes attack a neighbouring traitor first; nations weigh traitors **2×** as targets (user request during 2.2) and the betrayed nation holds a grudge | A visible, short window of weakness: the betrayed side and its neighbours can strike back |
 | How many | **no cap** for players; nations hold at most 2 alliances (bots' own restraint) | A human may ally many tribes — but then can't eat them without becoming a traitor; the trade-off is the decision |
-| Victory | **only your own land counts** (70% or last standing); alliances don't share a win | Shared victory is what teams (2.3) are for. Two allies left alone will have to fight: nations never ally or renew when only two contenders are left |
+| Victory | **only your own land counts** (80% or last standing); alliances don't share a win | Shared victory is what teams (2.3) are for. Two allies left alone will have to fight: nations never ally or renew when only two contenders are left |
 | Elimination | an eliminated player's alliances and requests vanish | — |
 
 **AI**
@@ -574,6 +574,12 @@ equally often. Free-for-all keeps 70%. The HUD's goal ("Win 85%") follows the mo
 
 ### 3.16 Economy: gold, Mobilize, donations (milestone 2.4)
 
+> **D-033 (2026-10-16): Mobilize is gone.** After the Phase 2B playtest the user called it
+> "over powered" and asked to remove it entirely: gold now buys buildings, walls and missiles
+> (and can be given to friends); troops come only from land and Housing, and Housing gives
+> 2.5× the capacity it did. The Mobilize rows and the war chest below are history. The
+> command bar's Mobilize button became the missile launcher (§3.17.8).
+
 Model **E2 + Mobilize** (§6.1, Q6): gold comes from land, sublinearly, and before
 buildings exist (2.5) it buys one thing — troops, instantly, within your capacity.
 Donations between friends (§6.4) come with it. Design note written before building; the
@@ -585,13 +591,13 @@ user chose on 2026-10-02 that **troops can be donated too**, with limits (D-020)
 |---|---|---|
 | Income | every tick of play: **10 + 0.8 · √tiles** gold (rounded down). Spawn start (49 tiles) ≈ 16/tick (160/s); a mid-game empire of 50k tiles ≈ 190/tick (1.9k/s); 200k tiles ≈ 370/tick | "Land = income" is intuitive; the square root damps the snowball (4× the land → 2× the gold). The base keeps a small player in the game |
 | Tribes | **half** the income, and they **never spend it** | They're filler (D-017); their gold piles up as loot — eating a tribe that survived long pays |
-| Mobilize | spend **1 gold per troop** for instant home troops, at most up to your capacity (home + field ≤ capacity, as always). The HUD buys **10% of your capacity** per click (key **M**); if gold is short it buys what you can afford | Gold is a reserve army that doesn't count toward the cap and can't be killed — but deploying it fills you past the growth sweet spot. Best right after an attack (back to ½, where growth peaks) or right before one |
+| Mobilize *(removed, D-033)* | spend **1 gold per troop** for instant home troops, at most up to your capacity (home + field ≤ capacity, as always). The HUD buys **10% of your capacity** per click (key **M**); if gold is short it buys what you can afford | Gold is a reserve army that doesn't count toward the cap and can't be killed — but deploying it fills you past the growth sweet spot. Best right after an attack (back to ½, where growth peaks) or right before one |
 | How much it's worth | spending all income ≈ **+20% of peak troop growth** at every size (early 16 vs 75 troops/tick, mid 190 vs 1,040) | Noticeable, not dominant; buildings will compete for the same gold |
 | Loot | conquering a player (eliminating them) gives you **all their leftover gold** — nations' and tribes' alike (user request during 2.4; the note first said half). On the map the capturer's border shimmers gold for ~2 s and "+12K" with a coin rises from where the captured land was | Finishing players off pays, and you see it pay. Nobody gets the gold if no one eliminated them |
 | Donations | *(Planned change, D-023, milestone 2.5: troops only to a friend you share a border with, or by airlift from an Airport in 2B.1; gold unchanged.)* To an **ally or teammate**: troops (from your home troops) or gold, a share chosen with the usual send % (default 25%). Each kind to each friend at most every **10 s**. Troops can't push the friend over their capacity (only what fits is sent; nothing if they're full) | Rescue a friend under attack, or pool gold in a team. The cap and the cooldown limit "feeding" one player (D-020) |
 | Off switch | `rules.economy.enabled = false` (headless `--no-economy`): no gold at all, games play exactly as in 2.3 | Regression check |
 
-**AI (as built).** *Nations* keep gold as a **war chest**: right before they attack a
+**AI (as built; the war chest until D-033).** *Nations* keep gold as a **war chest**: right before they attack a
 player they mobilize all it buys (if that's at least 2% of their capacity), so gold makes
 their strikes stronger. They **give troops** — a quarter of their home troops — to a
 teammate or human ally who is losing a war (incoming armies bigger than the friend's home
@@ -607,7 +613,9 @@ up) 11.6–12.1 min.
 **HUD**
 
 - **Command bar:** gold and income next to the troop numbers; a **Mobilize** button with
-  the troops it buys and their cost (key M), disabled at the cap or without gold.
+  the troops it buys and their cost (key M), disabled at the cap or without gold — replaced
+  in D-033 by the missile launcher (once you own a Silo) and "🏠 +75K", the capacity your
+  Housing gives.
 - **Right-click menu on an ally or teammate:** *Send troops* and *Send gold* with the
   current send % and the amounts, or the seconds left on the cooldown.
 - **Hover card:** other players' gold.
@@ -923,10 +931,26 @@ the Fortress Wall, and the assault lands whole and takes the land. **Since the 2
 
 #### 3.17.8 Missile Silo
 
+> **D-033 (after the Phase 2B playtest, 2026-10-16).** The user: "Missiles need to do splash
+> damage maybe this comes with the bunker buster. Clicking on the missile silo to access a
+> missile launch isn't efficient … a button once the missile silo is placed to easily send
+> missiles out fast. Missiles need to move faster in the air." Now: missiles fly **60 km/s**
+> (6 tiles a tick, was 3 — the whole map in ~18 s, still time for SAMs); the strike missile
+> burns a **4 km crater** and the bunker buster hits everything within **4 km** for a level
+> (table below); and once you own a Silo the command bar shows a **launcher** — one button
+> per missile your Silos can fire with how many are ready (🚀 Missile **R**, 🎯 Buster **T**,
+> ☢ Warhead **X**). A click or the key aims it; every click on enemy land then fires one from
+> the nearest Silo that can reach it and has one ready, and aiming goes on while any are
+> left (the same key, Esc or right-click stop it). The aiming preview draws the crater (red)
+> inside the blast (orange) and says what it burns ("crater: 49 tiles burned · 2 buildings −2
+> levels · …"); the blast ring on impact matches (a buster's: its 4 km splash). Toasts: "🚀
+> Your strike missile hit 2 buildings · 49 tiles of land burned · 56.8K troops killed".
+> Nations count the crater's troops and the buster's splash in a missile's value.
+
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
 |---|---|---|---|---|---|---|
-| I | Missile Silo | 1 | 30 s | 250 km | 75k | **Strike missile**: at the target, every enemy building within 8 km loses **two** levels (I–II destroyed; since D-032 — was one), the rest are out of action 60 s, fortification there is suppressed for 30 s, and **10% of the victim's home troops die** (D-032); no land destroyed |
-| II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target is **destroyed** (since D-032 — was two levels) and 5% of its owner's home troops die; slots let you fire two at once (saturates SAMs) |
+| I | Missile Silo | 1 | 30 s | 250 km | 75k | **Strike missile**: at the target, every enemy building within 8 km loses **two** levels (I–II destroyed; since D-032 — was one), the rest are out of action 60 s, fortification there is suppressed for 30 s, and **10% of the victim's home troops die** (D-032); since D-033 it also blasts a **4 km crater**: that enemy land becomes neutral for 30 s at 3× the expansion cost (the tiles of buildings still standing are spared), its owners losing home troops in proportion |
+| II | Advanced Silo | 2 | 25 s | 400 km | 75k | **Bunker buster**: the building at the exact target is **destroyed** (since D-032 — was two levels), every other enemy building within **4 km loses a level** (its splash, D-033), and 5% of its owner's home troops die; slots let you fire two at once (saturates SAMs) |
 | III | Strategic Missile Complex | 3 | 20 s | whole map | 75k / **500k** | **Strategic warhead** (own 90 s cooldown): 20 km radius — land becomes neutral *scorched* land (3× expansion cost for 60 s), buildings destroyed, owner loses home troops in proportion to land lost. Breaks an alliance if it hits the ally (like OpenFront). Only SAM III can intercept it |
 
 *As built (2B.5):* the table as written, with these details decided while building it (D-030).
@@ -967,7 +991,7 @@ worth `siloWorth` 0.4 × capacity for the whole ladder (each level its share of 
 III double while a runaway leader stands) while an enemy nation or human has buildings within
 250 km of their land; one Silo. They fire a strike missile or bunker buster at an enemy they are
 at war with when the levels it would cost are worth twice the price, one more missile than the
-SAM II+ interceptors on the route (never while mobilizing), and the warhead only at a **runaway
+SAM II+ interceptors on the route, and the warhead only at a **runaway
 leader** (a non-friend holding a third of all owned land), where it scorches the most of the
 leader's land, never on an ally's land and never into a SAM III. A hostile Silo in reach counts
 as an air threat for their SAMs. In headless games (30 Islands games, 8 nations) Silos
@@ -1004,12 +1028,12 @@ Speeds/ranges in tiles (= km). Cooldowns in seconds of game time.
 
 | Building | Lvl | Build / upgrade cost (total) | Time | Benefit | New ability | Range | Capacity | Cooldown | Countered by | Looks like |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Housing ✅ | I | 40k (40k) | 5 s | +30k troop capacity | — | — | — | — | capture (−1 lvl), strike, missile | one house, 1 pip |
-| Housing ✅ | II Developed Housing | +90k (130k) | 10 s | +90k capacity | +5% troop growth (all buildings together max +20%) | — | — | — | same | two houses, 2 pips |
-| Housing ✅ | III Metropolis | +220k (350k) | 20 s | +250k capacity, +10% growth | +20 gold/tick | — | — | — | same — a prime target | a tower between houses, 3 pips |
+| Housing ✅ | I | 40k (40k) | 5 s | +75k troop capacity (30k until D-033) | — | — | — | — | capture (−1 lvl), strike, missile | one house, 1 pip |
+| Housing ✅ | II Developed Housing | +90k (130k) | 10 s | +225k capacity (90k) | +5% troop growth (all buildings together max +20%) | — | — | — | same | two houses, 2 pips |
+| Housing ✅ | III Metropolis | +220k (350k) | 20 s | +625k capacity (250k), +10% growth | +20 gold/tick | — | — | — | same — a prime target | a tower between houses, 3 pips |
 | Factory ✅ | I | 60k (60k) | 5 s | +30 gold/tick (300/s) | — | — | — | — | capture, strike, missile | hall + one chimney |
-| Factory ✅ | II Industrial Complex | +120k (180k) | 10 s | +90 gold/tick | Mobilize −10% (best factory counts) | — | — | — | same | hall + two chimneys |
-| Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +220 gold/tick, Mobilize −20% | **War production** ✅ (2B.5): airports & silos within 60 km reload 25% faster | 60 | — | — | same — a prime target | hall + three chimneys |
+| Factory ✅ | II Industrial Complex | +120k (180k) | 10 s | +100 gold/tick (90 and Mobilize −10% until D-033) | — | — | — | — | same | hall + two chimneys |
+| Factory ✅ | III Mega Industrial Complex | +280k (460k) | 20 s | +250 gold/tick (220 and Mobilize −20% until D-033) | **War production** ✅ (2B.5): airports & silos within 60 km reload 25% faster | 60 | — | — | same — a prime target | hall + three chimneys |
 | Port ✅ | I | 50k (50k) | 10 s | boats from within 30 km of it 1.5× faster; +1 boat at a time; +15 gold/tick | — | 30 | +1 boat | — | capture, strike, missile, warships (later) | small pier |
 | Port ✅ | II Naval Port | +120k (170k) | 15 s | boats 2× faster; +1 more boat; +40 gold/tick | **Marines**: landings from it lose ×0.8 per tile | 30 | +2 boats | — | same | pier + crane |
 | Port ✅ | III Naval Base | +300k (470k) | 20 s | boats ×2, +2 boats, Marines; +25 gold/tick, a trade ship every 7 s (§3.19) | **Coastal fortification** ✅ (its owner's coast within 30 km counts as a Stone Wall) and a **warship patrol** ✅ (2 warships within 40 km, §3.18.1) | 30 / 40 | +2 boats | rebuild 60 s | strike, missile, enemy warships, airborne behind the coast | the pack's Modern port |
@@ -1054,7 +1078,7 @@ captured by a **tribe** is destroyed (tribes never keep buildings, like OpenFron
 buildings; troop gifts need a shared border (D-023). **Nation AI:** a nation weighs every
 option — a new Housing or Factory (one building per 4,000 tiles) and the next level of each
 building — by value per gold (capacity 1 per troop, growth bonus over 1 min of peak growth,
-gold over 2.5 min of income, Mobilize discount over the gold it earns in that time), aims
+gold over 2.5 min of income — and, until D-033, a Mobilize discount), aims
 at the best one it can afford within 2 min of income, keeps part of that price out of its
 war chest while saving (turtles 100%, expanders 80%, opportunists 60%, aggressors 40%),
 and builds once it can pay — in peacetime, one construction at a time, deep inside its
@@ -1102,6 +1126,17 @@ tune the game's pace (crush curve, win share) rather than make L3 cheaper.
 
 #### 3.17.13 UI/UX
 
+- **Keys and badges (D-033, the user after the Phase 2B playtest):** keys **1–7** pick up the
+  build bar's buildings in order — 1 Housing, 2 Factory, 3 Port, 4 Airport, 5 SAM, 6 Silo, 7
+  Wall (the attack presets moved to Shift+1–5); each tile shows its key, keeps its name on
+  one line ("SAM", "Silo": two-line names spilled out of the 36 px box) and the row wraps on
+  a narrow screen instead of spilling out of the bar. "Icons do not feel clear enough of what
+  they actually are": every type has a **colour and a bold symbol** — Housing green ⌂,
+  Factory amber (sawtooth roof), Port blue ⚓, Airport purple ✈, SAM teal (shield), Silo red
+  (rocket), Wall grey (battlements) — drawn as a small disc on the icon's upper left on the
+  map, in the build bar and on the card. **Zoomed out**, other players' level I–II buildings
+  are dots filled with their type's colour, ringed in the owner's, with **one white pip per
+  level** under them ("level dots when zoomed out").
 - **Build (as built after the 2.5 playtest):** a **build bar** in the bottom command bar —
   one tile per building with its icon and price (red when you can't afford it). Click a
   tile and the building sticks to the mouse (snapped to the tile under it, with its
@@ -1241,13 +1276,13 @@ without rework (their owner and destination can change at sea).
 the same sea, picked at random, on a fixed rhythm (Port I every 20 s, Naval Port every 10 s;
 each Port has its own beat so they don't all leave at once). The ship sails the sea route at
 1 tile per tick (Port speed bonuses are for troop boats). When it docks, **both** owners
-earn gold — the more sea it crossed, the more: 400 + 10 per route tile, at most 6,000 (≈
+earn gold — the more sea it crossed, the more: 1,000 + 12 per route tile since D-033 (400 + 10 before), at most 6,000 (≈
 1.4k for 100 tiles, 3.4k for 300). Allies, teammates and enemies all trade (no embargo yet).
 
 | Rule | Value / behaviour | Why |
 |---|---|---|
 | Partners | any other living player's finished Port that shares a sea with yours | OpenFront: any trading partner |
-| Gold per trip | each side `min(6,000, 400 + 10 × route tiles)`, paid on docking | Long routes pay more (like OpenFront), but capped |
+| Gold per trip | each side `min(6,000, 1,000 + 12 × route tiles)` (400 + 10 until D-033: "Ports don't make enough money when receiving goods early game"), paid on docking | Long routes pay more (like OpenFront), but capped; the bigger base pays the short routes of the early game |
 | Rhythm | Port I one ship per 20 s, Naval Port one per 10 s | Levels matter; a typical Port I earns ~30 gold/tick from trade (≈ a Factory I), a Naval Port ~60 |
 | Harbour income | the flat Port income drops to +5 / +15 gold per tick (was +15 / +40) | Trade is now where a Port's money comes from; the small flat part keeps a lone Port useful |
 | Destination Port captured | the ship docks with the new owner (they earn the receiving half) — unless that's the ship's own owner (no gold) | Ports change hands; trade follows the Port |
@@ -1394,7 +1429,8 @@ and a keyboard path, and hovering always tells you what a click would do.
     the segment that would be sent at the current % is **hatched**, so you see where
     you'd land relative to the sweet spot *before* clicking; growth rate `+480/s`.
   - **Attack % control:** five presets (segmented control) + live troop count.
-    Adjustable by click, `1–5`, `Q/E`, or Shift+wheel. Fill animates smoothly.
+    Adjustable by click, `Shift+1–5` (numpad 1–5; plain `1–5` until D-033 gave the number
+    keys to the buildings), `Q/E`, or Shift+wheel. Fill animates smoothly.
 - **Active attacks (above the command bar):** one compact chip per attack — target,
   remaining army (shrinking bar), tiles taken, a qualitative **odds** label
   (*Overwhelming · Advantage · Even · Costly · Hopeless*), and × to retreat. Incoming
@@ -1414,7 +1450,7 @@ and a keyboard path, and hovering always tells you what a click would do.
   as a faint striped segment. A status line names the state in plain words — *Low —
   rebuilding slowly · Near half — fastest growth · Above half — growth slowing · Full — not
   growing. Send troops!* — and at full capacity the whole card pulses amber. Presets
-  10–100 (keys 1–5) plus the live troop count; a non-preset value (Q/E, Shift+wheel) is
+  10–100 (Shift+1–5) plus the live troop count; a non-preset value (Q/E, Shift+wheel) is
   shown next to it.
 - **Odds** (`sim/battle.ts`, the same estimate the bots use): the expected share of the
   target's land an army takes — limited by Lanchester's law *and* by the per-tile cost of
@@ -1430,7 +1466,12 @@ and a keyboard path, and hovering always tells you what a click would do.
 - **Hover card:** owner, terrain (highland/mountain warn "slower, costlier"), troops,
   land, bot personality, "Attacking you" / "You're attacking", and what a click would
   do: expand (with an upper bound of tiles) or attack (army, odds, expected outcome) — or
-  why it can't (not bordering, spawn protection countdown, no troops).
+  why it can't (not bordering, spawn protection countdown, no troops). *D-033 (the user:
+  "no hover land info needed for tribes or unclaimed land; hover information needs to be more
+  clear and easy to read"):* no card over unclaimed land or a tribe's; the card has a coloured
+  edge in the owner's colour, a bold name with one relation chip (Ally, Teammate, Attacking
+  you, Traitor), the bot's description, labelled rows — Troops, Land, Gold, Housing — and the
+  click's outcome in its own box ("CLICK attack with 38K (25%) Advantage").
 - **Right-click menu:** the same preview for every preset (pick one to send it), retreat
   from that player / stop expanding. Arrow keys + Enter work; Esc or a click outside
   closes it.

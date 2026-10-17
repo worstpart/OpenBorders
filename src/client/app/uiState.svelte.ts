@@ -130,6 +130,11 @@ class UiState {
    */
   airliftFrom = $state<number | null>(null);
   liftMode = $state<LiftMode>("airlift");
+  /**
+   * Aiming from the command bar's missile launcher (D-033): each click fires from whichever
+   * Silo can, and aiming goes on while missiles are ready (airliftFrom is then any such Silo).
+   */
+  missileAuto = $state(false);
   /** Your warship selected for orders: the next click on the sea sends it there (or null). */
   selectedWarship = $state<number | null>(null);
   /** The air defence view (GAME_DESIGN.md §3.17.7, key V): every SAM's ring on the map. */
@@ -193,6 +198,7 @@ class UiState {
     this.boatPreview = null;
     this.placing = null;
     this.airliftFrom = null;
+    this.missileAuto = false;
     this.selectedWarship = null;
     this.wallPoints = [];
     this.myRequests = new Map();

@@ -41,7 +41,7 @@ function me(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     gold: 100_000,
     goldPerTick: 20,
     tradeGold: 0,
-    mobilizeDiscount: 0,
+    capacityBonus: 0,
     growthBonus: 0,
     peakTiles: 150,
     tier: null,
@@ -169,9 +169,9 @@ describe("building card", () => {
     const housing = building();
     const card = buildingCard(ctx({ buildings: [housing] }), housing);
     expect(card.name).toBe("Housing");
-    expect(card.effects).toEqual(["+30K troop capacity"]);
+    expect(card.effects).toEqual(["+75K troop capacity"]);
     expect(card.upgrade).toMatchObject({ name: "Developed Housing", price: 113_000 });
-    expect(card.upgrade!.lines).toEqual(["Troop capacity +90K", "New: +5% troop growth"]);
+    expect(card.upgrade!.lines).toEqual(["Troop capacity +225K", "New: +5% troop growth"]);
     expect(card.upgrade!.affordable).toBe(false);
   });
 
@@ -191,12 +191,9 @@ describe("building card", () => {
   });
 
   it("describes every level", () => {
-    expect(effectLines(DEFAULT_RULES, "factory", 2)).toEqual([
-      "+900 gold/s",
-      "Mobilize 10% cheaper",
-    ]);
+    expect(effectLines(DEFAULT_RULES, "factory", 2)).toEqual(["+1K gold/s"]);
     expect(upgradeLines(DEFAULT_RULES, "housing", 2)).toEqual([
-      "Troop capacity +250K",
+      "Troop capacity +625K",
       "+10% troop growth",
       "New: gold +200/s",
     ]);
@@ -257,7 +254,7 @@ describe("building toasts and hint", () => {
       names,
     );
     expect(toasts.map((t) => t.text)).toEqual([
-      "Developed Housing ready — +90K troop capacity, +5% troop growth",
+      "Developed Housing ready — +225K troop capacity, +5% troop growth",
       "P3 took over your Factory",
       "You destroyed P4's Housing",
     ]);
@@ -265,7 +262,7 @@ describe("building toasts and hint", () => {
 
   it("suggests building once Housing is affordable", () => {
     const hints = new HintTracker(null);
-    for (const id of ["expand", "sweetSpot", "menus", "gold"] as const) hints.complete(id);
+    for (const id of ["expand", "sweetSpot", "menus"] as const) hints.complete(id);
     expect(hints.update({ playing: true, canAttackPlayer: false }, 0)).toBeNull();
     expect(hints.update({ playing: true, canAttackPlayer: false, canBuild: true }, 1)).toBe(
       "build",

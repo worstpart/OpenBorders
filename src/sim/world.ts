@@ -112,8 +112,6 @@ export interface BuildingBonus {
   growth: number;
   /** Extra gold per tick. */
   income: number;
-  /** Mobilize costs this share less. */
-  mobilizeDiscount: number;
 }
 
 /**
@@ -566,7 +564,7 @@ export function createWorld(setup: GameSetup): World {
     tradeGold: 0,
     lastEmoteTick: -1,
     lastPingTick: -1,
-    bonus: { capacity: 0, growth: 0, income: 0, mobilizeDiscount: 0 },
+    bonus: { capacity: 0, growth: 0, income: 0 },
     team: p.team ?? 0,
     encircleDirty: true,
     brain: p.kind === "bot" ? createBrain(p, rng) : null,

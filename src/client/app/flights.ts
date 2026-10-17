@@ -26,10 +26,14 @@ import {
 import { levelRules } from "../../sim/systems/buildings.ts";
 import {
   isMissile,
+  MISSILE_KINDS,
   missileCost,
+  missileLevel,
   missileProblem,
   missileProblemText,
   siloRange,
+  siloReady,
+  warheadCooldownLeft,
   type MissileProblem,
 } from "../../sim/systems/missiles.ts";
 import type { BuildingType } from "../../sim/rules.ts";
@@ -95,12 +99,18 @@ export type MissileEffect =
       readonly buildings: number;
       readonly radius: number;
       readonly seconds: number;
+      /** The crater (D-033): its radius, and the enemy land tiles it would burn. */
+      readonly craterRadius: number;
+      readonly craterTiles: number;
     }
   | {
       readonly kind: "buster";
       readonly buildingType: BuildingType;
       readonly level: number;
       readonly levelAfter: number;
+      /** Its splash (D-033): the other enemy buildings within `radius` that lose a level. */
+      readonly radius: number;
+      readonly splash: number;
     }
   | {
       readonly kind: "warhead";
@@ -348,11 +358,29 @@ function missileEffect(
     return dx * dx + dy * dy <= radius * radius;
   };
   if (kind === "missile") {
+    // Like the sim: the tiles of buildings that survive the blast (level III) don't burn.
+    const standing = new Set(
+      buildings.filter((b) => enemy(b.owner) && b.level > f.missileLevels).map((b) => b.tile),
+    );
+    let craterTiles = 0;
+    const c = f.craterRadius;
+    const cx = tile % map.width;
+    const cy = Math.floor(tile / map.width);
+    for (let y = Math.max(0, cy - c); y <= Math.min(map.height - 1, cy + c); y++) {
+      for (let x = Math.max(0, cx - c); x <= Math.min(map.width - 1, cx + c); x++) {
+        const at = y * map.width + x;
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= c * c && enemy(owner[at]!) && !standing.has(at)) {
+          craterTiles++;
+        }
+      }
+    }
     return {
       kind,
       buildings: buildings.filter((b) => enemy(b.owner) && r2(f.missileRadius, b.tile)).length,
       radius: f.missileRadius,
       seconds: (f.missileSuppressionTicks * rules.tickMs) / 1000,
+      craterRadius: c,
+      craterTiles,
     };
   }
   if (kind === "buster") {
@@ -362,6 +390,10 @@ function missileEffect(
       buildingType: target.type,
       level: target.level,
       levelAfter: Math.max(0, target.level - f.busterLevels),
+      radius: f.busterSplashRadius,
+      splash: buildings.filter(
+        (b) => b !== target && enemy(b.owner) && r2(f.busterSplashRadius, b.tile),
+      ).length,
     };
   }
   // The warhead spares only your own land and your teammates' (missiles.ts warheadTiles).
@@ -388,7 +420,7 @@ const percent = (share: number) => `${Math.round(share * 100)}%`;
 /** What a strike missile does, in a few words (cards, the aiming banner). */
 export function strikeMissileText(rules: GameRules): string {
   const f = rules.flights;
-  return `every enemy building within ${f.missileRadius} km loses ${f.missileLevels} level${f.missileLevels > 1 ? "s" : ""}, and ${percent(f.missileTroopShare)} of their troops die`;
+  return `blasts a ${f.craterRadius} km crater of empty land, every enemy building within ${f.missileRadius} km loses ${f.missileLevels} level${f.missileLevels > 1 ? "s" : ""}, and ${percent(f.missileTroopShare)} of their troops die`;
 }
 
 /** What a bunker buster does, in a few words. */
@@ -398,25 +430,33 @@ export function busterText(rules: GameRules): string {
     f.busterLevels >= 3
       ? "destroys one enemy building"
       : `one building loses ${f.busterLevels} levels`;
-  return `${hit}, and ${percent(f.busterTroopShare)} of its owner's troops die`;
+  return `${hit}, the enemy buildings within ${f.busterSplashRadius} km lose ${f.busterSplashLevels} level${f.busterSplashLevels > 1 ? "s" : ""}, and ${percent(f.busterTroopShare)} of its owner's troops die`;
 }
 
 /** A missile's effect in a few words, for the aiming label. */
 export function missileEffectText(rules: GameRules, effect: MissileEffect): string {
   const f = rules.flights;
   if (effect.kind === "missile") {
+    const crater =
+      effect.craterTiles > 0
+        ? `crater: ${effect.craterTiles.toLocaleString("en-US")} tiles burned · `
+        : "";
     const hit =
       effect.buildings > 0
         ? `${effect.buildings} building${effect.buildings > 1 ? "s" : ""} −${f.missileLevels} levels · `
         : "";
-    return `${hit}${percent(f.missileTroopShare)} of their troops · suppress ${effect.radius} km for ${effect.seconds} s`;
+    return `${crater}${hit}${percent(f.missileTroopShare)} of their troops · suppress ${effect.radius} km for ${effect.seconds} s`;
   }
   if (effect.kind === "buster") {
     const name = levelRules(rules, effect.buildingType, Math.max(1, effect.level)).name;
+    const splash =
+      effect.splash > 0
+        ? ` · ${effect.splash} more building${effect.splash > 1 ? "s" : ""} −${f.busterSplashLevels}`
+        : "";
     const troops = ` · ${percent(f.busterTroopShare)} of their troops`;
     return effect.levelAfter === 0
-      ? `destroy ${name}${troops}`
-      : `${name} → level ${ROMAN[effect.levelAfter]}${troops}`;
+      ? `destroy ${name}${splash}${troops}`
+      : `${name} → level ${ROMAN[effect.levelAfter]}${splash}${troops}`;
   }
   return `scorch ${effect.tiles.toLocaleString("en-US")} tiles of land`;
 }
@@ -506,3 +546,125 @@ export interface BlastEffect {
 
 /** How long a blast shows (ms). */
 export const BLAST_MS = 1600;
+
+/**
+ * The missile launcher in the command bar (D-033, the user: "we should have a button once the
+ * missile silo is placed to easily send missiles out fast"): one button per missile your Silos
+ * can fire, with how many are ready — a click (or its key) aims it, and every click on enemy
+ * land fires one from whichever Silo can reach it.
+ */
+export interface LauncherSlot {
+  readonly kind: MissileKind;
+  readonly name: string;
+  readonly key: string;
+  /** Missiles of this kind ready to fire now (launches sent but not yet seen count as used). */
+  readonly ready: number;
+  readonly cost: number;
+  readonly affordable: boolean;
+}
+
+export const LAUNCHER_NAMES: Readonly<Record<MissileKind, { name: string; key: string }>> = {
+  missile: { name: "Missile", key: "R" },
+  buster: { name: "Buster", key: "T" },
+  warhead: { name: "Warhead", key: "X" },
+};
+
+/** Your finished Silos that can fire `kind`. */
+export function silosFor(
+  buildings: readonly BuildingSnapshot[],
+  me: PlayerId,
+  kind: MissileKind,
+): BuildingSnapshot[] {
+  return buildings.filter(
+    (b) => b.owner === me && b.type === "silo" && b.level >= missileLevel(kind),
+  );
+}
+
+/** Missiles of `kind` a Silo can fire now, minus the launches already sent from it (`pending`). */
+export function siloShots(
+  rules: GameRules,
+  silo: BuildingSnapshot,
+  kind: MissileKind,
+  tick: number,
+  pending = 0,
+): number {
+  if (kind === "warhead" && (warheadCooldownLeft(silo, tick) > 0 || pending > 0)) return 0;
+  const ready = Math.max(0, siloReady(rules, silo, tick) - pending);
+  return kind === "warhead" ? Math.min(1, ready) : ready;
+}
+
+export function missileLauncher(
+  rules: GameRules,
+  buildings: readonly BuildingSnapshot[],
+  me: PlayerSnapshot,
+  tick: number,
+  pending: ReadonlyMap<number, number> = new Map(),
+): LauncherSlot[] {
+  if (!rules.flights.enabled) return [];
+  const slots: LauncherSlot[] = [];
+  for (const kind of MISSILE_KINDS) {
+    const silos = silosFor(buildings, me.id, kind);
+    if (silos.length === 0) continue;
+    let ready = 0;
+    for (const silo of silos)
+      ready += siloShots(rules, silo, kind, tick, pending.get(silo.id) ?? 0);
+    const cost = missileCost(rules, kind);
+    slots.push({ kind, ...LAUNCHER_NAMES[kind], ready, cost, affordable: me.gold >= cost });
+  }
+  return slots;
+}
+
+/**
+ * A missile of `kind` aimed at `tile` from whichever of your Silos should fire it: the
+ * nearest one that can (in range, a missile ready), else the nearest one that could reach,
+ * to say why not. Null when you have no Silo for it.
+ */
+export function launcherPreview(
+  rules: GameRules,
+  map: GameMap,
+  me: PlayerSnapshot,
+  owner: Uint16Array,
+  friends: ReadonlySet<PlayerId>,
+  teammates: ReadonlySet<PlayerId>,
+  tick: number,
+  tile: number | null,
+  buildings: readonly BuildingSnapshot[],
+  kind: MissileKind,
+  pending: ReadonlyMap<number, number> = new Map(),
+): AirliftPreview | null {
+  const silos = silosFor(buildings, me.id, kind);
+  if (silos.length === 0) return null;
+  const at = tile ?? silos[0]!.tile;
+  const distance = (b: BuildingSnapshot) => {
+    const dx = (b.tile % map.width) - (at % map.width);
+    const dy = Math.floor(b.tile / map.width) - Math.floor(at / map.width);
+    return dx * dx + dy * dy;
+  };
+  silos.sort((a, b) => distance(a) - distance(b) || a.id - b.id);
+  let fallback: AirliftPreview | null = null;
+  for (const silo of silos) {
+    const preview = airliftPreview(
+      rules,
+      map,
+      silo,
+      me,
+      owner,
+      friends,
+      tick,
+      tile,
+      0,
+      buildings,
+      kind,
+      teammates,
+    );
+    const shots = siloShots(rules, silo, kind, tick, pending.get(silo.id) ?? 0);
+    if (!preview.problem && shots > 0) return preview;
+    if (!fallback || (fallback.problem === "outOfRange" && preview.problem !== "outOfRange")) {
+      fallback =
+        !preview.problem && shots < 1
+          ? { ...preview, problem: kind === "warhead" ? "cooldown" : "reloading", missile: null }
+          : preview;
+    }
+  }
+  return fallback;
+}

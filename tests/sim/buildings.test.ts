@@ -199,7 +199,7 @@ describe("effects", () => {
     expect(me.bonus.growth).toBe(RULES.buildings.maxGrowthBonus);
   });
 
-  it("Factories add gold per tick and make Mobilize cheaper", () => {
+  it("Factories add gold per tick, more at each level", () => {
     const w = world();
     const me = w.players[0]!;
     send(w, 1, { type: "build", buildingType: "factory", tile: at(4, 2) });
@@ -207,13 +207,7 @@ describe("effects", () => {
     expect(me.lastIncome).toBe(goldIncome(RULES, me.tiles) + FACTORY[0].income!);
     send(w, 1, { type: "upgrade", buildingId: w.buildings[0]!.id });
     run(w, FACTORY[1].buildTicks);
-    expect(me.bonus.mobilizeDiscount).toBe(FACTORY[1].mobilizeDiscount);
-
-    me.gold = 1_000;
-    const events = send(w, 1, { type: "mobilize", percentBp: 10_000 });
-    const mobilized = events.find((e) => e.type === "mobilized");
-    // 10% off: 1,000 gold buys 1,111 troops.
-    expect(mobilized).toMatchObject({ troops: 1_111, gold: 1_000 });
+    expect(me.lastIncome).toBe(goldIncome(RULES, me.tiles) + FACTORY[1].income!);
   });
 });
 

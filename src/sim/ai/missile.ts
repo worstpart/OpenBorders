@@ -10,14 +10,13 @@
  *    with an interceptor ready on the route;
  *  - otherwise a **strike missile** or, from a Silo II+, a **bunker buster** at an enemy it is
  *    at war with (armies either way, or one it sends this think): the target is worth the gold
- *    of the levels the enemies' buildings there would lose (SAMs ×`strikeSamWeight`, Airports
+ *    of the levels the enemies' buildings there would lose (the crater's and the buster's
+ *    splash included, D-033) (SAMs ×`strikeSamWeight`, Airports
  *    ×`strikeAirportWeight`, as for air strikes) plus the troops it kills (a gold a troop),
  *    and it fires only when that is at least
  *    `missileValueFactor`× what the launch costs. SAM II+ on the route shoot missiles down one
  *    by one, so it fires one more missile than the interceptors ready there (saturation) — if
  *    its Silo has them, and the value covers them all.
- *
- * Not while the bot spends its gold on Mobilize this think (its war chest comes first).
  */
 import type { Command } from "../commands.ts";
 import { withinRange } from "../geometry.ts";
@@ -77,14 +76,9 @@ function readySilo(world: World, bot: Player): Building | null {
 }
 
 /** A nation's missile launches for this think (see the header); empty for none. */
-export function decideMissiles(
-  world: World,
-  bot: Player,
-  actions: readonly Command[],
-  mobilizing: boolean,
-): Command[] {
+export function decideMissiles(world: World, bot: Player, actions: readonly Command[]): Command[] {
   const rules = world.rules;
-  if (!rules.flights.enabled || mobilizing) return [];
+  if (!rules.flights.enabled) return [];
   const silo = readySilo(world, bot);
   if (!silo) return [];
   const warhead = decideWarhead(world, bot, silo);
@@ -183,22 +177,33 @@ function decideConventional(
   let best: { tile: number; kind: MissileKind; count: number; value: number } | null = null;
   for (const b of targets) {
     if (!wars.has(b.owner) || !withinRange(world.map, silo.tile, b.tile, range)) continue;
-    // The strike missile around this building, and the bunker buster on it.
+    // The strike missile around this building, and the bunker buster on it (its splash
+    // costs the neighbours a level, D-033).
     let around = 0;
+    let splash = 0;
     for (const other of targets) {
       if (withinRange(world.map, b.tile, other.tile, f.missileRadius)) {
         around += levelsWorth(other, f.missileLevels);
       }
+      if (other !== b && withinRange(world.map, b.tile, other.tile, f.busterSplashRadius)) {
+        splash += levelsWorth(other, f.busterSplashLevels);
+      }
     }
-    // People killed count too, at a gold a troop (rules.economy.goldPerTroop).
-    const home = getPlayer(world, b.owner)!.homeTroops * rules.economy.goldPerTroop;
+    // People killed count too, at a gold a troop (rules.economy.goldPerTroop) — the crater's
+    // share of the owner's land as well (its area stands in for the land it would burn).
+    const owner = getPlayer(world, b.owner)!;
+    const home = owner.homeTroops * rules.economy.goldPerTroop;
+    const craterShare = Math.min(
+      1,
+      (Math.PI * f.craterRadius * f.craterRadius) / Math.max(1, owner.tiles),
+    );
     const options: { kind: MissileKind; value: number }[] = [
-      { kind: "missile", value: around + home * f.missileTroopShare },
+      { kind: "missile", value: around + home * (f.missileTroopShare + craterShare) },
     ];
     if (silo.level >= 2) {
       options.push({
         kind: "buster",
-        value: levelsWorth(b, f.busterLevels) + home * f.busterTroopShare,
+        value: levelsWorth(b, f.busterLevels) + splash + home * f.busterTroopShare,
       });
     }
     for (const option of options) {

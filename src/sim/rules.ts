@@ -207,8 +207,8 @@ export interface DiplomacyRules {
 }
 
 /**
- * Gold (GAME_DESIGN.md §3.16): earned from land, spent on Mobilize (instant troops), given
- * to friends. Model E2 of §6.1.
+ * Gold (GAME_DESIGN.md §3.16): earned from land, spent on buildings, walls and missiles,
+ * given to friends (Mobilize, gold into instant troops, was removed: D-033). Model E2 of §6.1.
  */
 export interface EconomyRules {
   /** false: no gold at all (games play exactly as before milestone 2.4). */
@@ -218,7 +218,7 @@ export interface EconomyRules {
   readonly incomePerSqrtTile: number;
   /** Tribes earn this share of the income (and never spend it: it becomes loot). */
   readonly tribeIncomeShare: number;
-  /** Mobilize: gold per troop raised. */
+  /** What a troop is worth in gold, to nations weighing a missile (troops it kills). */
   readonly goldPerTroop: number;
   /** Whoever eliminates a player takes this share of their gold. */
   readonly lootShare: number;
@@ -251,8 +251,6 @@ export interface BuildingLevelRules {
   readonly growthBonus?: number;
   /** Extra gold per tick. */
   readonly income?: number;
-  /** Mobilize costs this share less (the player's best building counts; no stacking). */
-  readonly mobilizeDiscount?: number;
   /**
    * Ports (GAME_DESIGN.md §3.18): boats launched within `range` tiles of it sail this many
    * times faster…
@@ -575,6 +573,17 @@ export interface FlightRules {
   readonly missileTroopShare: number;
   readonly busterTroopShare: number;
   /**
+   * Splash (the user after the Phase 2B playtest, D-033): a strike missile also blasts a
+   * crater — enemy land within `craterRadius` of the target becomes neutral (but the tiles of
+   * buildings still standing; its owners lose home troops in proportion to the land lost),
+   * costing `scorchedCost`× to retake for `craterTicks`…
+   */
+  readonly craterRadius: number;
+  readonly craterTicks: number;
+  /** …and a bunker buster costs every other enemy building within `busterSplashRadius` `busterSplashLevels` level(s). */
+  readonly busterSplashRadius: number;
+  readonly busterSplashLevels: number;
+  /**
    * The strategic warhead (Silo III) costs `warheadCost`: everyone's land within
    * `warheadRadius` of the target but the launcher's and their teammates' becomes neutral
    * scorched land — its buildings destroyed, its owner losing home troops in proportion to
@@ -594,8 +603,8 @@ export interface BuildAiRules {
    */
   readonly goalHorizonTicks: number;
   /**
-   * …keeping this share of the price out of its war chest (Mobilize before attacks), by
-   * personality: turtles invest, aggressors fight.
+   * …keeping this share of the price out of reach of gifts and missiles, by personality:
+   * turtles invest, aggressors fight.
    */
   readonly saving: Readonly<Record<Personality, number>>;
   /** At most one building per this many tiles; beyond that it only upgrades. */
@@ -793,7 +802,7 @@ export interface AiRules {
   /**
    * Missiles (GAME_DESIGN.md §3.17.8, 2B.5): a nation launches a strike missile or bunker
    * buster only when the levels it would cost enemies are worth at least `missileValueFactor`×
-   * its price (and never into SAMs that would stop it), keeping its Mobilize war chest…
+   * its price (and never into SAMs that would stop it)…
    */
   readonly missileValueFactor: number;
   /**
@@ -845,10 +854,10 @@ export interface AiRules {
   /** Distance (tiles) beyond the bot's own radius where it looks for open land to aim at. */
   readonly expansionLookAhead: number;
   /**
-   * Economy (GAME_DESIGN.md §3.16): right before attacking a player, nations mobilize all
-   * their gold can buy (a war chest) — if that's at least this share of their capacity.
+   * Economy (GAME_DESIGN.md §3.16): nations give gold away only when they have at least this
+   * share of their capacity in gold to spare.
    */
-  readonly mobilizeMinShare: number;
+  readonly giftGoldMinShare: number;
   /** Nations give a teammate or human ally who is losing a war this share of their home troops… */
   readonly donateTroopsShare: number;
   /**
@@ -902,7 +911,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   tickMs: 100,
   troops: {
     capacityBase: 10_000,
-    capacityScale: 1_000,
+    // 650 (1,000 until D-033): land gives a third less, so Housing carries more of an army.
+    capacityScale: 650,
     capacityExponent: 0.6,
     growthFloor: 10,
     // Early game: ~15 s from 10% to 50% of capacity and ~15 s from 50% to 90%.
@@ -989,12 +999,13 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     absorbBelowPeakShare: 0.25,
   },
   victory: {
-    landShare: 0.7,
+    // 80% after the Phase 2B playtest (70% until then).
+    landShare: 0.8,
     // Teams need more (2B.6 balance pass): at 70% two teams of four ended as the land race
     // did (5.5 min on Islands, a level-III building in 3 of 30 games); at 85%: 9.3 min, 16 of 30.
     teamLandShare: 0.85,
-    // Anti-stall: almost every game ends by 16 min. After 15 min the requirement drops
-    // 1% every 30 s, reaching 50% at 25 min — so two equal players who keep cancelling
+    // Anti-stall: after 15 min the requirement drops 1% every 30 s, reaching 50% at 30 min
+    // (25 min while the goal was 70%) — so two equal players who keep cancelling
     // each other's attacks (a 1% case in bot games, up to 60 min) can't stall forever.
     declineStartTicks: 9_000,
     declineStepTicks: 300,
@@ -1071,8 +1082,8 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     expansionMargin: 1.25,
     expansionRecallAbove: 0.05,
     expansionLookAhead: 40,
-    // Economy (§3.16): gold is a war chest, spent on attacks; gifts go to friends in need.
-    mobilizeMinShare: 0.02,
+    // Economy (§3.16): gifts go to friends in need.
+    giftGoldMinShare: 0.02,
     donateTroopsShare: 0.25,
     donateGoldShare: 0.5,
     giftGoldBelow: 0.5,
@@ -1140,7 +1151,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
       },
     },
     // Buildings (§3.17): like OpenFront's nations, Housing first; Factories next; upgrades
-    // once the land is "full". Most gold stays a war chest for attacks (§3.16).
+    // once the land is "full".
     build: {
       goalHorizonTicks: 1_200,
       saving: { expander: 0.8, aggressor: 0.4, turtle: 1, opportunist: 0.6 },
@@ -1216,13 +1227,12 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   },
   economy: {
     enabled: true,
-    // Spending all income on Mobilize adds ~20% of peak troop growth at every size: 49
-    // tiles → 16 gold/tick (peak growth 75), 50k → 189 (1,040), 200k → 367 (1,900).
+    // 49 tiles → 16 gold/tick, 50k → 189, 200k → 367.
     incomeBase: 10,
     incomePerSqrtTile: 0.8,
     // Like their troop growth (D-017); unspent, it is the prize for eating them.
     tribeIncomeShare: 0.5,
-    // One gold, one troop: the HUD's two numbers compare directly.
+    // One gold, one troop (how nations value the troops a missile kills).
     goldPerTroop: 1,
     // User (2.4): conquering a player gives you all of their leftover gold.
     lootShare: 1,
@@ -1244,29 +1254,33 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // ability), so upgrading is never a trap — and a level-I building is cheap, not better.
     types: {
       // The gold → army engine (OpenFront's City). A fixed bonus: small players gain the most.
+      // D-033 (the user: nations "gain a lot of troops with little to no housing"): 2.5× the
+      // capacity it gave before (30k / 90k / 250k), while land gives a third less, and
+      // Mobilize is gone — troops now come from land and Housing only.
       housing: {
         onCapture: "adopt",
         placement: "land",
         levels: [
-          { name: "Housing", cost: 40_000, buildTicks: 50, capacity: 30_000 },
+          { name: "Housing", cost: 40_000, buildTicks: 50, capacity: 75_000 },
           {
             name: "Developed Housing",
             cost: 90_000,
             buildTicks: 100,
-            capacity: 90_000,
+            capacity: 225_000,
             growthBonus: 0.05,
           },
           {
             name: "Metropolis",
             cost: 220_000,
             buildTicks: 200,
-            capacity: 250_000,
+            capacity: 625_000,
             growthBonus: 0.1,
             income: 20,
           },
         ],
       },
-      // Gold, and cheaper Mobilize. Each step pays for itself in ~3.5 min.
+      // Gold. Each step pays for itself in ~3 min. (Levels II–III also made Mobilize cheaper
+      // until Mobilize was removed, D-033: their income went up instead.)
       factory: {
         onCapture: "adopt",
         placement: "land",
@@ -1276,15 +1290,13 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             name: "Industrial Complex",
             cost: 120_000,
             buildTicks: 100,
-            income: 90,
-            mobilizeDiscount: 0.1,
+            income: 100,
           },
           {
             name: "Mega Industrial Complex",
             cost: 280_000,
             buildTicks: 200,
-            income: 220,
-            mobilizeDiscount: 0.2,
+            income: 250,
             // War production (2B.5): nearby Airports and Silos reload a quarter faster.
             warProductionRange: 60,
             warProductionFactor: 0.75,
@@ -1502,12 +1514,14 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     landingSearchTiles: 60,
     maxRouteNodes: 600_000,
   },
-  // Trade ships (§3.19, the user's request in 2.8): a typical Port I earns ~30 gold/tick
-  // from trade (sending and receiving), about a Factory I; long routes pay more, capped.
+  // Trade ships (§3.19, the user's request in 2.8): long routes pay more, capped. After the
+  // Phase 2B playtest ("Ports don't make enough money when receiving goods early game") a
+  // trip pays 1,000 + 12/tile (was 400 + 10), still at most 6,000: an early 80-tile route 1,960
+  // to each side instead of 1,200, while long routes (capped) stay as they were.
   trade: {
     enabled: true,
-    goldBase: 400,
-    goldPerTile: 10,
+    goldBase: 1_000,
+    goldPerTile: 12,
     goldMax: 6_000,
     tilesPerTick: 1,
     maxShips: 200,
@@ -1535,7 +1549,9 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
   flights: {
     transportTilesPerTick: 2,
     fighterTilesPerTick: 3,
-    missileTilesPerTick: 3,
+    // Missiles 60 km/s (30 until the Phase 2B playtest: "missiles need to move faster"):
+    // across the whole map in ~18 s, still long enough for SAMs to fire.
+    missileTilesPerTick: 6,
     testFlights: false,
     testFlightPlanes: 4,
     enabled: true,
@@ -1565,6 +1581,11 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     missileDisableTicks: 600,
     missileTroopShare: 0.1,
     busterTroopShare: 0.05,
+    // Splash (D-033): a 4 km crater for 30 s; a buster's blast costs neighbours a level.
+    craterRadius: 4,
+    craterTicks: 300,
+    busterSplashRadius: 4,
+    busterSplashLevels: 1,
     warheadCost: 500_000,
     warheadRadius: 20,
     scorchedTicks: 600,

@@ -9,9 +9,12 @@
  *    `missileRadius` of the target loses `missileLevels` levels (2: levels I–II are destroyed)
  *    and is out of action for a while, the target's land there is suppressed (suppression.ts,
  *    like an air strike on a point) and its owner loses `missileTroopShare` of their home
- *    troops; the **bunker buster** (Silo II) — the enemy building on the tile loses
- *    `busterLevels` levels (3: destroyed) and its owner `busterTroopShare` of their home
- *    troops; the **strategic warhead** (Silo III, its own cooldown on mission
+ *    troops, and enemy land within `craterRadius` becomes a neutral crater (D-033: all but
+ *    the tiles of buildings still standing; its owners lose home troops in proportion, and it
+ *    costs `scorchedCost`× to retake for `craterTicks`); the **bunker buster** (Silo II) — the enemy building on the
+ *    tile loses `busterLevels` levels (3: destroyed), every other enemy building within
+ *    `busterSplashRadius` `busterSplashLevels` (D-033), and its owner `busterTroopShare` of
+ *    their home troops; the **strategic warhead** (Silo III, its own cooldown on mission
  *    slot 0) — everyone's land within `warheadRadius` of the target except the launcher's and
  *    their teammates' becomes neutral **scorched** land: its buildings are destroyed, each
  *    owner loses home troops in proportion to the share of their land lost, and expanding into
@@ -256,7 +259,11 @@ export function landMissile(world: World, flight: Flight): void {
   else if (flight.kind === "buster") landBuster(world, flight);
 }
 
-/** Strike missile: enemy buildings nearby lose two levels; the land is suppressed; troops die. */
+/**
+ * Strike missile: enemy buildings nearby lose two levels; the land is suppressed; troops die;
+ * the crater's land becomes neutral — all but the tiles of the buildings still standing (so
+ * a level-III building survives it: destroying one is the bunker buster's job).
+ */
 function landStrikeMissile(world: World, flight: Flight): void {
   const f = world.rules.flights;
   const hit = world.buildings.filter(
@@ -264,11 +271,26 @@ function landStrikeMissile(world: World, flight: Flight): void {
       isEnemy(world, flight.owner, b.owner) &&
       withinRange(world.map, flight.toTile, b.tile, f.missileRadius),
   );
-  for (const b of hit)
+  for (const b of hit) {
     strikeBuilding(world, b, f.missileLevels, f.missileDisableTicks, flight.owner);
+  }
+  const crater = landWithin(world, flight.toTile, f.craterRadius, (id) =>
+    isEnemy(world, flight.owner, id),
+  ).filter((tile) => world.buildingAt[tile]! < 0);
   const holder = world.owner[flight.toTile]!;
   const victim = isEnemy(world, flight.owner, holder) ? holder : NEUTRAL;
-  const troops = killTroops(world, victim, f.missileTroopShare, flight.owner);
+  let troops = killTroops(world, victim, f.missileTroopShare, flight.owner);
+  if (crater.length > 0) {
+    for (const lost of burnLand(world, crater, flight.owner)) {
+      if (lost.id === victim) troops += lost.troops;
+    }
+    world.scorched.push({
+      tile: flight.toTile,
+      radius: f.craterRadius,
+      by: flight.owner,
+      untilTick: world.tick + f.craterTicks,
+    });
+  }
   if (victim !== NEUTRAL) {
     suppress(
       world,
@@ -289,6 +311,58 @@ function landStrikeMissile(world: World, flight: Flight): void {
     victim,
     buildings: hit.length,
     troops,
+    crater: crater.length,
+  });
+}
+
+/** Land tiles within `radius` of `center` whose owner passes `hit`, in ascending order. */
+function landWithin(
+  world: World,
+  center: number,
+  radius: number,
+  hit: (id: PlayerId) => boolean,
+): number[] {
+  const { map } = world;
+  const x0 = center % map.width;
+  const y0 = (center - x0) / map.width;
+  const tiles: number[] = [];
+  for (let y = Math.max(0, y0 - radius); y <= Math.min(map.height - 1, y0 + radius); y++) {
+    for (let x = Math.max(0, x0 - radius); x <= Math.min(map.width - 1, x0 + radius); x++) {
+      const dx = x - x0;
+      const dy = y - y0;
+      if (dx * dx + dy * dy > radius * radius) continue;
+      const tile = y * map.width + x;
+      if (isLand(map, tile) && hit(world.owner[tile]!)) tiles.push(tile);
+    }
+  }
+  return tiles;
+}
+
+/**
+ * `tiles` become neutral; each owner loses home troops in proportion to the share of their
+ * land lost (by ascending id). Buildings on them must already be gone.
+ */
+function burnLand(
+  world: World,
+  tiles: readonly number[],
+  by: PlayerId,
+): { id: PlayerId; tiles: number; troops: number }[] {
+  const lost = new Map<PlayerId, number>();
+  for (const tile of tiles) {
+    const id = world.owner[tile]!;
+    lost.set(id, (lost.get(id) ?? 0) + 1);
+  }
+  const ids = [...lost.keys()].sort((a, b) => a - b);
+  const tilesBefore = new Map(ids.map((id) => [id, getPlayer(world, id)!.tiles]));
+  for (const tile of tiles) setOwner(world, tile, NEUTRAL);
+  return ids.map((id) => {
+    const player = getPlayer(world, id)!;
+    const before = tilesBefore.get(id)!;
+    const share = before > 0 ? lost.get(id)! / before : 1;
+    const troops = player.homeTroops * share;
+    player.homeTroops -= troops;
+    player.lastLostTo = by;
+    return { id, tiles: lost.get(id)!, troops };
   });
 }
 
@@ -302,13 +376,25 @@ function killTroops(world: World, victim: PlayerId, share: number, by: PlayerId)
   return troops;
 }
 
-/** Bunker buster: the enemy building on the tile is destroyed (three levels); troops die. */
+/**
+ * Bunker buster: the enemy building on the tile is destroyed (three levels), the enemy
+ * buildings around it lose a level; troops die.
+ */
 function landBuster(world: World, flight: Flight): void {
   const f = world.rules.flights;
   const b = enemyBuildingAt(world, flight.owner, flight.toTile);
   const holder = world.owner[flight.toTile]!;
   const victim = b ? b.owner : isEnemy(world, flight.owner, holder) ? holder : NEUTRAL;
+  const splash = world.buildings.filter(
+    (other) =>
+      other !== b &&
+      isEnemy(world, flight.owner, other.owner) &&
+      withinRange(world.map, flight.toTile, other.tile, f.busterSplashRadius),
+  );
   if (b) strikeBuilding(world, b, f.busterLevels, f.missileDisableTicks, flight.owner);
+  for (const other of splash) {
+    strikeBuilding(world, other, f.busterSplashLevels, f.missileDisableTicks, flight.owner);
+  }
   const troops = killTroops(world, victim, f.busterTroopShare, flight.owner);
   world.events.push({
     type: "missileHit",
@@ -317,8 +403,9 @@ function landBuster(world: World, flight: Flight): void {
     missile: "buster",
     tile: flight.toTile,
     victim,
-    buildings: b ? 1 : 0,
+    buildings: (b ? 1 : 0) + splash.length,
     troops,
+    crater: 0,
   });
 }
 
@@ -332,21 +419,8 @@ function spared(world: World, launcher: PlayerId, id: PlayerId): boolean {
  * ascending order. Shared with the HUD's aiming preview and the nations.
  */
 export function warheadTiles(world: World, launcher: PlayerId, center: number): number[] {
-  const { map } = world;
-  const r = world.rules.flights.warheadRadius;
-  const x0 = center % map.width;
-  const y0 = (center - x0) / map.width;
-  const tiles: number[] = [];
-  for (let y = Math.max(0, y0 - r); y <= Math.min(map.height - 1, y0 + r); y++) {
-    for (let x = Math.max(0, x0 - r); x <= Math.min(map.width - 1, x0 + r); x++) {
-      const dx = x - x0;
-      const dy = y - y0;
-      if (dx * dx + dy * dy > r * r) continue;
-      const tile = y * map.width + x;
-      if (isLand(map, tile) && !spared(world, launcher, world.owner[tile]!)) tiles.push(tile);
-    }
-  }
-  return tiles;
+  const radius = world.rules.flights.warheadRadius;
+  return landWithin(world, center, radius, (id) => !spared(world, launcher, id));
 }
 
 /** The strategic warhead: scorched land, buildings destroyed, home troops lost. */
@@ -354,14 +428,6 @@ function detonateWarhead(world: World, flight: Flight): void {
   const f = world.rules.flights;
   const launcher = flight.owner;
   const tiles = warheadTiles(world, launcher, flight.toTile);
-  // Who loses what, by ascending id.
-  const lost = new Map<PlayerId, number>();
-  for (const tile of tiles) {
-    const id = world.owner[tile]!;
-    lost.set(id, (lost.get(id) ?? 0) + 1);
-  }
-  const ids = [...lost.keys()].sort((a, b) => a - b);
-  const tilesBefore = new Map(ids.map((id) => [id, getPlayer(world, id)!.tiles]));
   // Buildings on the scorched land are destroyed (before the land changes hands, so they are
   // "struck" by the launcher rather than captured by nobody).
   const doomed = world.buildings.filter(
@@ -370,16 +436,8 @@ function detonateWarhead(world: World, flight: Flight): void {
       !spared(world, launcher, world.owner[b.tile]!),
   );
   for (const b of doomed) strikeBuilding(world, b, b.level + 1, 0, launcher);
-  for (const tile of tiles) setOwner(world, tile, NEUTRAL);
-  const victims = ids.map((id) => {
-    const player = getPlayer(world, id)!;
-    const before = tilesBefore.get(id)!;
-    const share = before > 0 ? lost.get(id)! / before : 1;
-    const troops = player.homeTroops * share;
-    player.homeTroops -= troops;
-    player.lastLostTo = launcher;
-    return { id, tiles: lost.get(id)!, troops };
-  });
+  const victims = burnLand(world, tiles, launcher);
+  const ids = victims.map((v) => v.id);
   const untilTick = world.tick + f.scorchedTicks;
   world.scorched.push({ tile: flight.toTile, radius: f.warheadRadius, by: launcher, untilTick });
   world.events.push({

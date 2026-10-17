@@ -1,11 +1,12 @@
-# Phase 2B handoff — air & strategic warfare built (2B.0 – 2B.6 + the 2B.6 playtest round)
+# Phase 2B handoff — air & strategic warfare done (2B.0 – 2B.6, approved, + the D-033 fixes)
 
 > **For the next session: read this file first.** It replaces
 > [`PHASE_2B_AFTER_2B.5_HANDOFF.md`](PHASE_2B_AFTER_2B.5_HANDOFF.md). The **working agreements
 > (§4), environment facts (§5) and repository map (§6) of
 > [`PHASE_2_HANDOFF.md`](PHASE_2_HANDOFF.md) still apply** — read those sections too; §4–§6 below
 > only add to them. Written 2026-10-14, rewritten 2026-10-16 after the user's 2B.6 playtest
-> round (D-032). The repo docs are the source of truth, not chat history.
+> round (D-032), and again the same day after the Phase 2B approval playtest and its fixes
+> (D-033). The repo docs are the source of truth, not chat history.
 
 ---
 
@@ -17,9 +18,10 @@
 | 2B.0 – 2B.5 (flights, icon-pack art, Airport I–III, SAM I–III, flak, air strikes, Missile Silo I–III, D-029, D-030, explosion particles) | ✅ |
 | 2B.6 Port III Naval Base, warships, coastal fortification, balance pass (85% team goal) | ✅ 169bee0 (ROADMAP "Milestone 2B.6 result", GAME_DESIGN §3.18.1, D-031) |
 | **2B.6 playtest round** — the user's five requests after playing 2B.6 | ✅ 266eedf (ROADMAP "2B.6 playtest round", D-032) |
-| **Phase 2B** | **Built — awaiting the user's approval playtest.** No `phase-2b` tag until they approve (Phase 2 was tagged after the user played it) |
-| Next | ⬜ the user plays Phase 2B → fix what they report → tag `phase-2b` → **Phase 3 multiplayer** (starts with decision D-006) |
-| Tests | 496 passing, type check clean, Prettier clean, build OK; `main` = `origin/main` |
+| **Phase 2B** | ✅ **Approved** by the user's playtest ("This feels good"), tag `phase-2b` on 09abcc4 (the build they played) |
+| **Phase 2B playtest round** — the user's twelve requests with the approval | ✅ the D-033 commit (ROADMAP "Phase 2B playtest round", D-033) |
+| Next | ⬜ a short check of the D-033 changes by the user → **Phase 3 multiplayer** (starts with decision D-006) |
+| Tests | 490 passing, type check clean, Prettier clean, build OK; `main` = `origin/main` |
 
 ## 2. What happened in the last two sessions
 
@@ -47,23 +49,34 @@ the other patrolling offshore; a strike missile destroying an enemy Housing and 
 their troops with the toast "🚀 Your strike missile hit 1 building: −2 levels each · 60.9K
 troops killed"; no console errors. **The user plays at Medium difficulty.**
 
+**Phase 2B approval playtest (2026-10-16, D-033).** "This feels good", and twelve requests.
+I investigated "nations gain a lot of troops with little housing": land gave ~90% of their
+capacity and Mobilize turned their gold into troops (1.7M in 12 min for one nation). Three
+questions; the user chose craters + blasts, "Housing matters more **and remove Mobilize
+entirely**", colour + symbol badges. Done (details: DECISIONS D-033, ROADMAP "Phase 2B
+playtest round", GAME_DESIGN §3.16 / §3.17.8 / §3.17.13):
+
+| They said | Done |
+|---|---|
+| Missiles need splash damage | Strike missile: a 4 km **crater** (enemy land → neutral, 3× to retake for 30 s, troops lost in proportion; standing buildings' tiles spared). Bunker buster: −1 level to every enemy building within 4 km. Circles while aiming and on impact |
+| A button to send missiles fast | **Launcher** in the command bar once you own a Silo: 🚀 Missile R · 🎯 Buster T · ☢ Warhead X with the count ready; each click on enemy land fires from the nearest Silo that can; aiming goes on while missiles are left |
+| Keys 1 Housing, 2 Factory, 3 Port … | Keys 1–7 = the build bar's order; attack presets moved to Shift+1–5 (numpad 1–5) |
+| UI boxes not aligned with text | Build-bar names on one line ("SAM", "Silo"), the key on each tile, a 700 px bar whose row wraps on narrow screens |
+| Missiles faster | 60 km/s (was 30) |
+| Ports earn too little receiving goods early | Trade 1,000 + 12/tile (was 400 + 10), cap 6,000 |
+| Icons unclear | A colour + bold symbol disc per type (map, build bar, card) |
+| No hover info over tribes / unclaimed land; clearer hover card | Hidden there; rebuilt with labelled rows, a relation chip and a click box |
+| 80% to win | Free-for-all 80% (teams keep 85%); anti-stall reaches 50% at 30 min |
+| Level dots zoomed out | Far-zoom dots in the type's colour with one pip per level |
+| Nations' troops | Mobilize removed; land capacity −⅓; Housing 2.5× (75k / 225k / 625k); "🏠 +75K" on the troop bar, a Housing row on the hover card |
+
 ## 3. Start of the next session
 
-1. **Ask the user for the Phase 2B approval playtest** (short and concrete — they answer
-   concrete lists well). Islands, Medium, as they like:
-   - **Warships:** build a Port → Naval Base (~470k), click a warship, then the sea; send it to
-     an enemy's coast and watch it sink their boats and take their trade; try landing on an
-     enemy Naval Base's coast (boats sunk, or a slow landing on the stone line).
-   - **Missiles:** a strike missile on a cluster of buildings, a bunker buster on a big one,
-     the warhead in a long game. Do they feel strong enough now — or too strong for 75k?
-   - **Air:** an airborne assault the enemy counter-attacks (it should survive and be taken
-     tile by tile, D-029) and an air strike.
-   - **Nations:** do they fight enough now? Do they fire missiles at you?
-   - One **team game** (~8–9 min now).
-   Also ask: explosions too much / too little? games too long or short?
-   **On approval:** tag `phase-2b` on the approving commit, push the tag, confirm `main` =
-   `origin/main` and the tag on GitHub. Anything they report: place it (tuning → fix now, new
-   systems → roadmap) and say where and why.
+1. **Ask the user for a short check of the D-033 changes** (concrete list): keys 1–7 and
+   Shift+1–5; the missile launcher (R, two quick clicks); a crater and a bunker buster's
+   splash; the badges and the zoomed-out level dots; the hover card; does Housing now decide
+   who has the bigger army, and do they miss Mobilize? Games run ~2 min longer (80%) — too
+   long? Fix what they report (tuning → now), then go to step 3.
 2. **Warship art** (whenever the user sends the sheet): save it as
    `openborder_icon_pack_final/sheets/warships.png`, add `warship-1..3` boxes to
    `SHEET_SPRITES` in `tools/iconPack.mjs` (measure them on the sheet like the second sheet),
@@ -95,8 +108,10 @@ troops killed"; no console errors. **The user plays at Medium difficulty.**
 |---|---|
 | Warship code | `systems/warships.ts`: `advanceWarships` (tick step 2a), `keepFleets`, `patrolOf` (centre + radius: order 15 / Base 40), `applyMoveWarship`, transit (far from its centre: fire within gun range, no chase), `seaTargets`/`choosePrey`, `fire`, `capture`, `patrolTiles(map, centre, range, offshore)`, `shoreDistance` (per map, precomputed in `createWorld`), `guardedWaters`. Nations: `ai/warship.ts` `decideWarships` (one blockader while at war). Client: `app/boats.ts` `warshipVoyage` / `warshipSize` / `warshipAtPoint`, `ui.selectedWarship`, `render/boats.ts` (ring, patrol circle, ⚓) |
 | Missile code | `systems/missiles.ts` `killTroops` (strike / buster); rules `flights.missileLevels` 2, `busterLevels` 3, `missileDisableTicks` 600, `missileTroopShare` 0.1, `busterTroopShare` 0.05; `ai.missileValueFactor` 1.2; `ai.build.siloWorth` 0.6. Texts shared by cards, banner and labels: `client/app/flights.ts` `strikeMissileText` / `busterText` |
-| Headless (final rules) | Islands Medium (40): 18.6 min, 369 nation-vs-nation attacks a game, 4.2 missiles, 1.7 Silos, ~19 trade ships taken by blockades. Islands Hard: 18.1 min, 4.1 missiles. Continent Hard (60): 8.8 min, wins expander 16 · turtle 21 · opportunist 12 · aggressor 11. Islands 2 teams: 8.5 min, 14 · 16. `pvpAttacksPerGame` is new in the headless summary |
-| Regression baseline | D-032 changed the nation tuning and missile rules, so every game differs from 2B.6; **266eedf** is the next baseline for `tools/hashDigest.mjs` |
+| Headless (D-033 rules) | Islands Medium (40): 20.4 min, 370 nation-vs-nation attacks a game, 8.6 missiles, 2.5 Silos, 0 bunker busters (nations never pick one). Islands 2 teams (30): 11.2 min, 13 · 17. Continent Hard (60): 10.1 min, wins expander 14 · turtle 17 · opportunist 15 · aggressor 14 |
+| Regression baseline | D-033 changed troops, trade, missiles, victory and the AI, so every game differs; the **D-033 commit** is the next baseline for `tools/hashDigest.mjs` |
+| Investigation script | A headless game that prints each nation's land capacity, Housing capacity, troops and gold every 2 min was written to the session scratchpad (not kept); rebuild it from `tools/headless.ts`'s `playOne` if needed |
+| D-033 code | Sim: `missiles.ts` `landWithin` / `burnLand` (crater + warhead), `landBuster` splash; `rules.flights.craterRadius/craterTicks/busterSplashRadius/busterSplashLevels`; frame `capacityBonus`. Client: `app/flights.ts` `missileLauncher` / `launcherPreview`, `ui.missileAuto`, `client.ts` `aimMissile` / `pickByKey` / `pendingLaunches`; `icons.ts` `TYPE_COLORS` / `TYPE_GLYPHS` |
 | Browser test that worked | Own tab; start screen buttons clicked by text from JS (`0` tribes, `Easy`, `Islands`, `Play`); spawn at tile 41419; `sendAs` alliance requests from nations 2–7 and `send` the replies (**ally all but one** — allying only four got me eliminated once); an interval of `sendAs` gold donations + neutral attacks; Port → III at the nearest coast tile (~45 s at 5×). Click tests: compute the ship's position with `app/boats.ts` (import its resource URL), `look()` there, dispatch `pointerdown`/`pointerup` on `#map` at `screenOf(tile)` — clicks past the map edge are ignored by design. Poll events at ≤ 1× every 20–50 ms or frames are skipped |
 | Hot reloads | Any edit under `src/sim` or `src/client/render` reloads the page and ends the test game |
 | Machine load | Running several headless batches in parallel next to the browser produced false tick spikes (warships 30–50 ms); run timing-sensitive batches one at a time |
@@ -117,6 +132,7 @@ docs/art/WARSHIP_ART_PROMPT.md  the image prompt for the user's warship sheet
 | Item | Where it goes |
 |---|---|
 | Warship art is a stand-in (grey troop boat) | when the user's sheet arrives (§3.2) |
+| Nations never fire a bunker buster (the strike missile's value wins); Mobilize's removal leaves big gold piles late (up to ~1M) | watch; nation build/missile tuning if the user notices |
 | Nations rarely lose boats to warships (they steer around guarded waters) — warships matter most against humans and in blockades | watch in the playtest |
 | Air content is still rare in bot games (Air Bases ~0.1, strikes ~0.2 a game on Islands) — nations spend on Silos and Naval Bases | revisit if the playtest says nations never use planes |
 | Continent games slightly favour turtles (21/60) | accepted for now; recheck with the next tuning |
@@ -127,4 +143,5 @@ docs/art/WARSHIP_ART_PROMPT.md  the image prompt for the user's warship sheet
 ## 8. Suggested opening prompt for the new chat
 
 > Read `docs/handoffs/PHASE_2B_HANDOFF.md` (and the sections of `PHASE_2_HANDOFF.md` it points
-> to). Ask me for the Phase 2B approval playtest, then follow the working agreements.
+> to). Ask me for a short check of the D-033 changes, then start Phase 3 with D-006, following
+> the working agreements.

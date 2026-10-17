@@ -86,13 +86,6 @@ export type SimEvent =
       readonly victim: PlayerId;
     }
   | {
-      /** Gold turned into home troops. */
-      readonly type: "mobilized";
-      readonly playerId: PlayerId;
-      readonly troops: number;
-      readonly gold: number;
-    }
-  | {
       /** A friend gave troops or gold. */
       readonly type: "donated";
       readonly from: PlayerId;
@@ -433,6 +426,8 @@ export type SimEvent =
       readonly buildings: number;
       /** Home troops `victim` lost (missiles kill people too, after the 2B.6 playtest). */
       readonly troops: number;
+      /** Strike missile (D-033): enemy land tiles its crater burned to neutral (0 for a buster). */
+      readonly crater: number;
     }
   | {
       /**

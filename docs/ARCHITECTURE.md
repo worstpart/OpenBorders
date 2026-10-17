@@ -219,7 +219,7 @@ interface World {
 
 ```
 1. applyCommands     validate & apply this turn's commands (spawn, attack, retreat,
-                     alliance request/reply/renew/break, mobilize, donate)
+                     alliance request/reply/renew/break, donate; mobilize until D-033)
 1a. updateChat       map pings run out (milestone 2.9)
 1b. updateDiplomacy  alliance requests and alliances run out (milestone 2.2)
 2. resolveCollisions opposing attacks cancel; same-target attacks merge
@@ -280,11 +280,12 @@ teams every factor is 1, so free-for-all games are unchanged. Client: `client/ap
 `player.gold` (an integer, hashed) and `player.lastIncome`; `earnGold` runs as tick step
 6b ("economy", right after troops) and also prunes `world.lastDonationTick` (per
 `donationKey(from, to, resource)`, hashed). Two commands: `mobilize` (percent of capacity,
-capped by the room under the cap and by gold) and `donate` (to an ally or teammate —
+capped by the room under the cap and by gold — removed in D-033, with its event, the Factory
+discount and the nations' war chest) and `donate` (to an ally or teammate —
 `areFriendly` — troops capped by the friend's room, or gold). Elimination calls
 `lootGold`, and the `eliminated` event carries `loot`. Nations decide gold after their
-action (bot.ts `economy()`: gifts, then mobilize); tribes only earn. The HUD reuses the
-simulation's own `mobilizeTroops` / `donationAmount` (client/app/economy.ts). Captures with
+action (bot.ts `economy()`: gifts); tribes only earn. The HUD reuses the
+simulation's own `donationAmount` (client/app/economy.ts). Captures with
 loot animate: the client keeps a short list of effects and writes their strength into bits
 2–7 of the palette alpha every animation frame (the shader's gold border and grow-in), and
 the label layer draws the rising "+gold". `rules.economy.enabled = false` (headless
@@ -406,7 +407,7 @@ nothing built then has to be rewritten for airports, SAMs and missiles later.
 `world.buildings` (ascending ids, found by binary search) + `world.buildingAt`; `setOwner`
 only records tiles with a building in `world.buildingTileChanges`, which step 5b settles
 once the fighting is over (a tile taken and retaken in one tick changes nothing). Each
-player's `bonus` (capacity, growth, income, Mobilize discount) is summed every tick from
+player's `bonus` (capacity, growth, income) is summed every tick from
 the buildings — derived, not hashed — and read by `troops.ts` / `economy.ts`. Nations
 decide in `ai/build.ts`. Frames carry **every building every tick** (a few hundred small
 objects at most — simpler than deltas; revisit if lobbies ever hold thousands). Placement
@@ -450,7 +451,7 @@ spatial grid and the cached per-player effects can't drift apart.
   building id, −1) for O(1) capture checks inside `setOwner`.
 - A coarse **spatial grid** (e.g. 32×32-tile cells → building ids) for every range query:
   spacing, zones, SAM coverage, Factory supply, strikes, missile blasts.
-- **Per-player effects** (capacity bonus, growth bonus, income bonus, Mobilize discount)
+- **Per-player effects** (capacity bonus, growth bonus, income bonus)
   are recomputed only when a building of that player changes, and read by `troops.ts` and
   `economy.ts` — those systems don't know building types.
 
@@ -614,7 +615,7 @@ for a non-neighbour — the quietest border tile in range) shares `quietSite` wi
 `bot.ts` `chooseAirTarget` (ready Military Airport; non-tribe enemies it doesn't border or
 whose front is walled; the land estimate with `airborneLoss`, the lift cap and the planes the
 route's SAMs would down; `airPreference`) competes with `chooseTarget` by `score` (new on
-`Choice`), boats last; assaults count as strikes for Mobilize and pings. `build.ts`
+`Choice`), boats last; assaults count as strikes for pings. `build.ts`
 `assaultProspect` (an air-reachable enemy weak enough that one Military Airport lift would
 take the personality's `minLandGain`) and `assaultValue` (`assaultWorth` × capacity, split
 over levels I–II by price). Headless `airPerGame` adds `airportUpgrades`, `assaults`,
@@ -676,8 +677,8 @@ victims' home troops × lost share, `lastLostTo` = launcher, `applyAllianceBreak
 a missile only if `samStops`; flak skips missiles; `interceptorsOnRoute` takes an optional
 missile kind. `buildings.ts`: `warProduction` / `producedTicks` (Airport cooldowns and Silo
 reloads/warhead cooldown). `suppress` takes an optional radius and duration. **AI:**
-`ai/missile.ts` `decideMissiles` (every nation each think, after the strike; not while it
-mobilizes) and `runawayLeader`; `build.ts` `siloProspect` / `siloValue` (`siloWorth`), and
+`ai/missile.ts` `decideMissiles` (every nation each think, after the strike) and
+`runawayLeader`; `build.ts` `siloProspect` / `siloValue` (`siloWorth`), and
 hostile Silos count as an air threat for SAMs (Silos are guarded too). Headless `airPerGame` adds
 `silos`, `siloUpgrades`, `silosIII`, `missiles`, `busters`, `warheads`, `missilesShotDown`,
 `missileLevels`, `missileKills`, `warheadTiles`, `warheadTroops`, `warheadBuildings`.
@@ -688,6 +689,22 @@ while aiming show only SAMs that stop that missile; threats gain kind `missile`,
 blast reaches your land, and SAM III early warning (`warning`); toasts sum a missile's hits into
 one; `render/flights.ts` draws missiles (art turned to the heading — `drawSprite` gained
 `rotation`), blasts and scorched zones (frame `scorched`).
+
+**D-033 (after the Phase 2B playtest).** Sim: `landStrikeMissile` adds a crater
+(`landWithin` + `burnLand`, shared with the warhead; the tiles of buildings still standing
+are spared; a `scorched` zone of `craterRadius` for `craterTicks`); `landBuster` adds the
+splash; `missileHit` carries `crater`. `missileTilesPerTick` 6. Mobilize is gone (command,
+event, `bonus.mobilizeDiscount`, the nations' war chest; `ai.giftGoldMinShare` replaces
+`mobilizeMinShare`). Frames carry `capacityBonus` (Housing's share of the capacity). Client:
+`app/flights.ts` `missileLauncher` / `launcherPreview` / `silosFor` / `siloShots`;
+`ui.missileAuto` marks launcher aiming, in which `client.ts` `airliftAt` lets
+`launcherPreview` pick the Silo per click and `sendAirlift` keeps aiming while missiles are
+left (`pendingLaunches` counts launches sent but not yet in a frame, cleared by their
+`flightLaunched`, a rejection or 3 s). Keys: `build1`–`build7` (`pickByKey`: the build bar's
+order), `missile` / `buster` / `warhead` (R / T / X), presets on Shift+digits
+(`SHIFT_KEY_ACTIONS`). `icons.ts` `TYPE_COLORS` / `TYPE_GLYPHS` feed the type badges of
+`BuildingIcon.svelte` and `render/buildings.ts` (`typeBadge`, and the far-zoom `dot` with
+level pips).
 
 **Explosion particles (2B.5, the user's request).** `render/particles.ts` `ParticleSystem`:
 `explode(kind, x, y, now, delay)` with presets `intercept` / `building` / `strike` /

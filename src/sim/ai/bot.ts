@@ -29,8 +29,7 @@
  * Teams (GAME_DESIGN.md §3.15): nations never target or ask a teammate, and prefer enemies
  * who attack a teammate or whom a teammate already attacks, so a team focuses its fire.
  *
- * Gold (GAME_DESIGN.md §3.16): nations save gold as a war chest and mobilize it right
- * before attacking a player; they help teammates and human allies in need (troops to one
+ * Gold (GAME_DESIGN.md §3.16): nations spend gold on buildings and missiles; they help teammates and human allies in need (troops to one
  * losing a war, spare gold to one who can use it). Tribes only earn.
  *
  * Border Defense (GAME_DESIGN.md §3.17.6): nations count a walled front's extra losses in
@@ -79,7 +78,7 @@ import {
   ASSAULT_LEVEL,
   assaultSite,
 } from "../systems/flights.ts";
-import { donationCooldownLeft, goldPerTroop, mobilizeCost, troopRoom } from "../systems/economy.ts";
+import { donationCooldownLeft, troopRoom } from "../systems/economy.ts";
 import { buildingReserve, decideBuild } from "./build.ts";
 import { decideMissiles } from "./missile.ts";
 import { decideWarships } from "./warship.ts";
@@ -144,8 +143,8 @@ export function thinkBots(world: World): void {
     // Pings for human friends (§3.20): where it strikes, or where it needs help.
     const ping = tribe ? null : nationPing(world, bot, actions, incomingTroops(world, bot.id));
     if (ping) world.pendingCommands.push({ playerId: bot.id, command: ping });
-    // Buildings (GAME_DESIGN.md §3.17): only with gold left over — not right before an
-    // attack (the war chest goes to Mobilize) nor when giving gold away.
+    // Buildings (GAME_DESIGN.md §3.17): not in a think that strikes a player (one thing at a
+    // time) nor when giving gold away.
     const strikes = actions.some(
       (c) =>
         ((c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL) ||
@@ -162,10 +161,9 @@ export function thinkBots(world: World): void {
     // Air strikes (2B.4): free but for their cooldown, so a ready Air Base always flies one.
     const strike = tribe ? null : decideStrike(world, bot, actions);
     if (strike) world.pendingCommands.push({ playerId: bot.id, command: strike });
-    // Missiles (2B.5): they cost gold, so not while the war chest goes to Mobilize.
+    // Missiles (2B.5).
     if (!tribe) {
-      const mobilizing = [...gold.before, ...gold.after].some((c) => c.type === "mobilize");
-      for (const command of decideMissiles(world, bot, actions, mobilizing)) {
+      for (const command of decideMissiles(world, bot, actions)) {
         world.pendingCommands.push({ playerId: bot.id, command });
       }
     }
@@ -183,9 +181,9 @@ export function thinkBots(world: World): void {
 /**
  * A nation's gold and gifts (GAME_DESIGN.md §3.16), decided with its action.
  *
- * Gold is a war chest: right before attacking a player the nation mobilizes all it can, so
- * gold makes strikes stronger. (Refilling the army after every attack — the first
- * version — made every nation harder to beat and stretched big lobbies from 13 to 18 min.)
+ * (Until D-033 gold was also a war chest, mobilized right before attacking a player. The
+ * user removed Mobilize after the Phase 2B playtest: gold now goes to buildings, walls,
+ * missiles and gifts.)
  *
  * Gifts, after the action, when it isn't under attack itself: troops to the teammate or
  * human ally losing a war worst, if it has troops to spare — over a shared border, or by
@@ -206,23 +204,8 @@ function economy(
   const after: Command[] = [];
   if (capacity <= 0) return { before, after };
   let home = bot.homeTroops;
-  // Gold saved toward a building stays out of the war chest (GAME_DESIGN.md §3.17).
-  let gold = bot.gold - buildingReserve(world, bot, bot.brain!.personality);
-  if (
-    actions.some(
-      (c) =>
-        ((c.type === "attack" || c.type === "boat") && c.target !== NEUTRAL) ||
-        c.type === "assault",
-    )
-  ) {
-    const discount = bot.bonus.mobilizeDiscount;
-    const chest = Math.min(troopRoom(bot), gold / goldPerTroop(world.rules, discount));
-    if (chest >= ai.mobilizeMinShare * capacity) {
-      before.push({ type: "mobilize", percentBp: bps(chest / capacity) });
-      home += chest;
-      gold -= mobilizeCost(world.rules, chest, discount);
-    }
-  }
+  // Gold saved toward a building is never given away (GAME_DESIGN.md §3.17).
+  const gold = bot.gold - buildingReserve(world, bot, bot.brain!.personality);
   // Home troops once this think's attacks have left.
   for (const c of actions) {
     if (c.type === "attack" || c.type === "boat" || c.type === "assault") {
@@ -285,7 +268,7 @@ function economy(
     );
   }
   const atCap = bot.homeTroops + bot.fieldTroops >= ai.wastingAt * capacity;
-  if (poorest && atCap && gold >= ai.mobilizeMinShare * capacity) {
+  if (poorest && atCap && gold >= ai.giftGoldMinShare * capacity) {
     after.push({
       type: "donate",
       to: poorest.id,

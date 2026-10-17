@@ -2,7 +2,8 @@
   /**
    * The build bar (GAME_DESIGN.md §3.17.13), the bottom row of the command bar: one tile per
    * building with its price. Clicking one picks it up — it follows the mouse until a click
-   * on your land places it; right-click or Esc puts it back.
+   * on your land places it; right-click or Esc puts it back. Keys 1–7 pick them up in this
+   * order (D-033); names stay on one line (two-line names spilled out of the box).
    */
   import { buildBarItems, wallPreview, type Placeable } from "../../app/buildings.ts";
   import { ui } from "../../app/uiState.svelte.ts";
@@ -17,6 +18,9 @@
   }
 
   let { onPick }: Props = $props();
+
+  /** Shorter names where the full one doesn't fit the tile. */
+  const SHORT: Partial<Record<Placeable, string>> = { sam: "SAM", silo: "Silo" };
 
   const items = $derived(ui.screen === "game" ? buildBarItems(ui.buildContext) : []);
   const placing = $derived(items.find((i) => i.type === ui.placing) ?? null);
@@ -88,7 +92,7 @@
       </span>
     {/if}
     <div class="items" role="toolbar" aria-label="Buildings">
-      {#each items as item (item.type)}
+      {#each items as item, index (item.type)}
         <button
           type="button"
           class="item"
@@ -96,14 +100,17 @@
           class:short={!item.affordable}
           tabindex={-1}
           disabled={!item.affordable && ui.placing !== item.type}
-          title="{item.name} — {item.role}{item.affordable ? '' : ' (not enough gold)'}"
+          title="{item.name} — {item.role}{item.affordable
+            ? ''
+            : ' (not enough gold)'} (key {index + 1})"
           onclick={() => onPick(item.type)}
         >
-          <BuildingIcon type={item.type} size={26} />
+          <BuildingIcon type={item.type} size={24} />
           <span class="text">
-            <span class="name">{item.name}</span>
+            <span class="name">{SHORT[item.type] ?? item.name}</span>
             <span class="price">{formatTroops(item.price)}{item.unit}</span>
           </span>
+          <kbd class="hotkey">{index + 1}</kbd>
         </button>
       {/each}
       {#if items.some((i) => i.type === "sam")}
@@ -151,17 +158,22 @@
     color: var(--text-muted);
   }
 
+  /* One row on a normal screen; on a narrow one the tiles wrap instead of spilling out. */
   .items {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
   }
 
   .item {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 36px;
-    padding: 0 var(--space-2) 0 6px;
+    height: 38px;
+    padding: 0 11px 0 6px;
+    white-space: nowrap;
     border: 1px solid var(--surface-hairline);
     border-radius: var(--radius-control);
     background: rgb(255 255 255 / 0.05);
@@ -195,8 +207,21 @@
   .text {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     align-items: flex-start;
-    line-height: 1.15;
+    gap: 1px;
+    line-height: 1.1;
+  }
+
+  .hotkey {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    font: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-muted);
   }
 
   .name {
@@ -221,7 +246,7 @@
     align-items: center;
     justify-content: center;
     width: 34px;
-    height: 36px;
+    height: 38px;
     padding: 0;
     border: 1px dashed var(--surface-hairline);
     border-radius: var(--radius-control);

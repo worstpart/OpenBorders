@@ -76,7 +76,7 @@ describe("trade ships", () => {
     expect(trips.filter((t) => t.owner === 1)).toHaveLength(2);
     expect(trips.filter((t) => t.owner === 2)).toHaveLength(2);
     const gold = tradeGoldFor(RULES, 14);
-    expect(gold).toBe(540);
+    expect(gold).toBe(1_168); // 1,000 + 12 a tile (D-033)
     for (const trip of trips) {
       expect(trip.gold).toBe(gold);
       expect(trip.receiver).toBe(trip.owner === 1 ? 2 : 1);

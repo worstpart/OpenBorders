@@ -93,9 +93,6 @@ export function effectLines(rules: GameRules, type: BuildingType, level: number)
   if (effect.capacity) lines.push(`+${formatTroops(effect.capacity)} troop capacity`);
   if (effect.growthBonus) lines.push(`+${Math.round(effect.growthBonus * 100)}% troop growth`);
   if (effect.income) lines.push(`+${formatTroops(effect.income * 10)} gold/s`);
-  if (effect.mobilizeDiscount) {
-    lines.push(`Mobilize ${Math.round(effect.mobilizeDiscount * 100)}% cheaper`);
-  }
   if (effect.boatSpeed) {
     lines.push(`Boats ×${effect.boatSpeed} faster within ${effect.range ?? 0} km`);
   }
@@ -207,11 +204,6 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
   }
   if (next.income) {
     lines.push(`${now.income ? "Gold" : "New: gold"} +${formatTroops(next.income * 10)}/s`);
-  }
-  if (next.mobilizeDiscount) {
-    lines.push(
-      `${now.mobilizeDiscount ? "" : "New: "}Mobilize ${Math.round(next.mobilizeDiscount * 100)}% cheaper`,
-    );
   }
   if (next.tradeEveryTicks && tradeEnabled(rules)) {
     lines.push(`Trade ships every ${(next.tradeEveryTicks * rules.tickMs) / 1000} s`);

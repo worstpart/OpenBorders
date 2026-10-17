@@ -175,7 +175,7 @@ describe("air strike on a building", () => {
     // Disabled: its income is gone until it works again.
     expect(w.players[1]!.bonus.income).toBe(0);
     run(w, 200);
-    expect(w.players[1]!.bonus.income).toBe(90);
+    expect(w.players[1]!.bonus.income).toBe(100);
   });
 
   it("a level-I building is destroyed; an upgrade under way is lost", () => {
