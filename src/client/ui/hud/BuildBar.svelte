@@ -30,6 +30,7 @@
     if (!airport || !ui.me) return null;
     return {
       mode: ui.liftMode,
+      level: airport.level,
       troops: airliftTroops(
         DEFAULT_RULES,
         airport.level,
@@ -66,7 +67,10 @@
           {/if}
           <span class="muted">· Esc to cancel</span>
         {:else if airlift?.mode === "missile"}
-          Click enemy land within range for a strike missile — {strikeMissileText(DEFAULT_RULES)}
+          Click enemy land within range for a strike missile — {strikeMissileText(
+            DEFAULT_RULES,
+            airlift.level,
+          )}
           <span class="muted">· Esc or right-click to cancel</span>
         {:else if airlift?.mode === "buster"}
           Click an enemy building within range for a bunker buster

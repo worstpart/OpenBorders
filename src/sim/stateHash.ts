@@ -160,6 +160,8 @@ export function hashWorld(world: World): number {
         .addInt(f.arriveTick);
       // Escorts (2B.4) only when there are some, so earlier games keep their hashes.
       if (f.escorts > 0) h.addInt(0x2b4).addInt(f.escorts);
+      // A conventional missile's Silo level (its blast size, after 3.4).
+      if (f.kind === "missile" || f.kind === "buster") h.addInt(0x35).addInt(f.sourceLevel);
     }
   }
   // Suppression zones (2B.4), only while some are in force.

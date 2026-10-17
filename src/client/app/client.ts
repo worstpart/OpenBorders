@@ -1116,15 +1116,9 @@ export class GameClient {
       this.explode(event);
       if (event.type === "missileHit" || event.type === "warheadDetonated") {
         // A missile's blast (2B.5): a flash and a ring over its radius (a buster's: its splash).
-        const f = DEFAULT_RULES.flights;
         this.blastEffects.push({
           tile: event.tile,
-          radius:
-            event.type === "warheadDetonated"
-              ? event.radius
-              : event.missile === "buster"
-                ? f.busterSplashRadius
-                : f.missileRadius,
+          radius: event.radius,
           warhead: event.type === "warheadDetonated",
           start: performance.now(),
         });

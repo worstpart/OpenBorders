@@ -311,6 +311,8 @@ export interface Flight {
   readonly kind: FlightKind;
   /** The building it took off from, or -1 (test flights). */
   readonly source: number;
+  /** That building's level at take-off (0: none) — a missile's blast grows with its Silo's. */
+  readonly sourceLevel: number;
   readonly fromTile: number;
   readonly toTile: number;
   /** Who owned the target tile at launch (0 = neutral land or sea). */

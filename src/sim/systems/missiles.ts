@@ -6,7 +6,7 @@
  *    within the Silo's range (Silo III: anywhere) and pays its gold; it flies as a flight of
  *    one "plane" at missile speed (flights.ts), visible to everyone with its ETA.
  *  - Three missiles: the **strike missile** (Silo I) — every enemy building within
- *    `missileRadius` of the target loses `missileLevels` levels (2: levels I–II are destroyed)
+ *    `missileRadius` (`missileBlast`: the sizes grow with the firing Silo's level) of the target loses `missileLevels` levels (2: levels I–II are destroyed)
  *    and is out of action for a while, the target's land there is suppressed (suppression.ts,
  *    like an air strike on a point) and its owner loses `missileTroopShare` of their home
  *    troops, and enemy land within `craterRadius` becomes a neutral crater (D-033: all but
@@ -31,7 +31,7 @@
  */
 import { withinRange } from "../geometry.ts";
 import { isLand, type GameMap } from "../map/gameMap.ts";
-import type { GameRules } from "../rules.ts";
+import type { GameRules, MissileBlast } from "../rules.ts";
 import {
   getPlayer,
   NEUTRAL,
@@ -79,6 +79,15 @@ export function missileLevel(kind: MissileKind): number {
 /** Gold a launch of `kind` costs. */
 export function missileCost(rules: GameRules, kind: MissileKind): number {
   return kind === "warhead" ? rules.flights.warheadCost : rules.flights.missileCost;
+}
+
+/**
+ * How big a conventional missile from a Silo of `level` blasts (the user after playing 3.4:
+ * impacts grow with upgrades). A missile keeps its Silo's level at launch (Flight.sourceLevel).
+ */
+export function missileBlast(rules: GameRules, level: number): MissileBlast {
+  const silo = rules.buildings.types.silo.levels;
+  return silo[Math.min(Math.max(level, 1), silo.length) - 1]!.blast!;
 }
 
 /** Whether a SAM of `level` can shoot down a missile of `kind` (II+: conventional, III: all). */
@@ -266,15 +275,16 @@ export function landMissile(world: World, flight: Flight): void {
  */
 function landStrikeMissile(world: World, flight: Flight): void {
   const f = world.rules.flights;
+  const blast = missileBlast(world.rules, flight.sourceLevel);
   const hit = world.buildings.filter(
     (b) =>
       isEnemy(world, flight.owner, b.owner) &&
-      withinRange(world.map, flight.toTile, b.tile, f.missileRadius),
+      withinRange(world.map, flight.toTile, b.tile, blast.missileRadius),
   );
   for (const b of hit) {
     strikeBuilding(world, b, f.missileLevels, f.missileDisableTicks, flight.owner);
   }
-  const crater = landWithin(world, flight.toTile, f.craterRadius, (id) =>
+  const crater = landWithin(world, flight.toTile, blast.craterRadius, (id) =>
     isEnemy(world, flight.owner, id),
   ).filter((tile) => world.buildingAt[tile]! < 0);
   const holder = world.owner[flight.toTile]!;
@@ -286,7 +296,7 @@ function landStrikeMissile(world: World, flight: Flight): void {
     }
     world.scorched.push({
       tile: flight.toTile,
-      radius: f.craterRadius,
+      radius: blast.craterRadius,
       by: flight.owner,
       untilTick: world.tick + f.craterTicks,
     });
@@ -298,7 +308,7 @@ function landStrikeMissile(world: World, flight: Flight): void {
       flight.owner,
       victim,
       flight.toTile,
-      f.missileRadius,
+      blast.missileRadius,
       f.missileSuppressionTicks,
     );
   }
@@ -308,6 +318,8 @@ function landStrikeMissile(world: World, flight: Flight): void {
     owner: flight.owner,
     missile: "missile",
     tile: flight.toTile,
+    radius: blast.missileRadius,
+    craterRadius: blast.craterRadius,
     victim,
     buildings: hit.length,
     troops,
@@ -382,6 +394,7 @@ function killTroops(world: World, victim: PlayerId, share: number, by: PlayerId)
  */
 function landBuster(world: World, flight: Flight): void {
   const f = world.rules.flights;
+  const blast = missileBlast(world.rules, flight.sourceLevel);
   const b = enemyBuildingAt(world, flight.owner, flight.toTile);
   const holder = world.owner[flight.toTile]!;
   const victim = b ? b.owner : isEnemy(world, flight.owner, holder) ? holder : NEUTRAL;
@@ -389,7 +402,7 @@ function landBuster(world: World, flight: Flight): void {
     (other) =>
       other !== b &&
       isEnemy(world, flight.owner, other.owner) &&
-      withinRange(world.map, flight.toTile, other.tile, f.busterSplashRadius),
+      withinRange(world.map, flight.toTile, other.tile, blast.busterSplashRadius),
   );
   if (b) strikeBuilding(world, b, f.busterLevels, f.missileDisableTicks, flight.owner);
   for (const other of splash) {
@@ -402,6 +415,8 @@ function landBuster(world: World, flight: Flight): void {
     owner: flight.owner,
     missile: "buster",
     tile: flight.toTile,
+    radius: blast.busterSplashRadius,
+    craterRadius: 0,
     victim,
     buildings: (b ? 1 : 0) + splash.length,
     troops,

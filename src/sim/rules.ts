@@ -244,6 +244,16 @@ export type BuildingType = (typeof BUILDING_TYPES)[number];
  * One level of a building. Effect numbers are the building's total at that level (not
  * the step from the level below), so "Housing II: +80k capacity" reads straight off it.
  */
+/**
+ * How big a Silo's conventional missiles blast (by its level): a strike missile's crater and
+ * the reach on buildings (also its suppression), a bunker buster's splash — all in tiles.
+ */
+export interface MissileBlast {
+  readonly craterRadius: number;
+  readonly missileRadius: number;
+  readonly busterSplashRadius: number;
+}
+
 export interface BuildingLevelRules {
   /** Display name of the level ("Developed Housing"). */
   readonly name: string;
@@ -309,6 +319,8 @@ export interface BuildingLevelRules {
   readonly bunkerBuster?: boolean;
   /** …at level III the strategic warhead, ready again this many ticks after one. */
   readonly warheadCooldownTicks?: number;
+  /** …and its conventional missiles blast this big (they grow with the Silo's level). */
+  readonly blast?: MissileBlast;
   /**
    * Factory III's war production (2B.5): the owner's Airports and Silos within
    * `warProductionRange` tiles of it reload and cool down in `warProductionFactor`× the time.
@@ -560,12 +572,11 @@ export interface FlightRules {
   /**
    * Missiles (Missile Silo, GAME_DESIGN.md §3.17.8, 2B.5), one "plane" each. A conventional
    * missile (strike missile or bunker buster) costs `missileCost` gold to launch. The strike
-   * missile: every enemy building within `missileRadius` tiles of the target loses
-   * `missileLevels` level(s), and the target's land there is suppressed (as by an air strike)
-   * for `missileSuppressionTicks`…
+   * missile: every enemy building within its blast's `missileRadius` (MissileBlast, by the
+   * Silo's level) loses `missileLevels` level(s), and the target's land there is suppressed
+   * (as by an air strike) for `missileSuppressionTicks`…
    */
   readonly missileCost: number;
-  readonly missileRadius: number;
   readonly missileLevels: number;
   readonly missileSuppressionTicks: number;
   /** …the bunker buster: the enemy building at the target loses `busterLevels` levels… */
@@ -580,14 +591,12 @@ export interface FlightRules {
   readonly busterTroopShare: number;
   /**
    * Splash (the user after the Phase 2B playtest, D-033): a strike missile also blasts a
-   * crater — enemy land within `craterRadius` of the target becomes neutral (but the tiles of
+   * crater — enemy land within its blast's `craterRadius` becomes neutral (but the tiles of
    * buildings still standing; its owners lose home troops in proportion to the land lost),
    * costing `scorchedCost`× to retake for `craterTicks`…
    */
-  readonly craterRadius: number;
   readonly craterTicks: number;
-  /** …and a bunker buster costs every other enemy building within `busterSplashRadius` `busterSplashLevels` level(s). */
-  readonly busterSplashRadius: number;
+  /** …and a bunker buster costs every other enemy building within its blast's `busterSplashRadius` `busterSplashLevels` level(s). */
   readonly busterSplashLevels: number;
   /**
    * The strategic warhead (Silo III) costs `warheadCost`: everyone's land within
@@ -1432,9 +1441,12 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
         ],
       },
       // Missiles (§3.17.8, 2B.5): a late-game check on a leader. The strike missile (75k a
-      // launch) costs every enemy building within 8 km a level; the bunker buster (II) two
-      // levels of one building; the strategic warhead (III, 500k, 90 s) scorches 20 km. A
+      // launch) costs every enemy building in its blast two levels; the bunker buster (II)
+      // destroys one building; the strategic warhead (III, 500k, 90 s) scorches 20 km. A
       // captured Silo is destroyed (too swingy to hand over). Slots reload one at a time.
+      // Blasts grow with the Silo (the user after playing 3.4: "impacted area too small, should
+      // get bigger as upgraded"; until then one size: a 4 km crater, 8 km on buildings, 4 km
+      // buster splash): crater 7 → 10 → 13 km, buildings 10 → 13 → 16 km, splash 5 → 6 → 8 km.
       silo: {
         onCapture: "destroy",
         placement: "land",
@@ -1446,6 +1458,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             range: 250,
             missileSlots: 1,
             reloadTicks: 300,
+            blast: { craterRadius: 7, missileRadius: 10, busterSplashRadius: 5 },
           },
           {
             name: "Advanced Silo",
@@ -1455,6 +1468,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             missileSlots: 2,
             reloadTicks: 250,
             bunkerBuster: true,
+            blast: { craterRadius: 10, missileRadius: 13, busterSplashRadius: 6 },
           },
           {
             name: "Strategic Missile Complex",
@@ -1465,6 +1479,7 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
             reloadTicks: 200,
             bunkerBuster: true,
             warheadCooldownTicks: 900,
+            blast: { craterRadius: 13, missileRadius: 16, busterSplashRadius: 8 },
           },
         ],
       },
@@ -1581,17 +1596,15 @@ export const DEFAULT_RULES: GameRules = deepFreeze({
     // destroyed) and puts the rest out of action for 60 s; a bunker buster destroys its target
     // outright (three levels); both kill a share of the victim's home troops.
     missileCost: 75_000,
-    missileRadius: 8,
     missileLevels: 2,
     missileSuppressionTicks: 300,
     busterLevels: 3,
     missileDisableTicks: 600,
     missileTroopShare: 0.1,
     busterTroopShare: 0.05,
-    // Splash (D-033): a 4 km crater for 30 s; a buster's blast costs neighbours a level.
-    craterRadius: 4,
+    // Splash (D-033): a crater for 30 s (its size: the Silo levels' blast); a buster's blast
+    // costs neighbours a level.
     craterTicks: 300,
-    busterSplashRadius: 4,
     busterSplashLevels: 1,
     warheadCost: 500_000,
     warheadRadius: 20,

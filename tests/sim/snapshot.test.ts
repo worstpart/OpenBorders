@@ -251,10 +251,8 @@ function warCommands(world: World, tick: number): StampedCommand[] {
       ];
     case 12:
       return [c(1, { type: "moveWarship", warshipId: 1, tile: at(140, 15) })];
-    case 30:
-      return [
-        c(1, { type: "launchMissile", buildingId: 2, tile: at(180, 10), missile: "warhead" }),
-      ];
+    case 30: // outside the Silo III strike missile's 13 km crater, which is neutral land now
+      return [c(1, { type: "launchMissile", buildingId: 2, tile: at(190, 6), missile: "warhead" })];
     case 80:
       return [c(1, { type: "attack", target: 2, focusTile: at(150, 20), percentBp: 2_000 })];
     case 260: // after the airlift's mission cooldown

@@ -422,6 +422,9 @@ export type SimEvent =
       readonly owner: PlayerId;
       readonly missile: "missile" | "buster";
       readonly tile: number;
+      /** The blast's reach on buildings (a buster's: its splash) and its crater (0 for a buster). */
+      readonly radius: number;
+      readonly craterRadius: number;
       readonly victim: PlayerId;
       readonly buildings: number;
       /** Home troops `victim` lost (missiles kill people too, after the 2B.6 playtest). */

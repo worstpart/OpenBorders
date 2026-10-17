@@ -188,8 +188,8 @@
         >
       </button>
       <div class="muted hint">
-        {capitalize(strikeMissileText(DEFAULT_RULES))}; their walls there stop working for a while.
-        SAM II+ can shoot it down
+        {capitalize(strikeMissileText(DEFAULT_RULES, silo.level))}; their walls there stop working
+        for a while. SAM II+ can shoot it down
       </div>
       {#if silo.buster}
         <button
@@ -203,7 +203,7 @@
             >{formatTroops(silo.missileCost)}</span
           >
         </button>
-        <div class="muted hint">{capitalize(busterText(DEFAULT_RULES))}</div>
+        <div class="muted hint">{capitalize(busterText(DEFAULT_RULES, silo.level))}</div>
       {/if}
       {#if silo.warheadSecondsLeft !== null}
         <button

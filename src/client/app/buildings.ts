@@ -161,12 +161,12 @@ function siloLines(rules: GameRules, level: number): string[] {
   const f = rules.flights;
   const slots = effect.missileSlots ?? 0;
   const lines = [
-    `Strike missile (${formatTroops(f.missileCost)}): ${strikeMissileText(rules)}`,
+    `Strike missile (${formatTroops(f.missileCost)}): ${strikeMissileText(rules, level)}`,
     `${slots} missile${slots > 1 ? "s" : ""}, each reloads in ${seconds(rules, effect.reloadTicks ?? 0)} s`,
     effect.wholeMap ? "Range: the whole map" : `Range ${effect.range ?? 0} km`,
   ];
   if (effect.bunkerBuster) {
-    lines.push(`Bunker buster (${formatTroops(f.missileCost)}): ${busterText(rules)}`);
+    lines.push(`Bunker buster (${formatTroops(f.missileCost)}): ${busterText(rules, level)}`);
   }
   if (effect.warheadCooldownTicks) {
     lines.push(
@@ -262,8 +262,13 @@ export function upgradeLines(rules: GameRules, type: BuildingType, level: number
       `${next.missileSlots} missiles, reload ${seconds(rules, next.reloadTicks ?? 0)} s each`,
     );
     lines.push(next.wholeMap ? "Range: the whole map" : `Range ${next.range ?? 0} km`);
+    if (next.blast && now.blast) {
+      lines.push(
+        `Bigger blasts: crater ${now.blast.craterRadius} → ${next.blast.craterRadius} km, buildings hit within ${now.blast.missileRadius} → ${next.blast.missileRadius} km`,
+      );
+    }
     if (next.bunkerBuster && !now.bunkerBuster) {
-      lines.push(`New: bunker buster — ${busterText(rules)}`);
+      lines.push(`New: bunker buster — ${busterText(rules, level + 1)}`);
     }
     if (next.warheadCooldownTicks) {
       lines.push(
@@ -515,6 +520,8 @@ export interface BuildingCard {
     /** Range in km (Infinity: the whole map). */
     readonly range: number;
     readonly buster: boolean;
+    /** Its level (missile blasts grow with it). */
+    readonly level: number;
     /** A Silo III: seconds until the warhead can fly again; null below level III. */
     readonly warheadSecondsLeft: number | null;
     readonly missileCost: number;
@@ -619,6 +626,7 @@ function siloStatus(ctx: BuildContext, building: BuildingSnapshot): BuildingCard
     secondsToNext: next === undefined ? 0 : seconds(rules, next - ctx.tick),
     range: siloRange(rules, building),
     buster: levelRules(rules, "silo", building.level).bunkerBuster === true,
+    level: building.level,
     warheadSecondsLeft: levelRules(rules, "silo", building.level).warheadCooldownTicks
       ? seconds(rules, warheadCooldownLeft(building, ctx.tick))
       : null,

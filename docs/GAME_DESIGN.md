@@ -946,6 +946,11 @@ the Fortress Wall, and the assault lands whole and takes the land. **Since the 2
 > levels · …"); the blast ring on impact matches (a buster's: its 4 km splash). Toasts: "🚀
 > Your strike missile hit 2 buildings · 49 tiles of land burned · 56.8K troops killed".
 > Nations count the crater's troops and the buster's splash in a missile's value.
+>
+> **D-033 amendment (after playing 3.4, 2026-10-17).** "Missile impacted area too small,
+> impacts should gradually get bigger as upgraded": blasts grow with the firing Silo's level
+> — crater **7 / 10 / 13 km**, buildings hit within **10 / 13 / 16 km**, buster splash
+> **5 / 6 / 8 km** (the 4 km / 8 km / 4 km in the table below are the old single sizes).
 
 | Level | Name | Missile slots | Reload | Range | Launch cost | New ability |
 |---|---|---|---|---|---|---|

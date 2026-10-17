@@ -179,6 +179,8 @@ export interface FlightSnapshot {
   readonly kind: FlightKind;
   /** The building it took off from, or -1 (test flights). */
   readonly source: number;
+  /** That building's level at take-off (0: none). */
+  readonly sourceLevel: number;
   /** Who owned the target tile at launch (0 = neutral land or sea). */
   readonly target: PlayerId;
   readonly fromTile: number;
@@ -410,6 +412,7 @@ function snapshotFlight(flight: Flight): FlightSnapshot {
     owner: flight.owner,
     kind: flight.kind,
     source: flight.source,
+    sourceLevel: flight.sourceLevel,
     target: flight.target,
     fromTile: flight.fromTile,
     toTile: flight.toTile,

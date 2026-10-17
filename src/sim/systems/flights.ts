@@ -166,6 +166,7 @@ export function launchFlight(world: World, launch: FlightLaunch): Flight {
     owner: launch.owner,
     kind: launch.kind,
     source: launch.source,
+    sourceLevel: findBuilding(world, launch.source)?.level ?? 0,
     fromTile: launch.fromTile,
     toTile: launch.toTile,
     target: world.owner[launch.toTile]!,

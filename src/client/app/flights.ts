@@ -27,6 +27,7 @@ import { levelRules } from "../../sim/systems/buildings.ts";
 import {
   isMissile,
   MISSILE_KINDS,
+  missileBlast,
   missileCost,
   missileLevel,
   missileProblem,
@@ -334,7 +335,19 @@ function missilePreview(
     planesLost: Math.min(1, shots),
     missile: problem
       ? null
-      : missileEffect(rules, map, owner, buildings, tile, kind, me.id, enemy, friends, teammates),
+      : missileEffect(
+          rules,
+          map,
+          owner,
+          buildings,
+          tile,
+          kind,
+          silo.level,
+          me.id,
+          enemy,
+          friends,
+          teammates,
+        ),
   };
 }
 
@@ -346,12 +359,14 @@ function missileEffect(
   buildings: readonly BuildingSnapshot[],
   tile: number,
   kind: MissileKind,
+  siloLevel: number,
   me: PlayerId,
   enemy: (id: PlayerId) => boolean,
   friends: ReadonlySet<PlayerId>,
   teammates: ReadonlySet<PlayerId>,
 ): MissileEffect {
   const f = rules.flights;
+  const blast = missileBlast(rules, siloLevel);
   const r2 = (radius: number, b: number) => {
     const dx = (b % map.width) - (tile % map.width);
     const dy = Math.floor(b / map.width) - Math.floor(tile / map.width);
@@ -363,7 +378,7 @@ function missileEffect(
       buildings.filter((b) => enemy(b.owner) && b.level > f.missileLevels).map((b) => b.tile),
     );
     let craterTiles = 0;
-    const c = f.craterRadius;
+    const c = blast.craterRadius;
     const cx = tile % map.width;
     const cy = Math.floor(tile / map.width);
     for (let y = Math.max(0, cy - c); y <= Math.min(map.height - 1, cy + c); y++) {
@@ -376,8 +391,8 @@ function missileEffect(
     }
     return {
       kind,
-      buildings: buildings.filter((b) => enemy(b.owner) && r2(f.missileRadius, b.tile)).length,
-      radius: f.missileRadius,
+      buildings: buildings.filter((b) => enemy(b.owner) && r2(blast.missileRadius, b.tile)).length,
+      radius: blast.missileRadius,
       seconds: (f.missileSuppressionTicks * rules.tickMs) / 1000,
       craterRadius: c,
       craterTiles,
@@ -390,9 +405,9 @@ function missileEffect(
       buildingType: target.type,
       level: target.level,
       levelAfter: Math.max(0, target.level - f.busterLevels),
-      radius: f.busterSplashRadius,
+      radius: blast.busterSplashRadius,
       splash: buildings.filter(
-        (b) => b !== target && enemy(b.owner) && r2(f.busterSplashRadius, b.tile),
+        (b) => b !== target && enemy(b.owner) && r2(blast.busterSplashRadius, b.tile),
       ).length,
     };
   }
@@ -417,20 +432,22 @@ function missileEffect(
 /** "10%": a share as a whole percent. */
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
-/** What a strike missile does, in a few words (cards, the aiming banner). */
-export function strikeMissileText(rules: GameRules): string {
+/** What a strike missile from a Silo of `level` does, in a few words (cards, the aiming banner). */
+export function strikeMissileText(rules: GameRules, level: number): string {
   const f = rules.flights;
-  return `blasts a ${f.craterRadius} km crater of empty land, every enemy building within ${f.missileRadius} km loses ${f.missileLevels} level${f.missileLevels > 1 ? "s" : ""}, and ${percent(f.missileTroopShare)} of their troops die`;
+  const blast = missileBlast(rules, level);
+  return `blasts a ${blast.craterRadius} km crater of empty land, every enemy building within ${blast.missileRadius} km loses ${f.missileLevels} level${f.missileLevels > 1 ? "s" : ""}, and ${percent(f.missileTroopShare)} of their troops die`;
 }
 
-/** What a bunker buster does, in a few words. */
-export function busterText(rules: GameRules): string {
+/** What a bunker buster from a Silo of `level` does, in a few words. */
+export function busterText(rules: GameRules, level: number): string {
   const f = rules.flights;
+  const blast = missileBlast(rules, level);
   const hit =
     f.busterLevels >= 3
       ? "destroys one enemy building"
       : `one building loses ${f.busterLevels} levels`;
-  return `${hit}, the enemy buildings within ${f.busterSplashRadius} km lose ${f.busterSplashLevels} level${f.busterSplashLevels > 1 ? "s" : ""}, and ${percent(f.busterTroopShare)} of its owner's troops die`;
+  return `${hit}, the enemy buildings within ${blast.busterSplashRadius} km lose ${f.busterSplashLevels} level${f.busterSplashLevels > 1 ? "s" : ""}, and ${percent(f.busterTroopShare)} of its owner's troops die`;
 }
 
 /** A missile's effect in a few words, for the aiming label. */

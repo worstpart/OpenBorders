@@ -25,6 +25,7 @@ import { levelRules } from "../systems/buildings.ts";
 import { areFriendly, isAllied } from "../systems/diplomacy.ts";
 import { interceptorsOnRoute } from "../systems/flights.ts";
 import {
+  missileBlast,
   missileCost,
   siloRange,
   siloReady,
@@ -162,6 +163,7 @@ function decideConventional(
   const range = siloRange(rules, silo);
   const ready = siloReady(rules, silo, world.tick);
   const cost = missileCost(rules, "missile");
+  const blast = missileBlast(rules, silo.level);
   const affordable = Math.min(ready, Math.floor(bot.gold / cost));
   if (affordable < 1) return [];
   /** Gold of `levels` levels off building `b` (from its top), weighted like air strikes. */
@@ -182,10 +184,10 @@ function decideConventional(
     let around = 0;
     let splash = 0;
     for (const other of targets) {
-      if (withinRange(world.map, b.tile, other.tile, f.missileRadius)) {
+      if (withinRange(world.map, b.tile, other.tile, blast.missileRadius)) {
         around += levelsWorth(other, f.missileLevels);
       }
-      if (other !== b && withinRange(world.map, b.tile, other.tile, f.busterSplashRadius)) {
+      if (other !== b && withinRange(world.map, b.tile, other.tile, blast.busterSplashRadius)) {
         splash += levelsWorth(other, f.busterSplashLevels);
       }
     }
@@ -195,7 +197,7 @@ function decideConventional(
     const home = owner.homeTroops * rules.economy.goldPerTroop;
     const craterShare = Math.min(
       1,
-      (Math.PI * f.craterRadius * f.craterRadius) / Math.max(1, owner.tiles),
+      (Math.PI * blast.craterRadius * blast.craterRadius) / Math.max(1, owner.tiles),
     );
     const options: { kind: MissileKind; value: number }[] = [
       { kind: "missile", value: around + home * (f.missileTroopShare + craterShare) },

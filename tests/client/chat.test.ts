@@ -152,6 +152,7 @@ describe("the incoming-threat warning", () => {
     owner: o,
     kind: "test",
     source: -1,
+    sourceLevel: 0,
     target: 1,
     fromTile: 4,
     toTile,

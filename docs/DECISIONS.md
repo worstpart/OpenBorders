@@ -37,7 +37,7 @@ Statuses: **Accepted** · **Proposed** (awaiting your confirmation) · **Superse
 | D-029 | Landed armies (airborne, boats) don't collide with counter-attacks; the pocket is taken tile by tile | **Accepted** 2026-10-12 (user's playtest of 2B.4) |
 | D-030 | Missiles hit enemies only; the warhead spares your and your teammates' land but hits allies; explosion particles | **Accepted** 2026-10-12 (mine, minor; particles the user's request) |
 | D-031 | Naval Base warships: automatic patrol; they sink non-friends' troop boats, fight warships, capture passing trade ships; coastal fortification = Stone Wall; team games need 85% | **Accepted** 2026-10-14 (user: control, targets, art; the rest mine) |
-| D-033 | After the Phase 2B playtest: Mobilize removed and Housing 2.5× (land −⅓); strike-missile crater, bunker-buster splash, missiles 60 km/s, a missile launcher; keys 1–7 build; type badges and level dots; clearer hover card; 80% to win; richer early trade | **Accepted** 2026-10-16 (user's requests and answers; details mine) |
+| D-033 | After the Phase 2B playtest: Mobilize removed and Housing 2.5× (land −⅓); strike-missile crater, bunker-buster splash (amended 2026-10-17: blasts grow with the Silo level), missiles 60 km/s, a missile launcher; keys 1–7 build; type badges and level dots; clearer hover card; 80% to win; richer early trade | **Accepted** 2026-10-16 (user's requests and answers; details mine) |
 | D-032 | After the 2B.6 playtest: warships take orders (click, then the sea), patrol 4 km offshore; missiles take 2 levels / destroy and kill troops; nations fight more (missiles, blockades, bolder expanders/opportunists) | **Accepted** 2026-10-15 (user's requests; numbers mine) |
 | D-034 | Phase 3 server on a cloud host from the start: one Node service (client + WebSocket) on **Railway**, US East; the `ws` package | **Accepted** 2026-10-16 (user: cloud from the start, Railway, North America, ws; details mine) |
 | D-035 | Joining: lobby links **and** public lobbies in the first online version; just a name, no accounts | **Accepted** 2026-10-16 (user: both; names mine, as proposed) |
@@ -718,6 +718,18 @@ badges work now and don't replace their art).
 **Consequences.** Gold has no instant-troop use: it goes into buildings, walls and missiles,
 so nations build more Housing and fire more missiles; games run ~2 min longer (80%, fewer
 instant armies). Headless and browser results: ROADMAP "Phase 2B playtest round".
+
+**Amendment (2026-10-17, the user after playing 3.4: "missile impacted area too small,
+impacts should gradually get bigger as upgraded").** Blasts now grow with the Silo that fires
+them (its level at launch — upgrading or losing it mid-flight changes nothing): strike-missile
+crater **7 / 10 / 13 km** (was 4 at every level), buildings hit and land suppressed within
+**10 / 13 / 16 km** (was 8), bunker-buster splash **5 / 6 / 8 km** (was 4; level I can't fire
+one). The warhead stays 20 km — a Silo III crater (~530 tiles) is still well under its ~1,260.
+Sizes live on the Silo levels (`rules.ts` `blast`, `missileBlast`); the upgrade preview says
+"Bigger blasts: crater 7 → 10 km …". Numbers mine. Headless, 40 Islands games at Medium vs the
+commit before: missiles 8.6 → 9.2 a game, building levels they destroy 14.4 → 17.1, median
+length 20.4 → 21.5 min, every game won; with flights off games are unchanged tick for tick.
+Online: server and page must update together (the sim changed).
 
 ## D-032 — Warship orders, harder missiles, more aggressive nations (after the 2B.6 playtest) · Accepted 2026-10-15
 

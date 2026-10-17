@@ -83,25 +83,40 @@ const aim = (
   );
 
 describe("aiming a missile", () => {
-  it("a strike missile: the enemy buildings within 8 km, its price and flight time", () => {
-    const p = aim("missile", at(50, 25), [
-      building("factory", 3, at(52, 25), 2),
-      building("housing", 3, at(58, 25), 1), // exactly 8 km
-      building("housing", 3, at(59, 25), 1),
-    ]);
+  it("a strike missile from a Silo I: the enemy buildings within 10 km, its price and flight time", () => {
+    const p = aim(
+      "missile",
+      at(50, 25),
+      [
+        building("factory", 3, at(52, 25), 2),
+        building("housing", 3, at(60, 25), 1), // exactly 10 km
+        building("housing", 3, at(61, 25), 1),
+      ],
+      silo(1),
+    );
     expect(p).toMatchObject({ problem: null, cost: 75_000, planes: 1, planesLost: 0 });
     expect(p.seconds).toBe(Math.ceil(40 / 6) / 10);
     expect(p.missile).toMatchObject({
       kind: "missile",
       buildings: 2,
-      radius: 8,
-      craterRadius: 4,
-      craterTiles: 49,
+      radius: 10,
+      craterRadius: 7,
+      craterTiles: 149,
     });
     expect(missileEffectText(DEFAULT_RULES, p.missile!)).toBe(
-      // The 4 km crater (D-033): 49 tiles of their land burn.
-      "crater: 49 tiles burned · 2 buildings −2 levels · 10% of their troops · suppress 8 km for 30 s",
+      // The 7 km crater (D-033, Silo I): 149 tiles of their land burn.
+      "crater: 149 tiles burned · 2 buildings −2 levels · 10% of their troops · suppress 10 km for 30 s",
     );
+  });
+
+  it("the blast the preview shows grows with the Silo: 13 km crater, 16 km on buildings at III", () => {
+    const p = aim("missile", at(50, 25), [building("housing", 3, at(66, 25), 1)], silo(3));
+    expect(p.missile).toMatchObject({ buildings: 1, radius: 16, craterRadius: 13 });
+    const buster = aim("buster", at(50, 25), [
+      building("factory", 3, at(50, 25), 2),
+      building("housing", 3, at(58, 25), 1), // exactly 8 km: Silo III's splash
+    ]);
+    expect(buster.missile).toMatchObject({ kind: "buster", radius: 8, splash: 1 });
   });
 
   it("a bunker buster needs a building; a warhead counts the land it scorches and allies hit", () => {
@@ -182,13 +197,16 @@ describe("the Silo's card and texts", () => {
 
   it("names the levels: range, slots, bunker buster, warhead; Factory III's war production", () => {
     expect(effectLines(DEFAULT_RULES, "silo", 1)).toEqual([
-      "Strike missile (75K): blasts a 4 km crater of empty land, every enemy building within 8 km loses 2 levels, and 10% of their troops die",
+      "Strike missile (75K): blasts a 7 km crater of empty land, every enemy building within 10 km loses 2 levels, and 10% of their troops die",
       "1 missile, each reloads in 30 s",
       "Range 250 km",
     ]);
     expect(upgradeLines(DEFAULT_RULES, "silo", 2)).toContain("Range: the whole map");
     expect(upgradeLines(DEFAULT_RULES, "silo", 1)).toContain(
-      "New: bunker buster — destroys one enemy building, the enemy buildings within 4 km lose 1 level, and 5% of its owner's troops die",
+      "New: bunker buster — destroys one enemy building, the enemy buildings within 6 km lose 1 level, and 5% of its owner's troops die",
+    );
+    expect(upgradeLines(DEFAULT_RULES, "silo", 1)).toContain(
+      "Bigger blasts: crater 7 → 10 km, buildings hit within 10 → 13 km",
     );
     expect(upgradeLines(DEFAULT_RULES, "factory", 2)).toContain(
       "New: war production — Airports and Silos within 60 km reload 25% faster",
@@ -232,6 +250,8 @@ describe("missile toasts and threats", () => {
       owner,
       missile: "missile",
       tile: at(50, 25),
+      radius: 10,
+      craterRadius: 7,
       victim: 1,
       buildings: 1,
       troops: 1_200,
@@ -271,6 +291,7 @@ describe("missile toasts and threats", () => {
     owner: 3,
     kind: "warhead",
     source: -1,
+    sourceLevel: 0,
     target: 3,
     fromTile: at(60, 10),
     toTile: at(30, 25),
