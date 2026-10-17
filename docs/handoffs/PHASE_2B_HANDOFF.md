@@ -17,8 +17,9 @@
 | Phase 1, Phase 2 | ✅ tags `phase-1`, `phase-2` |
 | **Phase 2B** (2B.0 flights · 2B.0b icon-pack art · 2B.1 Airport I · 2B.2 SAM · 2B.3 assault + flak · 2B.4 air strikes · 2B.5 Missile Silo · 2B.6 Naval Base + warships · D-032 playtest round) | ✅ **approved** by the user's playtest 2026-10-16 ("This feels good"); tag **`phase-2b` on 09abcc4** (the build they played) |
 | Phase 2B playtest round — the user's twelve requests with the approval | ✅ **4d597f7** (D-033; ROADMAP "Phase 2B playtest round") — **not played by the user yet** |
-| Next | ⬜ a short check of D-033 by the user (§3.1) → **Phase 3 — multiplayer**, starting with decision **D-006** (§3.3) |
-| Tests | 490 passing (54 files), type check clean, Prettier clean, build OK; `main` = `origin/main` |
+| Phase 3 (started 2026-10-16) | ✅ decisions: **D-006 accepted (option C)**, D-034 a **cloud host from the start** (provider chosen at the start of 3.1), D-035 lobby links **and** public lobbies, D-036 bots fill — milestones 3.0–3.7 in ROADMAP (e5db369). ✅ **3.0 snapshots + determinism harness** (ROADMAP "3.0 result") |
+| Next | ⬜ the user's D-033 notes (asked for, not in yet — §3.1) → **3.1 server skeleton + first deploy**: first present the hosting choice (WHAT / WHY / OPTIONS / RECOMMENDATION with current prices; the user makes the account) and ask before adding the `ws` package |
+| Tests | 501 passing (55 files), type check clean, Prettier clean, build OK |
 
 ## 2. What Phase 2B ended with
 
@@ -127,7 +128,7 @@ milestones into ROADMAP.
 | Fact | Detail |
 |---|---|
 | Host abstraction (Phase 3's seam) | `src/host/host.ts` `SimHost` (`start`, `send`, `onFrame`, pause/speed for local games only); `LocalHost` (turn = one tick, 100 ms; commands stamped `{playerId, command}` = `StampedCommand`), `WorkerHost` + `simWorker.ts` + `workerProtocol.ts` (frames slimmed for the wire: routes sent once, walls only when changed — a ready model for network frames). Maps generate from a seed in `mapWorker.ts` — a server can regenerate the same map |
-| Determinism today | `src/sim` is guard-tested (no `Math.random`, `**`, transcendental `Math`, clocks, DOM, locale); `stateHash.ts` `hashWorld` / `computeOwnerHash`; `tools/hashDigest.mjs` compares seeds between commits. **No world snapshot (serialize/deserialize) exists yet** — milestone 3.0 |
+| Determinism today | `src/sim` is guard-tested (no `Math.random`, `**`, transcendental `Math`, clocks, DOM, locale); `stateHash.ts` `hashWorld` / `computeOwnerHash`; `tools/hashDigest.mjs` compares seeds between commits. `snapshot.ts` `serializeWorld` / `deserializeWorld` (3.0) and `replay.ts` `CommandRecorder` / `replayLog`; `node tools/crossEngine.ts` + the same `tools/determinismGames.ts` imported in a browser tab compare engines. A client builds its frames from its own restored world (fresh frame caches, so the first frame is complete); on a **resync** (3.5) the client must also reset its renderer and HUD state, which still describe the drifted world |
 | Import boundaries | `tests/guards/importBoundaries.ts` already defines `server` (may import sim, shared, packages) and `shared`; `host` may not import packages |
 | Validation | Every command is validated by the sim when it executes (`tick.ts` `applyCommand`; rejections become `commandRejected` events) — the server reuses that, never trusts client state |
 | Commands to carry online | spawn, confirmSpawn, attack, boat, recallBoat, retreat, alliance request/reply/renew/break, donate, build, upgrade, cancelBuild, buildWall, upgradeWall, cancelWall, emote, ping, airlift, assault, airStrike, launchMissile, moveWarship (`testFlight` is dev-only) |

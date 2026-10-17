@@ -854,7 +854,7 @@ bots-only games must not change):
 
 | | Milestone | What it delivers | Proves |
 |---|---|---|---|
-| 3.0 ⬜ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
+| 3.0 ✅ | **Snapshots + determinism harness** | `serializeWorld` / `deserializeWorld` (everything `hashWorld` covers plus RNG state, bot brains, maps such as `lastDonationTick`); round trip (snapshot mid-game → continue → the same hashes as never stopping); a command-log replayer; the same seeded game in Node and in the browser (Chromium; Firefox if a test runner is added — ask before installing) with identical hashes tick by tick | that C is viable |
 | 3.1 ⬜ | **Server skeleton + first deploy** | `src/server/` (Node; one game per worker thread; the sim + a 100 ms turn scheduler; WebSocket via the `ws` package — ask first); `NetworkHost` (a `SimHost` on the browser's own WebSocket) in `src/host/`; the server also serves the built client. Two tabs on this computer play one game, then the same build runs on the cloud host (**provider: the user's choice at the start of 3.1**, D-034). Only unguessable game links; connection and message-size limits | two browsers, anywhere, play one game |
 | 3.2 ⬜ | **Lobby by link** | create a game with the solo settings, share the link, names (D-035 rules), Ready, the creator starts; nations and tribes fill the rest (D-036) | friends can join |
 | 3.3 ⬜ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
@@ -862,6 +862,34 @@ bots-only games must not change):
 | 3.5 ⬜ | **Hash checks, resync, reconnect, spectators** | clients report hashes every N ticks, the server compares them with its own and resends a snapshot to a drifting client; reconnect and late join/spectate = snapshot + the turns since | robustness |
 | 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
 | 3.7 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host; logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
+
+**3.0 result** *(done 2026-10-16)*. `src/sim/snapshot.ts`: `serializeWorld` / `deserializeWorld`
+save the **whole** World generically (every field of every game object, so a field added later
+is saved without touching it; an unknown class makes it throw rather than drop data) except the
+map, the rules (checked by fingerprint: a snapshot refuses another map or other rules) and
+per-tick scratch. Exact by construction: doubles round-trip through JSON, −0 / NaN / ±∞ and
+`undefined` are tagged, Map and Set keep their iteration order (bots iterate border sets), a
+TileQueue keeps its heap layout and insertion counter (`save` / `restore`), the RNG its four
+words; the rebuilt world must hash to the saved hash. Typed arrays run-length encoded. Size and
+speed (Islands 1100×700, 18 bots): **~150–450 KB of JSON**, saved in ~15 ms, rebuilt in ~10 ms.
+`src/sim/replay.ts`: `CommandRecorder` (seed, players, the turns that carried commands,
+checkpoint hashes) and `replayLog` (from the start, or from a rebuilt snapshot + the turns since
+— the reconnect path; reports the first checkpoint that differs). **Tests** (11, all through
+JSON text and on a freshly generated map, so no per-map cache carries over): a generated Islands
+game with a scripted human, nations and tribes — snapshots every 400 ticks each play on 250
+ticks hash for hash, the log replays the whole game to the same full state; a staged war with
+every 2B system in play (airlift, assault, point and building strikes, strike missile, buster,
+warhead, SAM interceptions, warships firing, boats, trade, pings, suppression, scorched land) —
+a snapshot every 7 ticks, each played to the end with the same hash every tick **and the same
+full state** (hashed or not); encoding edge cases; refusals (another map, other rules, a
+tampered state, a newer version, an unknown class). **Cross-engine**: `tools/determinismGames.ts`
+(pure, imported by both) + `node tools/crossEngine.ts`: six 3,000-tick games (Islands Hard,
+Continent Medium with 40 tribes, Two lands 2 teams; a scripted human in each) and one
+12,000-tick Islands Hard game gave **identical** per-tick digests, checkpoints and halfway
+snapshot text in Node 24 and the browser (Chromium 152), and each resumed from its snapshot to
+the same digest. Firefox/Safari not checked yet (would need a browser test runner — a package,
+ask first; the user's friends' browsers are the real test in 3.7). Bots-only games identical to
+`4d597f7` (`tools/hashDigest.mjs`, Continent / Islands / Two-lands teams, seeds 1–2). Tests: 501.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
