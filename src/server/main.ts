@@ -117,6 +117,21 @@ async function serveFile(req: IncomingMessage, res: ServerResponse): Promise<voi
       .end(`ok ${lobbies.gameCount} games, ${connectionCount} connections${proxy}\n`);
     return;
   }
+  if (url.pathname === "/debug/address") {
+    // Shows callers only their own address headers: how the server tells players apart.
+    const header = (name: string) => req.headers[name] ?? null;
+    const report = {
+      chosen: addressOf(req),
+      "x-real-ip": header("x-real-ip"),
+      "x-envoy-external-address": header("x-envoy-external-address"),
+      "x-forwarded-for": header("x-forwarded-for"),
+      socket: req.socket.remoteAddress ?? null,
+    };
+    res
+      .writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+      .end(JSON.stringify(report, null, 2) + "\n");
+    return;
+  }
   let path = normalize(join(DIST, decodeURIComponent(url.pathname)));
   if (path !== DIST && !path.startsWith(DIST + sep)) {
     res.writeHead(403).end();
@@ -153,10 +168,19 @@ const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MES
 const connectionsByAddress = new Map<string, number>();
 let connectionCount = 0;
 
+/**
+ * The player's address. Behind the proxy, the headers its edge sets with the client's own
+ * address come first (X-Real-IP, then Envoy's external address); the last X-Forwarded-For
+ * entry is only a fallback (on Railway it can be an internal hop that changes per connection).
+ */
 function addressOf(req: IncomingMessage): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (BEHIND_PROXY && typeof forwarded === "string") {
-    const last = forwarded.split(",").at(-1)?.trim();
+  if (BEHIND_PROXY) {
+    for (const name of ["x-real-ip", "x-envoy-external-address"]) {
+      const value = req.headers[name];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    const forwarded = req.headers["x-forwarded-for"];
+    const last = typeof forwarded === "string" ? forwarded.split(",").at(-1)?.trim() : "";
     if (last) return last;
   }
   return req.socket.remoteAddress ?? "";
