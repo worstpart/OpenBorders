@@ -1100,6 +1100,16 @@ app; the user chose to **skip Google for now** (the code is ready and off until
 no CORS headers; `tools/onlineSmoke.ts` 400 turns OK (the planned repair only, ping ~78 ms);
 the live start screen shows "Playing as a guest". **Milestone 3.7 done.**
 
+**3.8 progress** *(2026-10-18)*. **Accounts survive an update:** the user's account was still
+there after a Railway update (the volume works). **Clean stop:** that update emailed "Deploy
+crashed": the server had no SIGTERM handler, so the old process died by the signal when
+Railway replaced it (and `npm start` turned that into an error exit). Now `main.ts` handles
+SIGTERM/SIGINT: logs `stopping (…)`, closes every game socket with **1012 "server updating"**
+(`SERVER_UPDATING_CLOSE` in protocol.ts), closes the accounts file (the WAL is folded in) and
+exits 0; `railway.json` starts `node src/server/main.ts` directly. The page doesn't try to
+rejoin after 1012 and says "The server is being updated, so this game has ended. Try again in
+a minute." Checked locally: a stop mid-game shows that message, exit code 0, no `-wal` file left.
+
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
 outcome below is computed by it, never claimed by a client. Clients only *request*:

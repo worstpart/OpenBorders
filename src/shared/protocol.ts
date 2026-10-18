@@ -33,6 +33,12 @@ export const ONLINE_RULES = makeRules({ spawn: { timeoutTicks: 600 } });
 /** Where the game server listens for WebSockets (same origin as the page in production). */
 export const SOCKET_PATH = "/ws";
 
+/**
+ * The close code the server sends when it stops for an update (3.8; WebSocket 1012 "service
+ * restart"). Running games end with it: the page says so instead of trying to rejoin.
+ */
+export const SERVER_UPDATING_CLOSE = 1012;
+
 /** Largest message either side accepts, in bytes (a command is a few hundred). */
 export const MAX_CLIENT_MESSAGE_BYTES = 8 * 1024;
 

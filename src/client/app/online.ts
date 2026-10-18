@@ -19,6 +19,7 @@ import type { PlayerId } from "../../sim/world.ts";
 import {
   PROTOCOL_VERSION,
   OPEN_GAMES_PATH,
+  SERVER_UPDATING_CLOSE,
   SOCKET_PATH,
   type OpenGame,
   type ClientMessage,
@@ -365,7 +366,8 @@ export class OnlineSession {
       // After the end there is nothing to come back to: the end card stays as it is.
       if (this.over) return;
       // A running game tries to come back by itself, unless the server meant to close it.
-      if (online.status === "playing" && event.code !== POLICY_CLOSE) {
+      const meant = event.code === POLICY_CLOSE || event.code === SERVER_UPDATING_CLOSE;
+      if (online.status === "playing" && !meant) {
         if (this.attempt < RECONNECT_DELAYS_MS.length) {
           const delay = RECONNECT_DELAYS_MS[this.attempt]!;
           this.attempt++;
@@ -380,9 +382,11 @@ export class OnlineSession {
       const reason =
         event.code === POLICY_CLOSE && event.reason === "replaced"
           ? "This game was opened in another tab."
-          : online.status === "playing"
-            ? "Lost the connection to the server."
-            : online.error || "Couldn't reach the game server.";
+          : event.code === SERVER_UPDATING_CLOSE
+            ? "The server is being updated, so this game has ended. Try again in a minute."
+            : online.status === "playing"
+              ? "Lost the connection to the server."
+              : online.error || "Couldn't reach the game server.";
       ui.online = { ...online, status: "error", reconnecting: 0, error: reason };
     };
   }

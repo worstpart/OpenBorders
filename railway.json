@@ -4,7 +4,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node src/server/main.ts",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }

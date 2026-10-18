@@ -24,6 +24,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import {
   MAX_CLIENT_MESSAGE_BYTES,
   OPEN_GAMES_PATH,
+  SERVER_UPDATING_CLOSE,
   SOCKET_PATH,
   type GameConfig,
   type ServerMessage,
@@ -344,3 +345,30 @@ function accept(ws: WebSocket, address: string, account: SignedIn | null): void 
 server.listen(PORT, HOST, () =>
   log(`OpenBorder server on http://${HOST}:${PORT} (serving ${DIST})`),
 );
+
+// --- Stopping (3.8) -------------------------------------------------------------------------
+
+/**
+ * Railway stops the old server with SIGTERM on every update. Without this the process died by
+ * the signal, and the exit counted as a crash. Now players are told why their game ended (the
+ * page doesn't try to rejoin a game that is gone), the accounts file is closed cleanly and the
+ * process exits normally.
+ */
+let stopping = false;
+function stop(signal: string): void {
+  if (stopping) return;
+  stopping = true;
+  log(`stopping (${signal}): ${lobbies.gameCount} games, ${connectionCount} connections`);
+  server.close();
+  for (const ws of sockets.clients) ws.close(SERVER_UPDATING_CLOSE, "server updating");
+  // A moment for the close messages to go out; never longer than a few seconds in all.
+  setTimeout(() => {
+    for (const ws of sockets.clients) ws.terminate();
+    accountStore.close();
+    log("stopped");
+    process.exit(0);
+  }, 500).unref();
+  setTimeout(() => process.exit(0), 5_000).unref();
+}
+process.on("SIGTERM", () => stop("SIGTERM"));
+process.on("SIGINT", () => stop("SIGINT"));
