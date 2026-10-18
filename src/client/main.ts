@@ -1,4 +1,5 @@
 import { mount } from "svelte";
+import { loadAccount } from "./app/account.svelte.ts";
 import { GameClient } from "./app/client.ts";
 import { rollMapSeed } from "./app/setup.ts";
 import { ui } from "./app/uiState.svelte.ts";
@@ -31,6 +32,9 @@ try {
 if (import.meta.env.DEV && client) {
   (window as unknown as { __openborder: GameClient["debug"] }).__openborder = client.debug;
 }
+
+// Who is signed in (3.7) — guests need no answer to play.
+void loadAccount();
 
 mount(App, {
   target: requireElement("#ui", HTMLDivElement),

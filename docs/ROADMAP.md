@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel ✅ (live); 3.7 accounts & profiles next — handoff `PHASE_3_AFTER_3.6_HANDOFF.md` |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel ✅ (live); 3.7 accounts & profiles built (not live yet — Railway volume + Google client, `docs/ACCOUNTS_SETUP.md`) |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -861,7 +861,7 @@ bots-only games must not change):
 | 3.4 ✅ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ✅ | **Hash checks, resync, reconnect, spectators** | clients check every turn's hash against the server's and ask for a snapshot when they drift; rejoin with a secret seat token (reload, reopened link, dropped connection — retried by itself); late join = watch (snapshot + the turns since) | robustness |
 | 3.6 ✅ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
-| 3.7 ⬜ | **Accounts & profiles** *(added 2026-10-17 at the user's request)* | **optional** sign-in (**D-037**, accepted 2026-10-18) — **Google** or a **name + password** account with no email (one-time recovery code); guests keep playing with just a name (D-035). Public profile: display name (the lobby name rules + blocklist), join date, games played, wins — only online games with ≥ 2 humans count; signed-in names are reserved. Built with no new packages: **SQLite** (`node:sqlite`) on a **Railway volume**, `crypto.scrypt` for passwords, a random session key in a secure cookie (server keeps its hash). No email kept; "Delete my account" erases everything at once. Needs from the user: the Railway volume and a Google Cloud OAuth client (I write the steps). A short privacy note | people can keep a name and a record |
+| 3.7 🟡 | **Accounts & profiles** *(added 2026-10-17 at the user's request)* | **optional** sign-in (**D-037**, accepted 2026-10-18) — **Google** or a **name + password** account with no email (one-time recovery code); guests keep playing with just a name (D-035). Public profile: display name (the lobby name rules + blocklist), join date, games played, wins — only online games with ≥ 2 humans count; signed-in names are reserved. Built with no new packages: **SQLite** (`node:sqlite`) on a **Railway volume**, `crypto.scrypt` for passwords, a random session key in a secure cookie (server keeps its hash). No email kept; "Delete my account" erases everything at once. Needs from the user: the Railway volume and a Google Cloud OAuth client (I write the steps). A short privacy note | people can keep a name and a record |
 | 3.8 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host (signing in too); logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
 
 **3.0 result** *(done 2026-10-16)*. `src/sim/snapshot.ts`: `serializeWorld` / `deserializeWorld`
@@ -1058,6 +1058,40 @@ reload rejoining after a hot reload, a watcher's and a player's end card, the se
 "Rejoin your online game" bringing a closed tab back (the old tab: "opened in another tab");
 no console errors. The simulation is unchanged (bots-only games identical). Tests: 556.
 **Live (2026-10-18, ef05796):** `tools/onlineSmoke.ts` against Railway — 400 turns, the 2-team game dealt 3 v 3, the planned repair only, ping ~75 ms from here — OK; `tools/onlineEnd.ts` (now compares the server's game count with the one before it started, as other games may run) — OK; in two tabs on the live site: the team lobby and switching, the order ring at real latency, the status chip "● 68 ms" with "your orders reach the game in about 95 ms". **Milestone 3.6 done.**
+
+**3.7 result** *(2026-10-18, D-037)*. Protocol v7. **Optional accounts:** the start screen says
+"Playing as a guest · Sign in · Create account" or "Signed in as X · Profile". A **name +
+password** account needs no email; creating it shows a one-time **recovery code** (20 letters
+that can't be mixed up, shown once, "I saved it" to close) — with it a forgotten password is
+replaced, the code renewed and every other sign-in ended. **Google** sign-in (authorization code
+with PKCE, scope `openid` only, so we learn just Google's account number) appears once the
+server has `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`; a new Google account gets a stand-in
+name ("Commander 1234") and the page asks for a real one at once. **Profile:** name (renamed
+there), join date, games, wins; sign out; delete (confirmed, erased at once, name free again).
+Public profile cards open from a ✓ name in the lobby. **Lobbies:** a signed-in player plays under
+the account name (the lobby's name field is read-only for them); a guest asking for an account's
+name (any capitals) gets "Name (2)". **Counting:** a game counts when it starts with ≥ 2 humans
+(online only — solo games run in the browser); wins: the winner, or every member of the winning
+team, connected or not; the game worker now reports the winner with `ended`. **Built without
+new packages:** `node:sqlite` (`src/server/accountStore.ts`, one file in `DATA_DIR` — on Railway
+the volume's `RAILWAY_VOLUME_MOUNT_PATH`, locally `./data`, git-ignored), `crypto.scrypt`
+(N 2^15, r 8, p 3, per-account salt; SHA-256 for session keys and recovery codes;
+`src/server/passwords.ts`), and `src/server/accountApi.ts` (`/api/me`, `register`, `login`,
+`recover`, `logout`, `rename`, `delete`, `profile`, `/auth/google` + `/callback`): the
+session key in an HttpOnly, SameSite=Lax cookie for 30 days (Secure behind Railway, renewed
+at most daily), changes only as JSON POSTs from this site's Origin, tries limited (10 a minute
+per address, 10 per 15 minutes per name, 5 new accounts an hour per address), a wrong name as
+slow as a wrong password. The game socket reads the cookie on its upgrade (this site's pages
+only). `/health` adds "accounts" (or "accounts (not on a volume)") and "Google on/off". A short
+**privacy note** (start screen → Privacy, also at `/privacy` for Google's consent page).
+**Checked:** 17 new tests (hashing, codes, names, rate limits, the store, the API over real HTTP
+incl. Google with a stand-in token endpoint — state cookie, PKCE, wrong audience refused, return
+only to this site — and lobbies: reserved names, counted games, FFA and team wins); in my tab
+against a local server: create → recovery code → reload still signed in → lobby "Tester One✓",
+a cookie-less guest asking for "TESTER ONE" got "TESTER ONE (2)", the profile card, rename,
+sign out, sign in with other capitals, delete; the built page on the server itself (same-origin
+create / delete); phone width; `tools/onlineEnd.ts` OK. Tests: 573. Not live yet: needs the
+Railway volume and (for Google) the user's OAuth client — steps in `docs/ACCOUNTS_SETUP.md`.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

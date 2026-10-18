@@ -21,7 +21,7 @@ import { makeRules, type Difficulty } from "../sim/rules.ts";
 import type { PlayerId, PlayerSetup } from "../sim/world.ts";
 
 /** Bumped when the messages change; a client and server of different versions refuse each other. */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /**
  * The rules of every online game — the server and each browser build the world with exactly
@@ -83,6 +83,8 @@ export interface LobbyPlayer {
   readonly ready: boolean;
   /** Team games: the team this player picked or was put on (1..teams); 0 in free-for-all. */
   readonly team: number;
+  /** Signed in (3.7): the account name whose profile this player has; null for guests. */
+  readonly profile: string | null;
 }
 
 /** What the lobby shows about the game (the creator's settings, without the bots' names). */
@@ -126,7 +128,7 @@ export function cleanName(raw: unknown): string | null {
 }
 
 /** `name`, or "name (2)", "name (3)" … — the first one nobody in `taken` has. */
-export function uniqueName(name: string, taken: ReadonlySet<string>): string {
+export function uniqueName(name: string, taken: { has(name: string): boolean }): string {
   if (!taken.has(name)) return name;
   for (let n = 2; ; n++) {
     const suffix = ` (${n})`;

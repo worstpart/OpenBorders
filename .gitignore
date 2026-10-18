@@ -23,3 +23,6 @@ Thumbs.db
 # The user's icon pack (D-028): the PNGs are the source art for tools/iconPack.mjs; the SVGs
 # only wrap the same PNGs.
 openborder_icon_pack_final/**/*.svg
+
+# Accounts database of a local game server (3.7)
+data/

@@ -1,11 +1,14 @@
 /**
- * Lobbies and running games (milestones 3.1–3.6): who is in which game, public listing, the
+ * Lobbies and running games (milestones 3.1–3.7): who is in which game, public listing, the
  * lobby → (countdown →) start → turns flow, what happens when people leave, (3.5) repair
- * snapshots, rejoining a seat with its token, and spectators, and (3.6) picking a team in the
- * lobby and finished games kept a little while. Sockets and threads stay outside (Peer,
- * GameRunner), so this logic is tested without either.
+ * snapshots, rejoining a seat with its token, and spectators, (3.6) picking a team in the
+ * lobby and finished games kept a little while, and (3.7) signed-in players: they play under
+ * their account's name, which guests can't take, and counted games and wins go on their
+ * profiles (D-037). Sockets, threads and the database stay outside (Peer, GameRunner,
+ * AccountHooks), so this logic is tested without any of them.
  */
 import type { Command } from "../sim/commands.ts";
+import { COUNTED_GAME_MIN_HUMANS } from "../shared/accounts.ts";
 import {
   cleanName,
   EMPTY_GAME_GRACE_MS,
@@ -57,8 +60,31 @@ export interface GameEvents {
   /**
    * The game is over: its last turn has gone out and no more come; the runner still makes
    * snapshots until stop() (3.6). Or it failed with `error`: the runner has stopped itself.
+   * `result` says who won (3.7: for profiles).
    */
-  ended(error?: string): void;
+  ended(error?: string, result?: GameResult): void;
+}
+
+/** How a game ended: the winning player, or the winning team (0 in free-for-all). */
+export interface GameResult {
+  readonly winner: number | null;
+  readonly team: number;
+}
+
+/** A signed-in player (3.7): their account's id and name. */
+export interface AccountRef {
+  readonly id: number;
+  readonly name: string;
+}
+
+/** What the lobbies need from the accounts (3.7) — the database stays outside. */
+export interface AccountHooks {
+  /** Another account (not `accountId`) has this name: a guest can't play under it. */
+  reserved(name: string, accountId: number | null): boolean;
+  /** Each account played a counted game (≥ 2 humans, D-037). */
+  played(accountIds: readonly number[]): void;
+  /** Each account won a counted game. */
+  won(accountIds: readonly number[]): void;
 }
 
 export type RunnerFactory = (config: GameConfig, events: GameEvents) => GameRunner;
@@ -80,9 +106,13 @@ export interface LobbyOptions {
   /** Runs `fn` after `ms`; returns a cancel function (setTimeout by default). */
   readonly schedule?: (fn: () => void, ms: number) => () => void;
   readonly log?: (line: string) => void;
+  /** Accounts (3.7); without them everyone is a guest. */
+  readonly accounts?: AccountHooks;
 }
 
 interface Member {
+  /** Signed in (3.7): the name comes from the account and can't be changed in the lobby. */
+  readonly account: AccountRef | null;
   peer: Peer | null;
   /** Cleaned and unique in the game (D-035). */
   name: string;
@@ -122,6 +152,8 @@ interface Room {
    * but no longer running, listed or counted against any limit.
    */
   finished: boolean;
+  /** Started with enough humans to count on profiles (3.7). */
+  counted: boolean;
 }
 
 /** What a connection does with the messages its browser sends. */
@@ -183,8 +215,11 @@ export class Lobbies {
     return [...this.rooms.values()].filter((r) => !r.finished);
   }
 
-  /** A new browser connection, from `address` (its IP, as the server sees it). */
-  connect(peer: Peer, address = ""): Connection {
+  /**
+   * A new browser connection, from `address` (its IP, as the server sees it); `account` when
+   * its browser is signed in (3.7).
+   */
+  connect(peer: Peer, address = "", account: AccountRef | null = null): Connection {
     let greeted = false;
     const budget = new CommandBudget(this.now);
     let room: Room | null = null;
@@ -248,9 +283,10 @@ export class Lobbies {
               waiting: new Set(),
               cancelEmpty: null,
               finished: false,
+              counted: false,
             };
             this.rooms.set(room.id, room);
-            member = this.addMember(room, peer, message.name);
+            member = this.addMember(room, peer, message.name, account);
             this.log(`game ${room.id} created`);
             this.sendLobby(room);
             return;
@@ -284,7 +320,7 @@ export class Lobbies {
             }
             if (target.members.length >= MAX_HUMANS) return fail("That game is full.");
             room = target;
-            member = this.addMember(room, peer, message.name);
+            member = this.addMember(room, peer, message.name, account);
             this.updateCountdown(room);
             this.sendLobby(room);
             return;
@@ -340,11 +376,14 @@ export class Lobbies {
           }
           case "name": {
             if (!room || !member || room.started) return;
+            if (member.account) {
+              return fail("You play under your account's name — change it on your profile.");
+            }
             const name = cleanName(message.name);
             if (!name) return fail("Names need a letter or a digit.");
             if (isBlockedName(name)) return fail("Please pick another name.");
             const others = room.members.filter((m) => m !== member);
-            member.name = uniqueName(name, this.takenNames(room, others));
+            member.name = uniqueName(name, this.takenNames(room, others, null));
             this.sendLobby(room);
             return;
           }
@@ -436,10 +475,15 @@ export class Lobbies {
     };
   }
 
-  private addMember(room: Room, peer: Peer, requested: unknown): Member {
-    const taken = this.takenNames(room, room.members);
-    let name = cleanName(requested);
-    if (name && isBlockedName(name)) name = null;
+  private addMember(
+    room: Room,
+    peer: Peer,
+    requested: unknown,
+    account: AccountRef | null,
+  ): Member {
+    const taken = this.takenNames(room, room.members, account?.id ?? null);
+    let name = account ? account.name : cleanName(requested);
+    if (name && !account && isBlockedName(name)) name = null;
     if (!name) {
       let n = room.members.length + 1;
       while (taken.has(`Player ${n}`)) n++;
@@ -447,6 +491,7 @@ export class Lobbies {
     }
     const { mode, teams } = room.settings;
     const member: Member = {
+      account,
       peer,
       name: uniqueName(name, taken),
       ready: false,
@@ -465,13 +510,24 @@ export class Lobbies {
     return member;
   }
 
-  /** Names a new or renamed player can't take: the other humans' and the bots'. */
-  private takenNames(room: Room, members: readonly Member[]): Set<string> {
-    return new Set([
+  /**
+   * Names a new or renamed player can't take: the other humans' and the bots', and (3.7)
+   * every account's name but the player's own (`accountId`; null for a guest).
+   */
+  private takenNames(
+    room: Room,
+    members: readonly Member[],
+    accountId: number | null,
+  ): { has(name: string): boolean } {
+    const names = new Set([
       ...members.map((m) => m.name),
       ...room.settings.nations,
       ...room.settings.tribes,
     ]);
+    const accounts = this.options.accounts;
+    return {
+      has: (name) => names.has(name) || (accounts?.reserved(name, accountId) ?? false),
+    };
   }
 
   private sendLobby(room: Room): void {
@@ -480,6 +536,7 @@ export class Lobbies {
       connected: m.peer !== null,
       ready: k === 0 || m.ready,
       team: m.team,
+      profile: m.account?.name ?? null,
     }));
     const summary = lobbySummary(room.settings);
     const startsIn = room.startsAt === null ? null : Math.max(0, room.startsAt - this.now());
@@ -535,6 +592,10 @@ export class Lobbies {
       ),
     };
     room.config = config;
+    // Profiles (D-037): a game counts once it starts with at least two humans.
+    room.counted = room.members.length >= COUNTED_GAME_MIN_HUMANS;
+    const signedIn = accountIds(room.members);
+    if (room.counted && signedIn.length > 0) this.options.accounts?.played(signedIn);
     for (const m of room.members) {
       m.peer?.send({
         t: "start",
@@ -564,13 +625,14 @@ export class Lobbies {
         const text = `{"t":"sync","snapshot":${json}}`;
         for (const peer of waiting) peer.sendText(text);
       },
-      ended: (error) => {
+      ended: (error, result) => {
         room.cancelEmpty?.();
         room.cancelEmpty = null;
         if (!error) {
           // Over (3.6): everyone has the last turn. The game is kept a while so a player
           // reconnecting now still gets its final state and sees the end card.
           this.log(`game ${room.id} ended`);
+          if (!room.finished && room.counted && result) this.recordWinners(room, result);
           room.finished = true;
           room.cancelEmpty = this.schedule(() => {
             room.cancelEmpty = null;
@@ -585,6 +647,21 @@ export class Lobbies {
         this.rooms.delete(room.id);
       },
     });
+  }
+
+  /**
+   * The signed-in players who won (3.7): the winner in free-for-all, everyone on the winning
+   * team in a team game — whether still connected or not (their country played on).
+   */
+  private recordWinners(room: Room, result: GameResult): void {
+    const players = room.config?.players ?? [];
+    const winners = room.members.filter((m) =>
+      result.team > 0
+        ? players[m.playerId - 1]?.team === result.team
+        : result.winner !== null && m.playerId === result.winner,
+    );
+    const ids = accountIds(winners);
+    if (ids.length > 0) this.options.accounts?.won(ids);
   }
 
   /** Every player and watcher of `room` gets `message` (encoded once). */
@@ -637,4 +714,9 @@ export class Lobbies {
   private log(line: string): void {
     this.options.log?.(line);
   }
+}
+
+/** The accounts among `members`, each once (one account may sit in two seats from two tabs). */
+function accountIds(members: readonly Member[]): number[] {
+  return [...new Set(members.flatMap((m) => (m.account ? [m.account.id] : [])))];
 }

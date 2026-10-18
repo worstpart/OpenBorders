@@ -28,7 +28,8 @@ export type FromGameWorker =
   | { readonly type: "snapshot"; readonly tick: number; readonly json: string }
   /** A snapshot couldn't be made (a bug): the game goes on, the asker gets an error. */
   | { readonly type: "snapshotFailed"; readonly message: string }
-  | { readonly type: "ended" }
+  /** Over: who won (3.7: for profiles). */
+  | { readonly type: "ended"; readonly winner: number | null; readonly team: number }
   | { readonly type: "error"; readonly message: string };
 
 const port = parentPort;
@@ -65,7 +66,7 @@ function pump(): void {
     return;
   }
   if (game.ended) {
-    post({ type: "ended" });
+    post({ type: "ended", winner: game.world.winner, team: game.world.winningTeam });
     return;
   }
   // Far behind (an overloaded machine): carry on from now rather than racing to catch up.

@@ -17,6 +17,8 @@
   import { MAP_DIMENSIONS, MAP_SIZE_NAMES } from "../../../sim/map/generate.ts";
   import type { OpenGame } from "../../../shared/protocol.ts";
   import { anySavedSeat, fetchOpenGames } from "../../app/online.ts";
+  import { account } from "../../app/account.svelte.ts";
+  import AccountDialog, { type AccountView } from "./AccountDialog.svelte";
 
   interface Props {
     onPlay: () => void;
@@ -36,6 +38,17 @@
    * that game has ended meanwhile, the lobby screen says so and the seat is forgotten.)
    */
   const seat = anySavedSeat();
+
+  /**
+   * The account dialog (3.7), or null. A new Google account is asked for its name at once;
+   * the address /privacy opens the privacy note (the link Google's sign-in page shows).
+   */
+  let dialog = $state<AccountView | null>(
+    location.pathname.replace(/\/$/, "").endsWith("/privacy") ? "privacy" : null,
+  );
+  $effect(() => {
+    if (account.me?.needsName && dialog === null) dialog = "profile";
+  });
 
   /** Open public games (3.4), refreshed every few seconds while this screen shows. */
   let openGames = $state<OpenGame[]>([]);
@@ -124,6 +137,24 @@
 <section class="card" aria-labelledby="title">
   <h1 id="title">OpenBorder</h1>
   <p class="tagline">Start small. Expand. Outlast everyone.</p>
+
+  {#if account.loaded}
+    <div class="account" aria-live="polite">
+      {#if account.me}
+        <span class="who">Signed in as <strong>{account.me.name}</strong></span>
+        <button type="button" class="link" onclick={() => (dialog = "profile")}>Profile</button>
+      {:else}
+        <span class="who">Playing as a guest</span>
+        <button type="button" class="link" onclick={() => (dialog = "signin")}>Sign in</button>
+        <button type="button" class="link" onclick={() => (dialog = "create")}
+          >Create account</button
+        >
+      {/if}
+    </div>
+    {#if account.notice}
+      <p class="notice" role="alert">{account.notice}</p>
+    {/if}
+  {/if}
 
   <div class="row">
     <span id="mode-label">Mode</span>
@@ -257,8 +288,24 @@
       </ul>
     </section>
   {/if}
-  <p class="note">Phase 2 prototype</p>
+  <p class="note">
+    Phase 3 prototype ·
+    <button type="button" class="link" onclick={() => (dialog = "privacy")}>Privacy</button>
+  </p>
 </section>
+
+{#if dialog}
+  <AccountDialog
+    view={dialog}
+    onClose={() => {
+      dialog = null;
+      account.notice = null;
+      if (location.pathname.replace(/\/$/, "").endsWith("/privacy")) {
+        history.replaceState(null, "", location.pathname.replace(/privacy\/?$/, ""));
+      }
+    }}
+  />
+{/if}
 
 <style>
   .card {
@@ -283,6 +330,42 @@
   .tagline {
     margin: var(--space-1) 0 var(--space-6);
     color: var(--text-secondary);
+  }
+
+  .account {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin: calc(-1 * var(--space-3)) 0 var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
+  .who strong {
+    color: var(--text-primary);
+  }
+
+  .link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .link:hover {
+    color: var(--text-primary);
+  }
+
+  .notice {
+    margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--color-warning);
   }
 
   .row {

@@ -7,8 +7,14 @@
  *
  * In development the Vite page connects to this server on port 8787 (see the client's
  * online.ts), so `npm start` alone is enough next to the dev server.
+ *
+ * Accounts (3.7, D-037) live in a SQLite file in DATA_DIR — on Railway the volume's mount
+ * path (RAILWAY_VOLUME_MOUNT_PATH), locally ./data. Google sign-in is on when
+ * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (PUBLIC_ORIGIN: the site's address as
+ * registered with Google, if it differs from what requests say).
  */
 import { randomBytes } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, resolve, sep } from "node:path";
@@ -22,6 +28,8 @@ import {
   type GameConfig,
   type ServerMessage,
 } from "../shared/protocol.ts";
+import { AccountApi, type SignedIn } from "./accountApi.ts";
+import { AccountStore } from "./accountStore.ts";
 import type { FromGameWorker, ToGameWorker } from "./gameWorker.ts";
 import { Lobbies, type GameEvents, type GameRunner } from "./lobbies.ts";
 
@@ -70,8 +78,9 @@ function startRunner(config: GameConfig, events: GameEvents): GameRunner {
       });
     } else if (message.type === "snapshot") events.snapshot(message.json);
     // Over: the worker keeps the final world for snapshots until stop() (3.6).
-    else if (message.type === "ended") events.ended();
-    else if (message.type === "snapshotFailed") {
+    else if (message.type === "ended") {
+      events.ended(undefined, { winner: message.winner, team: message.team });
+    } else if (message.type === "snapshotFailed") {
       log(`snapshot failed: ${message.message}`);
       events.snapshot(null);
     } else finish(message.message);
@@ -90,11 +99,47 @@ function startRunner(config: GameConfig, events: GameEvents): GameRunner {
   };
 }
 
+// --- Accounts (3.7) ------------------------------------------------------------------------
+
+const VOLUME = process.env["RAILWAY_VOLUME_MOUNT_PATH"];
+const DATA_DIR = resolve(
+  process.env["DATA_DIR"] ?? VOLUME ?? fileURLToPath(new URL("../../data", import.meta.url)),
+);
+/** On Railway without a volume the file goes with every update: say so in /health. */
+const ACCOUNTS_KEPT =
+  !BEHIND_PROXY || VOLUME !== undefined || process.env["DATA_DIR"] !== undefined;
+mkdirSync(DATA_DIR, { recursive: true });
+const accountStore = new AccountStore(join(DATA_DIR, "accounts.sqlite"));
+accountStore.pruneSessions(Date.now());
+setInterval(() => accountStore.pruneSessions(Date.now()), 60 * 60 * 1000).unref();
+
+const googleId = process.env["GOOGLE_CLIENT_ID"]?.trim();
+const googleSecret = process.env["GOOGLE_CLIENT_SECRET"]?.trim();
+const accountApi = new AccountApi({
+  store: accountStore,
+  behindProxy: BEHIND_PROXY,
+  addressOf: (req) => addressOf(req),
+  google: googleId && googleSecret ? { clientId: googleId, clientSecret: googleSecret } : null,
+  publicOrigin: process.env["PUBLIC_ORIGIN"] ?? null,
+  log,
+});
+log(
+  `accounts in ${DATA_DIR} (${accountStore.accountCount} accounts${ACCOUNTS_KEPT ? "" : ", NOT on a volume — lost on the next update"}); Google sign-in ${accountApi.googleEnabled ? "on" : "off"}`,
+);
+
 const lobbies = new Lobbies({
   startRunner,
   newGameId: () => randomBytes(9).toString("base64url"),
   newSeed: () => randomBytes(4).readUInt32LE(0),
   log,
+  accounts: {
+    reserved: (name, accountId) => {
+      const owner = accountStore.ownerOfName(name);
+      return owner !== null && owner !== accountId;
+    },
+    played: (ids) => accountStore.recordGame(ids),
+    won: (ids) => accountStore.recordWin(ids),
+  },
 });
 
 // --- The page: static files from dist/ -----------------------------------------------------
@@ -112,6 +157,7 @@ const TYPES: Record<string, string> = {
 };
 
 async function serveFile(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (await accountApi.handle(req, res)) return;
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405).end();
     return;
@@ -119,9 +165,13 @@ async function serveFile(req: IncomingMessage, res: ServerResponse): Promise<voi
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") {
     const proxy = BEHIND_PROXY ? ", behind proxy" : "";
+    const kept = ACCOUNTS_KEPT ? "" : " (not on a volume)";
+    const google = accountApi.googleEnabled ? "on" : "off";
     res
       .writeHead(200, { "content-type": "text/plain" })
-      .end(`ok ${lobbies.gameCount} games, ${connectionCount} connections${proxy}\n`);
+      .end(
+        `ok ${lobbies.gameCount} games, ${connectionCount} connections${proxy}, accounts${kept}, Google ${google}\n`,
+      );
     return;
   }
   if (url.pathname === OPEN_GAMES_PATH) {
@@ -220,6 +270,8 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   const address = addressOf(req);
+  // Signed in (3.7): the session cookie comes with the upgrade, from this site's pages only.
+  const account = accountApi.accountFor(req);
   const open = connectionsByAddress.get(address) ?? 0;
   if (open >= MAX_CONNECTIONS_PER_ADDRESS || connectionCount >= MAX_CONNECTIONS) {
     socket.end("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
@@ -234,11 +286,11 @@ server.on("upgrade", (req, socket, head) => {
       if (left > 0) connectionsByAddress.set(address, left);
       else connectionsByAddress.delete(address);
     });
-    accept(ws, address);
+    accept(ws, address, account);
   });
 });
 
-function accept(ws: WebSocket, address: string): void {
+function accept(ws: WebSocket, address: string, account: SignedIn | null): void {
   let alive = true;
   let windowStart = Date.now();
   let messages = 0;
@@ -251,7 +303,7 @@ function accept(ws: WebSocket, address: string): void {
     },
     close: (reason: string) => ws.close(1008, reason.slice(0, 100)),
   };
-  const connection = lobbies.connect(peer, address);
+  const connection = lobbies.connect(peer, address, account);
   ws.on("message", (data, isBinary) => {
     const now = Date.now();
     if (now - windowStart >= 1_000) {

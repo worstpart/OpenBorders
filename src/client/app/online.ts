@@ -147,11 +147,15 @@ export function anySavedSeat(now = Date.now()): SavedSeat | null {
   return null;
 }
 
+/** Where the game server answers HTTP: the page's own server, or port 8787 in development. */
+export function serverHttpBase(): string {
+  return import.meta.env.DEV ? `http://${location.hostname}:${devServerPort()}` : "";
+}
+
 /** The open public games (3.4) from the game server; [] when it can't be reached. */
 export async function fetchOpenGames(): Promise<OpenGame[]> {
-  const base = import.meta.env.DEV ? `http://${location.hostname}:${devServerPort()}` : "";
   try {
-    const response = await fetch(`${base}${OPEN_GAMES_PATH}`, { cache: "no-store" });
+    const response = await fetch(`${serverHttpBase()}${OPEN_GAMES_PATH}`, { cache: "no-store" });
     if (!response.ok) return [];
     const body = (await response.json()) as { games?: OpenGame[] };
     return Array.isArray(body.games) ? body.games : [];

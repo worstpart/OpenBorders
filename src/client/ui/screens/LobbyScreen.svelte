@@ -12,6 +12,7 @@
   import { teamName } from "../../app/teams.ts";
   import { MAP_SIZES, MAP_STYLE_LABELS } from "../../app/setup.ts";
   import { ui } from "../../app/uiState.svelte.ts";
+  import ProfileCard from "./ProfileCard.svelte";
 
   interface Props {
     onStart: () => void;
@@ -36,6 +37,8 @@
   let starting = $state(false);
   /** The name being typed (null = show the server's). */
   let draft = $state<string | null>(null);
+  /** A signed-in player's profile being looked at (3.7). */
+  let profileOf = $state<string | null>(null);
 
   const online = $derived(ui.online);
   const link = $derived(online?.gameId ? gameLink(online.gameId, location) : "");
@@ -121,15 +124,20 @@
     <p class="status" role="status">Starting… preparing the map</p>
   {:else}
     <label class="label" for="lobby-name">Your name</label>
-    <input
-      id="lobby-name"
-      maxlength={MAX_NAME_LENGTH}
-      autocomplete="nickname"
-      value={draft ?? me?.name ?? ""}
-      oninput={(e) => (draft = e.currentTarget.value)}
-      onblur={commitName}
-      onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-    />
+    {#if me?.profile}
+      <!-- Signed in (3.7): the account's name, changed on the profile. -->
+      <input id="lobby-name" readonly value={me.name} title="Your account's name" />
+    {:else}
+      <input
+        id="lobby-name"
+        maxlength={MAX_NAME_LENGTH}
+        autocomplete="nickname"
+        value={draft ?? me?.name ?? ""}
+        oninput={(e) => (draft = e.currentTarget.value)}
+        onblur={commitName}
+        onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      />
+    {/if}
 
     <label class="label" for="lobby-link">Invite friends with this link</label>
     <div class="link-row">
@@ -160,7 +168,18 @@
     <h2 class="label">Players ({online.players.length})</h2>
     {#snippet row(player: LobbyPlayer, k: number)}
       <li>
-        <span class="name">{player.name}</span>
+        {#if player.profile}
+          {@const profile = player.profile}
+          <button
+            type="button"
+            class="name profile"
+            title="Signed in — see {profile}'s profile"
+            onclick={() => (profileOf = profile)}
+            >{player.name}<span class="verified" aria-label="signed in">✓</span></button
+          >
+        {:else}
+          <span class="name">{player.name}</span>
+        {/if}
         {#if k === online.you}<span class="tag">you</span>{/if}
         {#if k === 0}<span class="tag">creator</span>{/if}
         <span class="state" class:ready={player.ready}>{player.ready ? "Ready" : "Not ready"}</span>
@@ -225,6 +244,10 @@
 
   <button type="button" class="leave" onclick={onLeave}>Leave</button>
 </section>
+
+{#if profileOf}
+  <ProfileCard name={profileOf} onClose={() => (profileOf = null)} />
+{/if}
 
 <style>
   .card {
@@ -295,6 +318,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .profile {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+  }
+
+  .profile:hover {
+    text-decoration: underline;
+  }
+
+  .verified {
+    margin-left: var(--space-1);
+    color: var(--accent);
+    font-size: var(--text-sm);
+  }
+
+  input[readonly]:not(#lobby-link) {
+    color: var(--text-secondary);
   }
 
   .state {
