@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅; 3.6 online feel next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel next — handoff `PHASE_3_AFTER_3.5_HANDOFF.md` |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -1020,6 +1020,7 @@ country, a watcher followed the game, a dropped connection came back by itself w
 tab showed "lost the connection" / "is back"; no console errors. Snapshots early in a game:
 35–56 KB of JSON. Not in scope: games surviving a server restart (a Railway update still ends
 them — 3.8). Tests: 545.
+**Live (2026-10-17, 4f8608a):** `tools/onlineSmoke.ts` against Railway — 400 turns; the corrupted creator repaired (1 mismatch, 1 snapshot), the spectator and the rejoined joiner 0 mismatches — OK; permessage-deflate negotiated through Railway's proxy; in the browser on the live site a reload mid-game put the player back in their country and a second tab watched. **Milestone 3.5 done.**
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
