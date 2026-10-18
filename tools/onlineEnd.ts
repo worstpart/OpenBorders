@@ -80,6 +80,11 @@ const check = (what: string, ok: boolean) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
 };
 
+/** Games the server counts as running (lobbies included). */
+const liveGames = async () =>
+  Number(/^ok (\d+) games/.exec(await (await fetch(health)).text())?.[1]);
+// Other games may be running on a shared server: this one must drop out of the count.
+const before = await liveGames();
 const a = await connect({ t: "create", settings, name: "End A" });
 const lobby = (await a.next("lobby")) as Extract<ServerMessage, { t: "lobby" }>;
 const b = await connect({ t: "join", gameId: lobby.gameId, name: "End B" });
@@ -106,8 +111,7 @@ const began = Date.now();
 let ended = false;
 while (Date.now() - began < 90_000) {
   await new Promise((r) => setTimeout(r, 500));
-  const text = await (await fetch(health)).text();
-  if (/^ok 0 games/.test(text)) {
+  if (lastTurn > 0 && (await liveGames()) <= before) {
     ended = true;
     break;
   }

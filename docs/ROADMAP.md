@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel ✅ (pending live check); 3.7 accounts & profiles next |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel ✅ (live); 3.7 accounts & profiles next — handoff `PHASE_3_AFTER_3.6_HANDOFF.md` |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -1057,6 +1057,7 @@ a teammate's ping, the order ring under 250–1000 ms of simulated lag, the ping
 reload rejoining after a hot reload, a watcher's and a player's end card, the seat forgotten,
 "Rejoin your online game" bringing a closed tab back (the old tab: "opened in another tab");
 no console errors. The simulation is unchanged (bots-only games identical). Tests: 556.
+**Live (2026-10-18, ef05796):** `tools/onlineSmoke.ts` against Railway — 400 turns, the 2-team game dealt 3 v 3, the planned repair only, ping ~75 ms from here — OK; `tools/onlineEnd.ts` (now compares the server's game count with the one before it started, as other games may run) — OK; in two tabs on the live site: the team lobby and switching, the order ring at real latency, the status chip "● 68 ms" with "your orders reach the game in about 95 ms". **Milestone 3.6 done.**
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every
