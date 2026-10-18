@@ -839,3 +839,43 @@ case. A player who leaves mid-game keeps their land; their country stops acting 
 handed to a bot), and they can rejoin it (milestone 3.5).
 
 **Alternatives.** Humans only (empty maps with few players).
+
+---
+
+## D-037 — Accounts & profiles: Google or name + password, SQLite on a volume, no email · Accepted 2026-10-18
+
+**Context.** The user asked (2026-10-17) for profiles with Google sign-in or own accounts —
+milestone 3.7. Phase 5's match history and leaderboards will build on these accounts.
+Asked four questions; the user chose the recommendation every time.
+
+**Decision.**
+- **Sign-in is optional.** Guests keep playing with just a name (D-035). Two ways to sign in:
+  **Google** (OAuth authorization-code flow with PKCE, done server-side with plain `fetch` to
+  Google — no package; the user creates the Google Cloud OAuth client) and **name + password**
+  with no email. A forgotten password can't be mailed, so account creation shows a **one-time
+  recovery code** (stored scrambled) that sets a new password.
+- **Storage: SQLite** (`node:sqlite`, built into Node 24) in a file on a **Railway volume** —
+  no extra service, cents a month. Works because we run one server copy; Postgres stays the
+  path if that ever changes.
+- **Security without new packages:** passwords and recovery codes through Node's
+  `crypto.scrypt` with a per-account salt; sessions are a random 32-byte key in an
+  `HttpOnly; Secure; SameSite=Lax` cookie for 30 days, the server stores only its SHA-256;
+  sign-in attempts are rate-limited.
+- **Public profile:** display name (the lobby name rules + blocklist), join date, games played,
+  wins. Only **online games with at least 2 humans** count (solo games run in the browser and
+  can't be trusted; alone-vs-bots online games could pump the numbers). A signed-in name is
+  **reserved**: nobody else can use it in a lobby.
+- **Data kept:** Google's account ID *or* the scrambled password, the display name, join date,
+  the two counts and active sessions. **No email**, no Google name or photo, no IP addresses in
+  the database. **"Delete my account"** erases everything at once and frees the name.
+- A short **privacy note** page, linked from the start screen.
+
+**Consequences.** The server gains a small HTTP API (sign-in, sign-out, profile, delete) and
+reads the cookie on the WebSocket upgrade, so a lobby knows who is signed in. Google may keep a
+new app in testing mode (up to 100 listed users) until it reviews the app's name and privacy
+page — we'll see what it asks when the user creates the client.
+
+**Alternatives.** Google only (simplest, no passwords stored); email + password with reset
+emails (needs a mail service and an own domain); Railway Postgres (a separate always-on
+service, a few dollars a month or more, one package); stats private; keeping the email; a 7-day
+undo before deletion.
