@@ -69,11 +69,12 @@ function startRunner(config: GameConfig, events: GameEvents): GameRunner {
         hash: message.hash,
       });
     } else if (message.type === "snapshot") events.snapshot(message.json);
+    // Over: the worker keeps the final world for snapshots until stop() (3.6).
+    else if (message.type === "ended") events.ended();
     else if (message.type === "snapshotFailed") {
       log(`snapshot failed: ${message.message}`);
       events.snapshot(null);
-    } else if (message.type === "ended") finish();
-    else finish(message.message);
+    } else finish(message.message);
   });
   worker.on("error", (error) => finish(error.message));
   const post = (message: ToGameWorker) => worker.postMessage(message);

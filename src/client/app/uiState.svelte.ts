@@ -67,6 +67,10 @@ export interface OnlineState {
   readonly catchingUp: boolean;
   /** The connection dropped: reconnect attempt n (0: connected). */
   readonly reconnecting: number;
+  /** The round trip to the server, smoothed (ms); null until measured (3.6). */
+  readonly pingMs: number | null;
+  /** Playing, but no turn came for a while: the server (or the network) is slow (3.6). */
+  readonly stalled: boolean;
 }
 
 /** Game speeds offered in the pause menu (solo games only). */
@@ -204,6 +208,10 @@ class UiState {
   hover = $state.raw<HoverInfo | null>(null);
   /** Set while in an online lobby or game; null in solo games. */
   online = $state.raw<OnlineState | null>(null);
+  /** Online (3.6): an order is taking a while to come back from the server. */
+  sendingOrder = $state(false);
+  /** Online (3.6): how long recent orders took to come back in a turn (ms), or null. */
+  orderDelayMs = $state<number | null>(null);
   toasts = $state.raw<readonly Toast[]>([]);
   hint = $state<HintId | null>(null);
 

@@ -1,13 +1,15 @@
 /**
- * Lobbies and running games (milestones 3.1–3.5): who is in which game, public listing, the
- * lobby → (countdown →) start → turns flow, what happens when people leave, and (3.5)
- * repair snapshots, rejoining a seat with its token, and spectators. Sockets and threads stay
- * outside (Peer, GameRunner), so this logic is tested without either.
+ * Lobbies and running games (milestones 3.1–3.6): who is in which game, public listing, the
+ * lobby → (countdown →) start → turns flow, what happens when people leave, (3.5) repair
+ * snapshots, rejoining a seat with its token, and spectators, and (3.6) picking a team in the
+ * lobby and finished games kept a little while. Sockets and threads stay outside (Peer,
+ * GameRunner), so this logic is tested without either.
  */
 import type { Command } from "../sim/commands.ts";
 import {
   cleanName,
   EMPTY_GAME_GRACE_MS,
+  FINISHED_GAME_KEEP_MS,
   gamePlayers,
   lobbySummary,
   uniqueName,
@@ -18,6 +20,7 @@ import {
   PUBLIC_MIN_PLAYERS,
   RESYNC_COOLDOWN_MS,
   settingsProblem,
+  smallestTeam,
   type ClientMessage,
   type GameConfig,
   type OpenGame,
@@ -39,7 +42,10 @@ export interface Peer {
 /** A running game's simulation (a worker thread on the server; in-thread in tests). */
 export interface GameRunner {
   command(playerId: number, command: Command): void;
-  /** Asks for a snapshot between two ticks; it comes back through GameEvents.snapshot. */
+  /**
+   * Asks for a snapshot between two ticks; it comes back through GameEvents.snapshot. Still
+   * answered once the game has ended (3.6), until stop().
+   */
   snapshot(): void;
   stop(): void;
 }
@@ -48,7 +54,10 @@ export interface GameEvents {
   turn(turn: TurnMessage): void;
   /** The snapshot asked for, as JSON, in order with the turns (null: it failed — a bug). */
   snapshot(json: string | null): void;
-  /** The game is over (or failed with `error`); its runner has stopped itself. */
+  /**
+   * The game is over: its last turn has gone out and no more come; the runner still makes
+   * snapshots until stop() (3.6). Or it failed with `error`: the runner has stopped itself.
+   */
   ended(error?: string): void;
 }
 
@@ -83,6 +92,8 @@ interface Member {
   playerId: number;
   /** Set when the game starts: the secret that gives this seat back (3.5). */
   token: string;
+  /** Team games: the team picked in the lobby (3.6); 0 in free-for-all. */
+  team: number;
 }
 
 interface Room {
@@ -106,6 +117,11 @@ interface Room {
   readonly waiting: Set<Peer>;
   /** Every human left the running game: it stops when this runs out (3.5). */
   cancelEmpty: (() => void) | null;
+  /**
+   * The game is over (3.6): kept FINISHED_GAME_KEEP_MS for rejoins (they see the end card),
+   * but no longer running, listed or counted against any limit.
+   */
+  finished: boolean;
 }
 
 /** What a connection does with the messages its browser sends. */
@@ -139,7 +155,12 @@ export class Lobbies {
   openGames(): OpenGame[] {
     const now = this.now();
     return [...this.rooms.values()]
-      .filter((r) => r.public && (r.started ? r.runner !== null : r.members.length < MAX_HUMANS))
+      .filter(
+        (r) =>
+          r.public &&
+          !r.finished &&
+          (r.started ? r.runner !== null : r.members.length < MAX_HUMANS),
+      )
       .sort((a, b) => Number(a.started) - Number(b.started) || b.members.length - a.members.length)
       .slice(0, 20)
       .map((r) => ({
@@ -153,8 +174,13 @@ export class Lobbies {
       }));
   }
 
+  /** Lobbies and running games (finished ones kept for rejoins don't count). */
   get gameCount(): number {
-    return this.rooms.size;
+    return this.liveRooms().length;
+  }
+
+  private liveRooms(): Room[] {
+    return [...this.rooms.values()].filter((r) => !r.finished);
   }
 
   /** A new browser connection, from `address` (its IP, as the server sees it). */
@@ -200,10 +226,10 @@ export class Lobbies {
             if (room) return fail("already in a game");
             const problem = settingsProblem(message.settings);
             if (problem) return fail(`can't create the game: ${problem}`);
-            if (this.rooms.size >= (this.options.maxGames ?? 20)) {
+            if (this.gameCount >= (this.options.maxGames ?? 20)) {
               return fail("The server is full right now — try again in a few minutes.");
             }
-            const mine = [...this.rooms.values()].filter((r) => r.address === address).length;
+            const mine = this.liveRooms().filter((r) => r.address === address).length;
             if (address && mine >= (this.options.maxGamesPerAddress ?? 3)) {
               return fail("You already have several games open — finish or leave one first.");
             }
@@ -221,6 +247,7 @@ export class Lobbies {
               watchers: new Set(),
               waiting: new Set(),
               cancelEmpty: null,
+              finished: false,
             };
             this.rooms.set(room.id, room);
             member = this.addMember(room, peer, message.name);
@@ -235,7 +262,9 @@ export class Lobbies {
             if (!target) return fail("That game doesn't exist (any more).");
             if (target.started) {
               // A running game: watch it (3.5).
-              if (!target.config || !target.runner) return fail("That game has ended.");
+              if (!target.config || !target.runner || target.finished) {
+                return fail("That game has ended.");
+              }
               if (target.watchers.size >= MAX_WATCHERS) {
                 return fail("That game has as many watchers as it can take.");
               }
@@ -279,8 +308,11 @@ export class Lobbies {
             room = target;
             member = seat;
             old?.close("replaced");
-            target.cancelEmpty?.();
-            target.cancelEmpty = null;
+            // (A finished game's timer closes it whoever comes back.)
+            if (!target.finished) {
+              target.cancelEmpty?.();
+              target.cancelEmpty = null;
+            }
             peer.send({
               t: "start",
               gameId: target.id,
@@ -290,7 +322,7 @@ export class Lobbies {
               midGame: true,
             });
             this.requestSnapshot(target, peer);
-            if (!old) {
+            if (!old && !target.finished) {
               this.broadcast(target, { t: "presence", playerId: seat.playerId, connected: true });
             }
             this.log(`game ${target.id}: player ${seat.playerId} rejoined`);
@@ -325,6 +357,21 @@ export class Lobbies {
             this.sendLobby(room);
             return;
           }
+          case "team": {
+            if (!room || !member || room.started || room.settings.mode !== "teams") return;
+            const team = message.team;
+            if (!Number.isInteger(team) || team < 1 || team > room.settings.teams) return;
+            member.team = team;
+            this.sendLobby(room);
+            return;
+          }
+          case "ping": {
+            // Measures the connection (3.6): the time the browser sent comes straight back.
+            if (typeof message.at === "number" && Number.isFinite(message.at)) {
+              peer.send({ t: "pong", at: message.at });
+            }
+            return;
+          }
           case "ready": {
             if (!room || !member || room.started) return;
             member.ready = message.ready === true;
@@ -338,7 +385,7 @@ export class Lobbies {
             return;
           }
           case "command": {
-            if (!room?.runner || !member || member.playerId === 0) return;
+            if (!room?.runner || room.finished || !member || member.playerId === 0) return;
             if (commandProblem(message.command)) {
               if (budget.strike() === "kick") peer.close("malformed commands");
               return;
@@ -378,8 +425,10 @@ export class Lobbies {
         } else {
           // A player who leaves keeps their land and stops acting (D-036) until they rejoin
           // (3.5). With no human left the game runs on a while for a rejoin, then stops.
-          this.broadcast(left, { t: "presence", playerId: member.playerId, connected: false });
-          if (!left.members.some((m) => m.peer)) this.stopWhenEmpty(left);
+          if (!left.finished) {
+            this.broadcast(left, { t: "presence", playerId: member.playerId, connected: false });
+            if (!left.members.some((m) => m.peer)) this.stopWhenEmpty(left);
+          }
         }
         room = null;
         member = null;
@@ -396,12 +445,21 @@ export class Lobbies {
       while (taken.has(`Player ${n}`)) n++;
       name = `Player ${n}`;
     }
+    const { mode, teams } = room.settings;
     const member: Member = {
       peer,
       name: uniqueName(name, taken),
       ready: false,
       playerId: 0,
       token: "",
+      // Team games: a newcomer goes to the smallest team, and may switch (3.6).
+      team:
+        mode === "teams"
+          ? smallestTeam(
+              teams,
+              room.members.map((m) => m.team),
+            )
+          : 0,
     };
     room.members.push(member);
     return member;
@@ -421,6 +479,7 @@ export class Lobbies {
       name: m.name,
       connected: m.peer !== null,
       ready: k === 0 || m.ready,
+      team: m.team,
     }));
     const summary = lobbySummary(room.settings);
     const startsIn = room.startsAt === null ? null : Math.max(0, room.startsAt - this.now());
@@ -472,7 +531,7 @@ export class Lobbies {
       seed: this.options.newSeed(),
       players: gamePlayers(
         room.settings,
-        room.members.map((m) => m.name),
+        room.members.map((m) => ({ name: m.name, team: m.team })),
       ),
     };
     room.config = config;
@@ -506,13 +565,22 @@ export class Lobbies {
         for (const peer of waiting) peer.sendText(text);
       },
       ended: (error) => {
-        if (error) {
-          this.log(`game ${room.id} failed: ${error}`);
-          this.broadcast(room, { t: "error", message: "The game stopped on the server." });
-        } else this.log(`game ${room.id} ended`);
-        room.runner = null;
         room.cancelEmpty?.();
         room.cancelEmpty = null;
+        if (!error) {
+          // Over (3.6): everyone has the last turn. The game is kept a while so a player
+          // reconnecting now still gets its final state and sees the end card.
+          this.log(`game ${room.id} ended`);
+          room.finished = true;
+          room.cancelEmpty = this.schedule(() => {
+            room.cancelEmpty = null;
+            if (this.rooms.get(room.id) === room) this.close(room);
+          }, FINISHED_GAME_KEEP_MS);
+          return;
+        }
+        this.log(`game ${room.id} failed: ${error}`);
+        this.broadcast(room, { t: "error", message: "The game stopped on the server." });
+        room.runner = null;
         room.waiting.clear();
         this.rooms.delete(room.id);
       },
@@ -536,7 +604,7 @@ export class Lobbies {
 
   /** Every human left `room`'s game: it stops after EMPTY_GAME_GRACE_MS unless one rejoins. */
   private stopWhenEmpty(room: Room): void {
-    if (room.cancelEmpty) return;
+    if (room.cancelEmpty || room.finished) return;
     this.log(`game ${room.id}: every player left; it stops in ${EMPTY_GAME_GRACE_MS / 1000} s`);
     room.cancelEmpty = this.schedule(() => {
       room.cancelEmpty = null;

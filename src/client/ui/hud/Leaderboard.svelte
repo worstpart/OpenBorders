@@ -5,6 +5,7 @@
   import { formatClock, formatPercent, formatTroops } from "../../format.ts";
   import { TEAM_COLORS } from "../../app/players.ts";
   import { teamName, teamStandings } from "../../app/teams.ts";
+  import NetStat from "./NetStat.svelte";
 
   interface Props {
     onMenu: () => void;
@@ -60,6 +61,7 @@
       Win {wholePercent(goal)}
     </span>
     {#if ui.speed !== 1}<span class="speed" title="Game speed">{ui.speed}×</span>{/if}
+    <NetStat />
     <button type="button" class="menu" tabindex={-1} title="Pause menu (Esc)" onclick={onMenu}>
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d="M3 4.5h10M3 8h10M3 11.5h10" />

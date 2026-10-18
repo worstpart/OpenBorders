@@ -10,6 +10,10 @@
  * its world with it (onRestored: the client redraws). A browser that joins mid-game (a
  * rejoin, a spectator) starts out waiting for its first snapshot the same way.
  *
+ * Orders on their way (3.6): an order goes to the server and comes back in a turn some
+ * 100–300 ms later. Until then it is pending — the client shows it at once (a ring where it
+ * was aimed) — and the time it took is the delay players feel, shown in the HUD.
+ *
  * The socket itself lives with the client (client/app/online.ts): this class only needs a
  * way to send a command and ask for a snapshot, and is handed the turns and snapshots.
  */
@@ -29,6 +33,19 @@ export interface ServerTurn {
 /** While waiting for a snapshot, ask again this often (the server may have been busy). */
 const RESYNC_RETRY_MS = 8_000;
 
+/** An order not back in a turn after this long was lost or dropped: stop showing it. */
+export const PENDING_ORDER_MS = 4_000;
+
+/** Recent order delays kept for the HUD's figure (the median of these). */
+const DELAY_SAMPLES = 9;
+
+/** One of the local player's orders, sent but not yet back in a turn (3.6). */
+export interface PendingOrder {
+  readonly command: Command;
+  /** `performance.now()` when it was sent. */
+  readonly sentAt: number;
+}
+
 export interface NetworkHostOptions {
   readonly localPlayerId: PlayerId;
   /** Sends the local player's command to the server. */
@@ -40,6 +57,8 @@ export interface NetworkHostOptions {
   /** A snapshot replaced the world after the game was running: redraw from `state`. */
   readonly onRestored?: (state: RestoredState) => void;
   readonly onError?: (message: string) => void;
+  /** The clock for pending orders (ms); performance.now by default (tests pass their own). */
+  readonly now?: () => number;
 }
 
 export class NetworkHost implements SimHost {
@@ -59,10 +78,15 @@ export class NetworkHost implements SimHost {
   private retry: ReturnType<typeof setTimeout> | null = null;
   private repairs = 0;
   private ruleTickMs = 100;
+  /** Sent, not yet seen in a turn; `key` is the command's JSON (it comes back unchanged). */
+  private pending: (PendingOrder & { readonly key: string })[] = [];
+  private delays: number[] = [];
+  private readonly now: () => number;
 
   constructor(options: NetworkHostOptions) {
     this.options = options;
     this.syncing = options.awaitSnapshot ?? false;
+    this.now = options.now ?? (() => performance.now());
     this.inner =
       typeof Worker === "undefined"
         ? new LocalHost({ localPlayerId: options.localPlayerId, clock: "manual" })
@@ -126,8 +150,25 @@ export class NetworkHost implements SimHost {
     return result;
   }
 
+  /** The local player's orders still on their way, oldest first (3.6). */
+  get pendingOrders(): readonly PendingOrder[] {
+    const now = this.now();
+    if (this.pending.length > 0 && now - this.pending[0]!.sentAt > PENDING_ORDER_MS) {
+      this.pending = this.pending.filter((p) => now - p.sentAt <= PENDING_ORDER_MS);
+    }
+    return this.pending;
+  }
+
+  /** How long the local player's recent orders took to come back in a turn (ms), or null. */
+  get orderDelayMs(): number | null {
+    if (this.delays.length === 0) return null;
+    const sorted = [...this.delays].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)]!;
+  }
+
   /** The next turn from the server. */
   receiveTurn(turn: ServerTurn): void {
+    this.confirmOrders(turn);
     // Until the snapshot comes every turn is from before it.
     if (this.syncing) return;
     if (turn.tick !== this.lastTick + 1) {
@@ -146,6 +187,8 @@ export class NetworkHost implements SimHost {
     this.lastTick = snapshot.tick;
     this.waiting = [];
     this.expected.clear();
+    // Orders sent before it are in it or lost; either way they aren't on their way any more.
+    this.pending = [];
     if (!this.started) {
       this.pendingSnapshot = snapshot;
       return;
@@ -165,6 +208,10 @@ export class NetworkHost implements SimHost {
   }
 
   send(command: Command): void {
+    // A spectator's orders are ignored by the server: nothing to wait for.
+    if (this.options.localPlayerId > 0) {
+      this.pending.push({ command, sentAt: this.now(), key: JSON.stringify(command) });
+    }
     this.options.sendCommand(command);
   }
 
@@ -193,6 +240,22 @@ export class NetworkHost implements SimHost {
     this.inner.dispose();
     this.waiting = [];
     this.expected.clear();
+    this.pending = [];
+  }
+
+  /** The local player's orders in `turn` are no longer on their way. */
+  private confirmOrders(turn: ServerTurn): void {
+    if (this.pending.length === 0) return;
+    const me = this.options.localPlayerId;
+    for (const stamped of turn.commands) {
+      if (stamped.playerId !== me) continue;
+      const key = JSON.stringify(stamped.command);
+      const k = this.pending.findIndex((p) => p.key === key);
+      if (k < 0) continue;
+      this.delays.push(this.now() - this.pending[k]!.sentAt);
+      if (this.delays.length > DELAY_SAMPLES) this.delays.shift();
+      this.pending.splice(k, 1);
+    }
   }
 
   private run(turn: ServerTurn): void {

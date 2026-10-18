@@ -4,6 +4,8 @@
  * thread, which broadcasts it. A slow tick never holds up other games or the sockets.
  * Asked for a snapshot (3.5) it posts one between two turns — the main thread forwards both
  * in the order they came, so the turns after a snapshot continue exactly from it.
+ * When the game ends it stops ticking but keeps the final world, so a player reconnecting
+ * then still gets it (3.6), until the main thread stops the thread.
  */
 import { parentPort } from "node:worker_threads";
 import type { Command } from "../sim/commands.ts";
@@ -64,7 +66,6 @@ function pump(): void {
   }
   if (game.ended) {
     post({ type: "ended" });
-    game = null;
     return;
   }
   // Far behind (an overloaded machine): carry on from now rather than racing to catch up.

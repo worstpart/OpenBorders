@@ -19,6 +19,10 @@
     publicOnline: (listed: boolean) => void;
     /** Join an open public game from the start screen's list (3.4). */
     joinOnline: (gameId: string) => void;
+    /** Back into the online game this browser has a seat in (3.6). */
+    rejoinOnline: () => void;
+    /** Team games, in the lobby: play on this team (3.6). */
+    teamOnline: (team: number) => void;
     /** Change the map's size or type, or roll a new one (shows the loading screen meanwhile). */
     selectMap: (choice: MapChoice) => void;
     confirmSpawn: () => void;
@@ -111,6 +115,7 @@
       onPlay={actions.play}
       onPlayOnline={actions.playOnline}
       onJoinOnline={actions.joinOnline}
+      onRejoinOnline={actions.rejoinOnline}
       onSelectMap={actions.selectMap}
     />
   </main>
@@ -122,6 +127,7 @@
       onRename={actions.renameOnline}
       onReady={actions.readyOnline}
       onPublic={actions.publicOnline}
+      onTeam={actions.teamOnline}
     />
   </main>
 {:else}

@@ -59,6 +59,8 @@ mount(App, {
       readyOnline: (ready) => client?.readyOnline(ready),
       publicOnline: (listed) => client?.publicOnline(listed),
       joinOnline: (gameId) => client?.joinOnline(gameId),
+      rejoinOnline: () => client?.rejoinOnline(),
+      teamOnline: (team) => client?.teamOnline(team),
       leaveOnline: () => {
         history.replaceState(null, "", location.pathname);
         client?.leaveOnline();

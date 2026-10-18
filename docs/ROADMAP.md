@@ -9,7 +9,7 @@
 | **1 — Playable prototype** | Prove the core loop is fun: spawn → expand → fight bots → win/lose | ✅ (tag `phase-1`) |
 | **2 — Gameplay depth** | Big lobbies, Tribes & Nations, alliances, teams, economy, then buildings (3 levels), walls (Border Defense), naval, trade, more maps, alerts & pings | ✅ (tag `phase-2`) |
 | **2B — Air & strategic warfare** *(placement chosen by the user 2026-10-02)* | Flights, Airports I–III, SAMs I–III, Missile Silos I–III, Port III — after Phase 2, **before** multiplayer; built bots-first (D-021); the user's icon pack as art (2B.0b, D-028) | ✅ 2B.0 – 2B.6, approved by the user's playtest 2026-10-16 (tag `phase-2b` on 09abcc4, the build they played); its fixes (D-033) right after |
-| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel next — handoff `PHASE_3_AFTER_3.5_HANDOFF.md` |
+| **3 — Multiplayer** | Hybrid authoritative server (D-006) on a cloud host from the start (D-034), lobby links + public lobbies (D-035), bots fill (D-036), reconnects, spectators | 🟡 3.0 snapshots ✅, 3.1 server on Railway ✅ (https://openborders-production.up.railway.app), 3.2 names + ready ✅, 3.3 validation + limits ✅, 3.4 public lobbies ✅, 3.5 repair + rejoin + spectators ✅ (live); 3.6 online feel ✅ (pending live check); 3.7 accounts & profiles next |
 | **4 — Polish** | Animation, sound, onboarding, mobile, accessibility, settings | ⬜ |
 | **5 — Production** | Accounts, profiles, leaderboards, deployment, monitoring, scaling | ⬜ |
 
@@ -860,7 +860,7 @@ bots-only games must not change):
 | 3.3 ✅ | **Validation & rate limits** | the server stamps the sender (never trusts a claimed `playerId`), rejects malformed or invalid commands (the sim already validates every command when it runs), per-player command limits, oversized/too-frequent messages dropped, misbehaving connections closed | nobody can cheat or flood |
 | 3.4 ✅ | **Public lobbies** | a list of open games on the start screen, one-click join, a start countdown once enough players are in, the name blocklist (D-035) | strangers can find a game |
 | 3.5 ✅ | **Hash checks, resync, reconnect, spectators** | clients check every turn's hash against the server's and ask for a snapshot when they drift; rejoin with a secret seat token (reload, reopened link, dropped connection — retried by itself); late join = watch (snapshot + the turns since) | robustness |
-| 3.6 ⬜ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
+| 3.6 ✅ | **Online feel** | instant pending feedback on clicks (command → next turn ≈ 100–200 ms), teams online, the end-of-game screen from the server's result, a latency indicator; pause/speed are solo-only | it feels like the solo game |
 | 3.7 ⬜ | **Accounts & profiles** *(added 2026-10-17 at the user's request)* | **optional** sign-in — **Google** and/or an email + password account; guests keep playing with just a name (D-035). A profile: display name (the lobby name rules + blocklist), games played, wins, join date; signed-in names are reserved. Needs: a database (Railway Postgres add-on — a small monthly cost, ask first), a Google Cloud OAuth client (the user creates it, like the Railway account), sessions in secure cookies, password hashing (a vetted package, ask first), a short privacy note. Decision D-037 at the start: sign-in methods, what a profile holds and shows, data kept and how to delete it | people can keep a name and a record |
 | 3.8 ⬜ | **Multiplayer playtest + hosting hardening** | the user plays with friends on the cloud host (signing in too); logs, restarts without lost lobbies where possible, a load check (many bot games on one server) | Phase 3 approval |
 
@@ -1021,6 +1021,42 @@ tab showed "lost the connection" / "is back"; no console errors. Snapshots early
 35–56 KB of JSON. Not in scope: games surviving a server restart (a Railway update still ends
 them — 3.8). Tests: 545.
 **Live (2026-10-17, 4f8608a):** `tools/onlineSmoke.ts` against Railway — 400 turns; the corrupted creator repaired (1 mismatch, 1 snapshot), the spectator and the rejoined joiner 0 mismatches — OK; permessage-deflate negotiated through Railway's proxy; in the browser on the live site a reload mid-game put the player back in their country and a second tab watched. **Milestone 3.5 done.**
+
+**3.6 result** *(2026-10-17)*. Protocol v6. **Orders on their way:** online an order reaches
+the game only when the server's turn brings it back; `NetworkHost` keeps every order sent
+until a turn carries it (matched by the order's JSON, the local player's only; lost ones are
+dropped after 4 s, a snapshot clears them). Meanwhile the map shows a small spinning ring where
+it was aimed (attack, spawn, boat, build, airlift, strikes, missiles, warship moves, pings, the
+last wall point), and the HUD says "sending…" when one takes over 250 ms. The time each order
+took is measured — the delay players actually feel. **Latency:** the browser pings every 2 s
+(`ping` → `pong` with its own clock), and the top-right status chip shows the smoothed round
+trip with a green / yellow / red dot (under 150 / 300 ms / more), its tooltip also the order
+delay; when no turn came for 1.5 s while playing, the banner says "Waiting for the server…".
+**Teams online** (D-035 amendment, the user's choice): players pick their team in the lobby — a
+newcomer goes to the smallest team, a click on **Join** switches; the lobby shows each team's
+players and how many nations will join it; at the start the nations even the sides out (to the
+smallest team, ties to fewer humans). Checked end to end: team colours and names the same in
+every browser, teammates' pings, the team goal (85%). **End of game:** the end card already
+comes from the simulation (the same everywhere); now when it ends the page forgets its seat and
+clears the address bar (a reload opens the start screen instead of "That game has ended"), stops
+reconnecting, and a watcher gets its own card ("Game over — Team Blue won the match", the
+winner's or winning team's land, Back to start). The server keeps a finished game **2 minutes**
+(`FINISHED_GAME_KEEP_MS`; its worker keeps the final world): a player whose connection dropped
+just before the end rejoins and sees the end card; finished games aren't listed, watchable,
+played or counted against any limit (/health counts only live games). **Start screen:** "Rejoin
+your online game" when this browser still keeps a seat (a tab closed mid-game). The player
+card's win line no longer says "70%" (the share needed shrinks over time). Dev hook:
+`__openborder.lag(ms)` holds every outgoing message, like a slow connection. **Checked:** tests
+(teams dealt and picked, ping, finished games kept and closed, pending orders and their delay,
+the HUD helpers, the banner); `tools/onlineSmoke.ts` now plays a 2-team game where the joiner
+switches to the creator's team (both on team 1, nations 3 v 3) and checks a ping comes back —
+passed (still 0 mismatches apart from the planned repair); new `tools/onlineEnd.ts` — a game
+won at the start, then a rejoin gets the finished world, a spectator is told it ended, the
+server counts 0 games — passed; in three tabs: team lobby and switching, nations as previewed,
+a teammate's ping, the order ring under 250–1000 ms of simulated lag, the ping figure, a
+reload rejoining after a hot reload, a watcher's and a player's end card, the seat forgotten,
+"Rejoin your online game" bringing a closed tab back (the old tab: "opened in another tab");
+no console errors. The simulation is unchanged (bots-only games identical). Tests: 556.
 
 **Buildings and air/strategic systems online — server authoritative**
 *(PLANNED, added 2026-10-02).* Under D-006 the server runs the same simulation, so every

@@ -7,6 +7,11 @@
  * the player back in their country; a dropped connection is retried a few times by itself
  * (the game freezes meanwhile and catches up from a snapshot); a link to a game already
  * running opens it to watch.
+ *
+ * 3.6: the player picks a team in a team game's lobby; the connection is measured (a ping
+ * every 2 s, shown in the HUD) and a game whose turns stop coming says so; when the game
+ * ends the seat is forgotten (a reload then opens the start screen, not "That game has
+ * ended").
  */
 import type { Command } from "../../sim/commands.ts";
 import type { WorldSnapshot } from "../../sim/snapshot.ts";
@@ -51,6 +56,10 @@ const REJOIN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 export const RECONNECT_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 15_000];
 /** The server closes with this code on purpose (kicked, replaced by another tab): no retry. */
 const POLICY_CLOSE = 1008;
+/** How often the connection is measured (3.6). */
+const PING_EVERY_MS = 2_000;
+/** Turns come every 100 ms: none for this long while playing means the server is slow. */
+export const STALL_MS = 1_500;
 
 /** The name this browser last played under online (D-035), or "" the first time. */
 export function savedName(): string {
@@ -124,6 +133,20 @@ function forgetSeat(): void {
   }
 }
 
+/** Any recent seat this browser keeps (3.6: the start screen offers to rejoin it). */
+export function anySavedSeat(now = Date.now()): SavedSeat | null {
+  for (const store of seatStores()) {
+    try {
+      const seat = JSON.parse(store.getItem(REJOIN_KEY) ?? "null") as SavedSeat | null;
+      if (!seat || typeof seat.gameId !== "string" || typeof seat.token !== "string") continue;
+      if (now - seat.savedAt < REJOIN_MAX_AGE_MS) return seat;
+    } catch {
+      // No storage here: try the next.
+    }
+  }
+  return null;
+}
+
 /** The open public games (3.4) from the game server; [] when it can't be reached. */
 export async function fetchOpenGames(): Promise<OpenGame[]> {
   const base = import.meta.env.DEV ? `http://${location.hostname}:${devServerPort()}` : "";
@@ -140,6 +163,15 @@ export async function fetchOpenGames(): Promise<OpenGame[]> {
 /** The link that joins game `gameId` (shared by its creator). */
 export function gameLink(gameId: string, location: { origin: string; pathname: string }): string {
   return `${location.origin}${location.pathname}?game=${encodeURIComponent(gameId)}`;
+}
+
+/** Back to the plain page address (the game is over, or left). */
+function clearAddressBar(): void {
+  try {
+    if (location.search) history.replaceState(null, "", location.pathname);
+  } catch {
+    // Not in a browser page (tests).
+  }
 }
 
 /** Puts the game's link in the address bar, so a reload comes back to it (3.5). */
@@ -184,6 +216,14 @@ export class OnlineSession {
   private game: { id: string; token: string; playerId: PlayerId } | null = null;
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Pings and the stalled-turns check (3.6). */
+  private ticker: ReturnType<typeof setInterval> | null = null;
+  private lastTurnAt = 0;
+  private lastPingAt = -Infinity;
+  /** Development checks only: outgoing messages wait this long (debugLag). */
+  private lagMs = 0;
+  /** The game is over (3.6): nothing to reconnect to, the seat is forgotten. */
+  private over = false;
 
   constructor(url: string, intent: ClientMessage, handlers: OnlineHandlers) {
     this.url = url;
@@ -202,8 +242,11 @@ export class OnlineSession {
       watching: false,
       catchingUp: false,
       reconnecting: 0,
+      pingMs: null,
+      stalled: false,
     };
     this.open();
+    this.ticker = setInterval(() => this.everyFewSeconds(), PING_EVERY_MS / 4);
   }
 
   static create(settings: OnlineSettings, handlers: OnlineHandlers): OnlineSession {
@@ -239,6 +282,11 @@ export class OnlineSession {
     this.post({ t: "visibility", public: listed });
   }
 
+  /** Team games, in the lobby: play on `team` (3.6). */
+  setTeam(team: number): void {
+    this.post({ t: "team", team });
+  }
+
   /** The creator starts the game for everyone in the lobby. */
   start(): void {
     this.post({ t: "start" });
@@ -266,10 +314,29 @@ export class OnlineSession {
     this.socket?.close(4000, "debug drop");
   }
 
+  /** Development checks only: holds every outgoing message `ms`, like a slow network (3.6). */
+  debugLag(ms: number): void {
+    this.lagMs = Math.max(0, ms);
+  }
+
+  /**
+   * The game is over (3.6): the seat is forgotten and the address bar cleared, so a reload
+   * opens the start screen; a connection lost from now on isn't worth reconnecting.
+   */
+  finished(): void {
+    if (this.over) return;
+    this.over = true;
+    forgetSeat();
+    clearAddressBar();
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    if (ui.online) ui.online = { ...ui.online, stalled: false, reconnecting: 0 };
+  }
+
   /** Leaves the game for good: the seat is forgotten (3.5). */
   close(): void {
     this.closedByUs = true;
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    if (this.ticker !== null) clearInterval(this.ticker);
     this.socket?.close();
     forgetSeat();
     ui.online = null;
@@ -291,6 +358,8 @@ export class OnlineSession {
     socket.onclose = (event) => {
       if (this.socket !== socket || this.closedByUs || !ui.online) return;
       const online = ui.online;
+      // After the end there is nothing to come back to: the end card stays as it is.
+      if (this.over) return;
       // A running game tries to come back by itself, unless the server meant to close it.
       if (online.status === "playing" && event.code !== POLICY_CLOSE) {
         if (this.attempt < RECONNECT_DELAYS_MS.length) {
@@ -314,8 +383,31 @@ export class OnlineSession {
     };
   }
 
+  /** Pings the server every PING_EVERY_MS; notices when turns stop coming (3.6). */
+  private everyFewSeconds(): void {
+    const online = ui.online;
+    if (!online) return;
+    const now = performance.now();
+    if (now - this.lastPingAt >= PING_EVERY_MS) {
+      this.lastPingAt = now;
+      this.post({ t: "ping", at: now });
+    }
+    const stalled =
+      online.status === "playing" &&
+      !this.over &&
+      online.reconnecting === 0 &&
+      this.lastTurnAt > 0 &&
+      now - this.lastTurnAt > STALL_MS;
+    if (stalled !== online.stalled) ui.online = { ...online, stalled };
+  }
+
   private post(message: ClientMessage): void {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+    const socket = this.socket;
+    const send = () => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    };
+    if (this.lagMs > 0) setTimeout(send, this.lagMs);
+    else send();
   }
 
   private deliver(item: Delivery): void {
@@ -363,8 +455,17 @@ export class OnlineSession {
         break;
       }
       case "turn":
+        this.lastTurnAt = performance.now();
+        if (online.stalled) ui.online = { ...online, stalled: false };
         this.deliver({ turn: message });
         break;
+      case "pong": {
+        // The round trip, smoothed a little so the number doesn't jump every reading.
+        const rtt = Math.max(0, performance.now() - message.at);
+        const pingMs = online.pingMs === null ? rtt : online.pingMs * 0.6 + rtt * 0.4;
+        ui.online = { ...online, pingMs };
+        break;
+      }
       case "sync":
         this.deliver({ snapshot: message.snapshot });
         break;
@@ -374,7 +475,7 @@ export class OnlineSession {
       case "error": {
         // A rejoin the server refused: the seat is gone (the game ended, the server restarted).
         const refused = online.status !== "playing" || online.reconnecting > 0;
-        if (refused) forgetSeat();
+        if (refused || this.over) forgetSeat();
         ui.online = {
           ...online,
           status: refused ? "error" : online.status,
@@ -410,6 +511,7 @@ export function onlineBanner(online: OnlineState | null): {
     };
   }
   if (online.catchingUp) return { text: "Catching up with the game…", tone: "info" };
+  if (online.stalled) return { text: "Waiting for the server…", tone: "warn" };
   if (online.error) return { text: online.error, tone: "warn" };
   if (online.watching) return { text: "👁 Watching — you're a spectator", tone: "info" };
   return null;

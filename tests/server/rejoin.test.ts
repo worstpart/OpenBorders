@@ -8,6 +8,7 @@ import { ServerGame } from "../../src/server/game.ts";
 import { Lobbies, type GameEvents, type Peer } from "../../src/server/lobbies.ts";
 import {
   EMPTY_GAME_GRACE_MS,
+  FINISHED_GAME_KEEP_MS,
   gamePlayers,
   MAX_WATCHERS,
   ONLINE_RULES,
@@ -154,8 +155,8 @@ describe("rejoin tokens (3.5)", () => {
     expect(runner.commands).toEqual([[1, { type: "confirmSpawn" }]]);
   });
 
-  it("a wrong token, a lobby or a finished game can't be rejoined", () => {
-    const { started, connect, runners } = setup();
+  it("a wrong token, a lobby or a game gone for good can't be rejoined", () => {
+    const { started, connect, runners, advance } = setup();
     started();
     const guess = connect();
     guess.connection.receive({ t: "rejoin", gameId: "g1", token: "secret1" + "x" });
@@ -164,6 +165,13 @@ describe("rejoin tokens (3.5)", () => {
     empty.connection.receive({ t: "rejoin", gameId: "g1", token: "" });
     expect(empty.peer.inbox.at(-1)).toMatchObject({ t: "error" });
     runners[0]!.events.ended();
+    // A finished game is kept a while (3.6): a rejoin still gets its final state…
+    const soon = connect();
+    soon.connection.receive({ t: "rejoin", gameId: "g1", token: "secret2" });
+    expect(startOf(soon.peer)).toMatchObject({ playerId: 1, midGame: true });
+    // …then it is gone.
+    advance(FINISHED_GAME_KEEP_MS);
+    expect(runners[0]!.stopped).toBe(true);
     const late = connect();
     late.connection.receive({ t: "rejoin", gameId: "g1", token: "secret2" });
     expect(late.peer.inbox.at(-1)).toMatchObject({ t: "error" });

@@ -295,9 +295,9 @@ describe("the server's game", () => {
     expect(commandProblem(null)).toMatch(/not a command/);
   });
 
-  it("teams: humans and nations are dealt round-robin, tribes stay teamless", () => {
+  it("teams: humans are dealt round-robin, nations even the sides out, tribes stay teamless", () => {
     const players = gamePlayers({ ...SETTINGS, mode: "teams", teams: 2 }, ["A", "B", "C"]);
-    expect(players.map((p) => p.team ?? 0)).toEqual([1, 2, 1, 2, 1, 0]);
+    expect(players.map((p) => p.team ?? 0)).toEqual([1, 2, 1, 2, 2, 0]);
   });
 });
 

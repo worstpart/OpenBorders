@@ -2,11 +2,14 @@
   /**
    * The online lobby (Phase 3, milestones 3.1–3.2): your name, the link to share, the game's
    * settings, who has joined and who is ready, and Start for the game's creator. Nations and
-   * tribes fill every place no human takes (D-036).
+   * tribes fill every place no human takes (D-036). Team games (3.6): the players are shown
+   * by team, and each picks theirs; nations then even the teams out.
    */
   import { MAP_SIZE_NAMES, MAP_DIMENSIONS } from "../../../sim/map/generate.ts";
-  import { MAX_NAME_LENGTH } from "../../../shared/protocol.ts";
+  import { MAX_NAME_LENGTH, nationTeams, type LobbyPlayer } from "../../../shared/protocol.ts";
   import { gameLink } from "../../app/online.ts";
+  import { TEAM_COLORS } from "../../app/players.ts";
+  import { teamName } from "../../app/teams.ts";
   import { MAP_SIZES, MAP_STYLE_LABELS } from "../../app/setup.ts";
   import { ui } from "../../app/uiState.svelte.ts";
 
@@ -17,9 +20,11 @@
     onReady: (ready: boolean) => void;
     /** Creator: list the game for strangers, or keep it to the link (3.4). */
     onPublic: (listed: boolean) => void;
+    /** Team games: play on this team (3.6). */
+    onTeam: (team: number) => void;
   }
 
-  let { onStart, onLeave, onRename, onReady, onPublic }: Props = $props();
+  let { onStart, onLeave, onRename, onReady, onPublic, onTeam }: Props = $props();
   /** Ticks once a second while a public countdown runs. */
   let clock = $state(Date.now());
   $effect(() => {
@@ -39,6 +44,33 @@
     online?.startsAt ? Math.max(0, Math.ceil((online.startsAt - clock) / 1000)) : null,
   );
   const notReady = $derived(online ? online.players.filter((p) => !p.ready).length : 0);
+  /**
+   * Team games (3.6): each team's humans (with their place in `players`) and the nations
+   * that will join it, dealt as the server will deal them.
+   */
+  /** "2 players + 3 nations". */
+  function teamCount(players: number, nations: number): string {
+    const humans = `${players} ${players === 1 ? "player" : "players"}`;
+    return nations > 0 ? `${humans} + ${nations} ${nations === 1 ? "nation" : "nations"}` : humans;
+  }
+  const teams = $derived.by(() => {
+    const s = online?.summary;
+    if (!online || !s || s.mode !== "teams") return [];
+    const nations = new Array<number>(s.teams + 1).fill(0);
+    const dealt = nationTeams(
+      s.teams,
+      online.players.map((p) => p.team),
+      s.nations,
+    );
+    for (const team of dealt) nations[team]!++;
+    return Array.from({ length: s.teams }, (_, k) => ({
+      team: k + 1,
+      members: online.players
+        .map((player, index) => ({ player, index }))
+        .filter((m) => m.player.team === k + 1),
+      nations: nations[k + 1]!,
+    }));
+  });
   const summary = $derived.by(() => {
     const s = online?.summary;
     if (!s) return "";
@@ -126,19 +158,46 @@
     {/if}
 
     <h2 class="label">Players ({online.players.length})</h2>
-    <ul class="players">
-      {#each online.players as player, k (k)}
-        <li>
-          <span class="name">{player.name}</span>
-          {#if k === online.you}<span class="tag">you</span>{/if}
-          {#if k === 0}<span class="tag">creator</span>{/if}
-          <span class="state" class:ready={player.ready}
-            >{player.ready ? "Ready" : "Not ready"}</span
+    {#snippet row(player: LobbyPlayer, k: number)}
+      <li>
+        <span class="name">{player.name}</span>
+        {#if k === online.you}<span class="tag">you</span>{/if}
+        {#if k === 0}<span class="tag">creator</span>{/if}
+        <span class="state" class:ready={player.ready}>{player.ready ? "Ready" : "Not ready"}</span>
+      </li>
+    {/snippet}
+    {#if teams.length > 0}
+      <div class="teams">
+        {#each teams as t (t.team)}
+          <section
+            class="team"
+            class:mine={me?.team === t.team}
+            style:--team-color={TEAM_COLORS[(t.team - 1) % TEAM_COLORS.length]}
+            aria-label={teamName(t.team)}
           >
-        </li>
-      {/each}
-    </ul>
-    <p class="note">Nations and tribes fill the rest of the map.</p>
+            <header>
+              <span class="team-dot" aria-hidden="true"></span>
+              <span class="team-name">{teamName(t.team)}</span>
+              <span class="team-count">{teamCount(t.members.length, t.nations)}</span>
+              {#if me?.team !== t.team}
+                <button type="button" class="pick" onclick={() => onTeam(t.team)}>Join</button>
+              {/if}
+            </header>
+            {#if t.members.length > 0}
+              <ul class="players">
+                {#each t.members as m (m.index)}{@render row(m.player, m.index)}{/each}
+              </ul>
+            {/if}
+          </section>
+        {/each}
+      </div>
+      <p class="note">Pick a team to play with your friends. Nations even the teams out.</p>
+    {:else}
+      <ul class="players">
+        {#each online.players as player, k (k)}{@render row(player, k)}{/each}
+      </ul>
+      <p class="note">Nations and tribes fill the rest of the map.</p>
+    {/if}
 
     {#if online.error}<p class="error" role="alert">{online.error}</p>{/if}
 
@@ -254,6 +313,63 @@
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
     background: rgba(255, 255, 255, 0.05);
+  }
+
+  .teams {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .team {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    border: 1px solid var(--surface-hairline);
+    border-left: 3px solid var(--team-color);
+    border-radius: var(--radius-control);
+  }
+
+  .team.mine {
+    background: color-mix(in srgb, var(--team-color) 12%, transparent);
+  }
+
+  .team header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 26px;
+    font-size: var(--text-sm);
+  }
+
+  .team-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--team-color);
+  }
+
+  .team-name {
+    font-weight: 650;
+  }
+
+  .team-count {
+    flex: 1;
+    color: var(--text-secondary);
+  }
+
+  .pick {
+    height: 26px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--surface-hairline);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+  }
+
+  .pick:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .tag {

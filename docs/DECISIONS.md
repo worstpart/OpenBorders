@@ -814,6 +814,13 @@ out of reach of abuse).
 before the final multiplayer playtest; details become D-037 at its start. Match history and
 leaderboards stay in Phase 5.
 
+**Amended 2026-10-17 (milestone 3.6):** team games online — asked whether players should
+pick their team, the user chose **picking in the lobby**. A newcomer is put on the smallest
+team and can switch with one click until the start; the nations then join the smallest team
+one by one (on a tie the one with fewer humans, the stronger players), so friends can play
+together and the sides end up as even as their choices allow. Tribes stay teamless; solo
+games keep dealing you and the nations round-robin.
+
 **Consequences.** Public lobbies need a lobby list on the server, a start countdown and
 the name rules above; moderation beyond that (reports, bans) is Phase 5.
 

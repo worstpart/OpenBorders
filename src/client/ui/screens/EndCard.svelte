@@ -19,6 +19,14 @@
   );
   const visible = $derived(over || (eliminated && !ui.spectating));
 
+  /** Watching an online game (3.5): no country of your own; the end card says who won. */
+  /** The winner's land — a team's combined land when a team won. */
+  const winnerTiles = $derived(
+    teamWin
+      ? ui.players.filter((p) => p.team === ui.winningTeam).reduce((sum, p) => sum + p.tiles, 0)
+      : (ui.players.find((p) => p.id === ui.winner)?.tiles ?? null),
+  );
+
   const endTick = $derived(me && me.eliminatedTick >= 0 ? me.eliminatedTick : ui.tick);
   const seconds = $derived(Math.max(0, endTick - ui.playStartTick) / 10);
 
@@ -32,8 +40,9 @@
       return eliminated ? `${how} You were knocked out, but your team carried on.` : how;
     }
     if (won) {
+      // (The share needed shrinks in long games, so the card doesn't name a number.)
       return ui.gameOverReason === "landShare"
-        ? "You control 70% of the land."
+        ? "You control the land you needed to win."
         : "You are the last one standing.";
     }
     const result = !over
@@ -81,6 +90,28 @@
       </div>
     </div>
   </div>
+{:else if over && !me}
+  <div class="backdrop">
+    <div class="card watched" role="dialog" aria-modal="true" aria-labelledby="end-title">
+      <h1 id="end-title">Game over</h1>
+      <p class="line">{line}</p>
+      <dl class="stats">
+        <div>
+          <dt>Match time</dt>
+          <dd>{formatClock(seconds)}</dd>
+        </div>
+        {#if winnerTiles !== null}
+          <div>
+            <dt>{teamWin ? "Winning team's land" : "Winner's land"}</dt>
+            <dd>{formatPercent(winnerTiles / ui.landTiles)}</dd>
+          </div>
+        {/if}
+      </dl>
+      <div class="actions">
+        <button type="button" class="primary" onclick={onPlayAgain}>Back to start</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -115,6 +146,11 @@
 
   .won h1 {
     color: var(--color-success);
+  }
+
+  /* A spectator neither won nor lost. */
+  .watched h1 {
+    color: var(--text-primary);
   }
 
   .line {

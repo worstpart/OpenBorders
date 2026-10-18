@@ -7,7 +7,8 @@ import { generateMapOffThread } from "../../host/mapGeneration.ts";
 import { NetworkHost } from "../../host/networkHost.ts";
 import { ONLINE_RULES, type GameConfig, type OnlineSettings } from "../../shared/protocol.ts";
 import type { GameSetup } from "../../sim/world.ts";
-import { OnlineSession } from "./online.ts";
+import { anySavedSeat, OnlineSession } from "./online.ts";
+import { pendingRings, slowOrder } from "./pendingOrders.ts";
 import { WorkerHost } from "../../host/workerHost.ts";
 import type { FrameTiming, RestoredState } from "../../host/host.ts";
 import type { Command } from "../../sim/commands.ts";
@@ -343,6 +344,17 @@ export class GameClient {
     this.online?.start();
   }
 
+  /** Rejoins the game this browser has a seat in (3.6: the start screen's button). */
+  rejoinOnline(): void {
+    const seat = anySavedSeat();
+    if (seat) this.joinOnline(seat.gameId);
+  }
+
+  /** Team games, in the lobby: play on `team` (3.6). */
+  teamOnline(team: number): void {
+    this.online?.setTeam(team);
+  }
+
   /** Lobby: your name, and whether you're ready. */
   renameOnline(name: string): void {
     this.online?.rename(name);
@@ -509,6 +521,8 @@ export class GameClient {
       renderer: () => this.renderer,
       /** Online (3.5): drops the connection, to watch it reconnect. */
       dropConnection: () => this.online?.debugDrop(),
+      /** Online (3.6): every message to the server waits `ms`, like a slow connection. */
+      lag: (ms: number) => this.online?.debugLag(ms),
       /** Online (3.5): corrupts this browser's world on purpose, to watch it repair itself. */
       corrupt: () => {
         if (this.host instanceof NetworkHost) this.host.debugCorrupt();
@@ -1303,6 +1317,8 @@ export class GameClient {
   private publish(frame: TickFrame): void {
     ui.tick = frame.tick;
     ui.phase = frame.phase;
+    // Online, the end (3.6) is the same on every browser: the seat needs no keeping now.
+    if (frame.phase === "ended") this.online?.finished();
     ui.playStartTick = frame.playStartTick;
     ui.players = frame.players;
     ui.attacks = frame.attacks;
@@ -1771,6 +1787,8 @@ export class GameClient {
       const sinceTick = (tick - ui.tick) * (DEFAULT_RULES.tickMs / 1000);
       this.markerLayer.draw(view, {
         width: this.map.width,
+        orders:
+          this.host instanceof NetworkHost ? pendingRings(this.host.pendingOrders, startedAt) : [],
         pings: this.pingMarkers(tick),
         threats: incomingThreats(ui.threatContext).map((t) => ({
           tile: t.tile,
@@ -1782,8 +1800,18 @@ export class GameClient {
       });
     }
 
+    this.updateOrderState(startedAt);
     this.perf.recordFrame(performance.now() - startedAt, this.renderer.lastUploadMs);
     requestAnimationFrame((next) => this.animationFrame(next));
+  }
+
+  /** Online (3.6): whether an order is slow to come back, and the recent order delay. */
+  private updateOrderState(now: number): void {
+    const host = this.host instanceof NetworkHost ? this.host : null;
+    const sending = host !== null && slowOrder(host.pendingOrders, now);
+    const delay = host?.orderDelayMs ?? null;
+    if (ui.sendingOrder !== sending) ui.sendingOrder = sending;
+    if (ui.orderDelayMs !== delay) ui.orderDelayMs = delay;
   }
 
   /** Friends' pings as the map shows them (GAME_DESIGN.md §3.20). */

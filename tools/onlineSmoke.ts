@@ -1,4 +1,4 @@
-// Online smoke test (milestones 3.1, 3.5): scripted browsers against a running game server.
+// Online smoke test (milestones 3.1, 3.5, 3.6): scripted browsers against a running game server.
 // One creates a game, the other joins by its id, the creator starts it; both run their own
 // simulation from the server's turns and compare their state hash with the server's after
 // every tick. Each player spawns and expands, so commands really travel. Then (3.5):
@@ -7,6 +7,8 @@
 //   - a spectator joins mid-game by the link and must stay in step from its snapshot;
 //   - the joiner's connection drops: it reconnects with its rejoin token, gets its country
 //     back from a snapshot and keeps playing.
+// And (3.6): it is a 2-team game where the joiner picks the creator's team in the lobby (both
+// must be on team 1 in the game, the nations evening the sides out), and a ping must come back.
 //   npm start            (in another terminal)
 //   node tools/onlineSmoke.ts [ws://localhost:8787/ws] [ticks=300]
 import { WebSocket } from "ws";
@@ -33,8 +35,8 @@ const DROP_AT = Math.round(TICKS * 0.5);
 
 const settings: OnlineSettings = {
   map: { seed: 7, ...MAP_DIMENSIONS.normal, style: "archipelago" },
-  mode: "ffa",
-  teams: 0,
+  mode: "teams",
+  teams: 2,
   difficulty: "medium",
   nations: ["Avalon", "Borea", "Corvia", "Dunmar"],
   tribes: ["Ash", "Birch", "Cedar"],
@@ -64,6 +66,8 @@ interface Client {
   snapshots: number;
   snapshotBytes: number;
   lastTick: number;
+  /** Round trip of a ping (3.6), ms; -1 until one came back. */
+  pingMs: number;
   started: Promise<void>;
   done: Promise<void>;
   onTick?: (client: Client) => void;
@@ -89,6 +93,7 @@ function client(name: string, first: ClientMessage | null, onLobby?: LobbyHandle
     snapshots: 0,
     snapshotBytes: 0,
     lastTick: 0,
+    pingMs: -1,
     started: new Promise((r) => (resolveStarted = r)),
     done: new Promise((r, j) => ((resolveDone = r), (rejectDone = j))),
   };
@@ -110,6 +115,7 @@ function client(name: string, first: ClientMessage | null, onLobby?: LobbyHandle
       const m = JSON.parse(text) as ServerMessage;
       if (m.t === "error") rejectDone(new Error(`${name}: ${m.message}`));
       if (m.t === "lobby") onLobby?.(m, c);
+      if (m.t === "pong") c.pingMs = performance.now() - m.at;
       if (m.t === "start") {
         c.gameId = m.gameId;
         c.playerId = m.playerId;
@@ -124,6 +130,7 @@ function client(name: string, first: ClientMessage | null, onLobby?: LobbyHandle
           });
         }
         c.syncing = m.midGame;
+        send(c, { t: "ping", at: performance.now() });
         resolveStarted();
       }
       if (m.t === "sync" && c.config) {
@@ -206,10 +213,17 @@ const creator = client("creator", { t: "create", settings, name: "Smoke Creator"
   if (!joiner) {
     const gameId = lobby.gameId;
     console.log(`created game ${gameId} as "${lobby.players[0]?.name}"`);
-    joiner = client("joiner", { t: "join", gameId, name: "Smoke Joiner" }, (_lobby, j) => {
-      if (!j.playerId) send(j, { t: "ready", ready: true });
+    joiner = client("joiner", { t: "join", gameId, name: "Smoke Joiner" }, (lobby, j) => {
+      // Dealt onto team 2, it switches to the creator's team (3.6), then says it's ready.
+      if (lobby.players[lobby.you]?.team !== 1) send(j, { t: "team", team: 1 });
+      else if (!j.playerId && !lobby.players[lobby.you]?.ready)
+        send(j, { t: "ready", ready: true });
     });
-  } else if (!started && lobby.players.length === 2 && lobby.players.every((p) => p.ready)) {
+  } else if (
+    !started &&
+    lobby.players.length === 2 &&
+    lobby.players.every((p) => p.ready && p.team === 1)
+  ) {
     started = true;
     console.log(`lobby: ${lobby.players.map((p) => p.name).join(", ")} — all ready, starting`);
     send(c, { t: "start" });
@@ -250,6 +264,9 @@ const timeout = setTimeout(() => {
 await creator.started;
 await joiner!.started;
 console.log(`started: creator is player ${creator.playerId}, joiner is player ${joiner!.playerId}`);
+const teams = creator.config!.players.map((p) => p.team ?? 0);
+console.log(`teams: ${teams.join(" ")} (humans first, then nations, then tribes)`);
+const teamsOk = teams[0] === 1 && teams[1] === 1 && teams.filter((t) => t === 2).length >= 3;
 let failed = false;
 try {
   await Promise.all([creator.done, joiner!.done]);
@@ -270,10 +287,16 @@ for (const c of [creator, joiner!, watcher].filter((x): x is Client => x !== nul
   );
 }
 console.log(`${((performance.now() - start) / 1000).toFixed(1)} s`);
+console.log(
+  `ping: creator ${creator.pingMs.toFixed(0)} ms, joiner ${joiner!.pingMs.toFixed(0)} ms`,
+);
 // Expected: the creator drifts once (on purpose) and is repaired; the joiner gets one
 // snapshot (its rejoin), the watcher one; nobody else ever differs.
 const ok =
   !failed &&
+  teamsOk &&
+  creator.pingMs >= 0 &&
+  joiner!.pingMs >= 0 &&
   creator.mismatches === 1 &&
   creator.snapshots === 1 &&
   joiner!.mismatches === 0 &&

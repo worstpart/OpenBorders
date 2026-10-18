@@ -4,7 +4,7 @@
  * first snapshot. (Without Web Workers here, NetworkHost runs a manual-clock LocalHost.)
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { NetworkHost, type ServerTurn } from "../../src/host/networkHost.ts";
+import { NetworkHost, PENDING_ORDER_MS, type ServerTurn } from "../../src/host/networkHost.ts";
 import type { RestoredState } from "../../src/host/host.ts";
 import type { TickFrame } from "../../src/sim/frame.ts";
 import { generateMap, MAP_DIMENSIONS } from "../../src/sim/map/generate.ts";
@@ -132,5 +132,54 @@ describe("NetworkHost repair (3.5)", { timeout: 30_000 }, () => {
     expect(c.resyncs).toEqual([]);
     expect(c.frames.at(-1)!.tick).toBe(20);
     expect(c.frames.at(-1)!.hash).toBe(hashWorld(server.world));
+  });
+});
+
+describe("orders on their way (3.6)", () => {
+  function pendingClient(localPlayerId = 1) {
+    let now = 1000;
+    const sent: unknown[] = [];
+    const host = new NetworkHost({
+      localPlayerId,
+      sendCommand: (command) => sent.push(command),
+      now: () => now,
+    });
+    hosts.push(host);
+    return { host, sent, wait: (ms: number) => (now += ms) };
+  }
+  const turn = (tick: number, commands: ServerTurn["commands"]): ServerTurn => ({
+    tick,
+    commands,
+    hash: 0,
+  });
+
+  it("an order is pending until a turn brings it back; the delay is measured", () => {
+    const { host, sent, wait } = pendingClient();
+    const attack = { type: "attack", target: 0, focusTile: 55, percentBp: 5000 } as const;
+    host.send(attack);
+    host.send({ type: "confirmSpawn" });
+    expect(sent).toHaveLength(2);
+    expect(host.pendingOrders.map((p) => p.command.type)).toEqual(["attack", "confirmSpawn"]);
+    expect(host.orderDelayMs).toBeNull();
+    wait(180);
+    // Someone else's identical order doesn't count; ours (sent through the server) does.
+    host.receiveTurn(turn(1, [{ playerId: 2, command: { ...attack } }]));
+    expect(host.pendingOrders).toHaveLength(2);
+    host.receiveTurn(turn(2, [{ playerId: 1, command: JSON.parse(JSON.stringify(attack)) }]));
+    expect(host.pendingOrders.map((p) => p.command.type)).toEqual(["confirmSpawn"]);
+    expect(host.orderDelayMs).toBe(180);
+  });
+
+  it("lost orders stop showing after a while; a snapshot clears them; watchers have none", () => {
+    const a = pendingClient();
+    a.host.send({ type: "confirmSpawn" });
+    a.wait(PENDING_ORDER_MS + 1);
+    expect(a.host.pendingOrders).toEqual([]);
+    a.host.send({ type: "confirmSpawn" });
+    a.host.receiveSnapshot({ tick: 9 } as WorldSnapshot);
+    expect(a.host.pendingOrders).toEqual([]);
+    const watcher = pendingClient(0);
+    watcher.host.send({ type: "confirmSpawn" });
+    expect(watcher.host.pendingOrders).toEqual([]);
   });
 });

@@ -16,7 +16,7 @@
   import { DEFAULT_RULES, DIFFICULTIES, type Difficulty } from "../../../sim/rules.ts";
   import { MAP_DIMENSIONS, MAP_SIZE_NAMES } from "../../../sim/map/generate.ts";
   import type { OpenGame } from "../../../shared/protocol.ts";
-  import { fetchOpenGames } from "../../app/online.ts";
+  import { anySavedSeat, fetchOpenGames } from "../../app/online.ts";
 
   interface Props {
     onPlay: () => void;
@@ -24,10 +24,18 @@
     onPlayOnline: () => void;
     /** Join one of the open public games listed here (3.4). */
     onJoinOnline: (gameId: string) => void;
+    /** Back into the online game this browser has a seat in (3.6). */
+    onRejoinOnline: () => void;
     onSelectMap: (choice: MapChoice) => void;
   }
 
-  let { onPlay, onPlayOnline, onJoinOnline, onSelectMap }: Props = $props();
+  let { onPlay, onPlayOnline, onJoinOnline, onRejoinOnline, onSelectMap }: Props = $props();
+
+  /**
+   * A seat in an online game kept by this browser (3.6) — the tab was closed mid-game. (If
+   * that game has ended meanwhile, the lobby screen says so and the seat is forgotten.)
+   */
+  const seat = anySavedSeat();
 
   /** Open public games (3.4), refreshed every few seconds while this screen shows. */
   let openGames = $state<OpenGame[]>([]);
@@ -219,6 +227,11 @@
   <button type="button" class="play" onclick={play} disabled={starting || ui.mapLoading}>
     {starting ? "Starting…" : ui.mapLoading ? "Generating map…" : "Play"}
   </button>
+  {#if seat}
+    <button type="button" class="rejoin" onclick={onRejoinOnline} disabled={starting}>
+      Rejoin your online game
+    </button>
+  {/if}
   <button type="button" class="online" onclick={onPlayOnline} disabled={starting || ui.mapLoading}>
     Play online with friends
   </button>
@@ -417,6 +430,23 @@
     font: inherit;
     font-weight: 600;
     cursor: pointer;
+  }
+
+  .rejoin {
+    width: 100%;
+    height: 38px;
+    margin-top: var(--space-2);
+    border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .rejoin:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 34%, transparent);
   }
 
   .open-games {

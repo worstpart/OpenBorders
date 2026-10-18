@@ -2,7 +2,8 @@
  * Map markers (GAME_DESIGN.md §3.20, milestone 2.9): friends' pings (a pulsing ring with the
  * ping's icon and who sent it), incoming threats (a red ring where they will hit, with the
  * seconds left), arrows at the screen edge for either when it is off screen, and emoji
- * bubbles over their senders' land.
+ * bubbles over their senders' land; online (3.6) a small spinning ring where one of your
+ * orders is aimed until the server's turn brings it back.
  *
  * Drawn with Canvas2D on the label overlay, after everything else so they stay on top.
  */
@@ -40,8 +41,16 @@ export interface EmoteBubble {
   readonly senderColor: string;
 }
 
+/** One of your orders on its way to the server (3.6). */
+export interface OrderMarker {
+  readonly tile: number;
+  /** Milliseconds since it was sent. */
+  readonly ageMs: number;
+}
+
 export interface MarkerDrawInput {
   readonly width: number;
+  readonly orders: readonly OrderMarker[];
   readonly pings: readonly PingMarker[];
   readonly threats: readonly ThreatMarker[];
   readonly emotes: readonly EmoteBubble[];
@@ -93,6 +102,11 @@ export class MarkerLayer {
       this.emote(x, y - lift, bubble);
     }
 
+    for (const order of input.orders) {
+      const p = tileScreen(order.tile);
+      if (onScreen(p)) this.order(p.x, p.y, order.ageMs);
+    }
+
     for (const threat of input.threats) {
       const p = tileScreen(threat.tile);
       if (onScreen(p)) this.threat(p.x, p.y, threat, input.time);
@@ -140,6 +154,25 @@ export class MarkerLayer {
       ctx.fillStyle = "#f4f1e8";
       ctx.fillText(ping.label, x, y + 22);
     }
+    ctx.restore();
+  }
+
+  /** A spinning dashed ring, quickly faded in, where an order is aimed (3.6). */
+  private order(x: number, y: number, ageMs: number): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, ageMs / 60);
+    ctx.translate(x, y);
+    ctx.rotate(ageMs / 160);
+    ctx.beginPath();
+    ctx.arc(0, 0, 9, 0, Math.PI * 2);
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(10,14,20,0.6)";
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.stroke();
     ctx.restore();
   }
 
